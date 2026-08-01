@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Ride Platform Starter
 
 نواة أولية لمنصة نقل متعددة الأدوار، مبنية كـ Monorepo:
@@ -79,3 +80,6 @@ password: ChangeMe123!
 ## ملاحظة الإصدارات
 
 تم تثبيت Next.js وReact وNestJS على إصدارات حديثة محددة. تم تثبيت Prisma على خط 6.19 المتوافق مع إعداد NestJS/CommonJS الحالي، بدل استخدام وسم `latest` الذي يجلب Prisma 7 ويتطلب إعداد Driver Adapter وتهيئة مختلفة.
+=======
+# ride-platform-starter
+>>>>>>> b5d6e4efa876bab828559d26bab807972feafbe1
