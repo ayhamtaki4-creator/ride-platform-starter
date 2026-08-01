@@ -1,14 +1,14 @@
-node_modules
-.pnpm-store
-.next
-dist
-coverage
-*.tsbuildinfo
-*.bak
+node_modules/
+.pnpm-store/
+.next/
+dist/
+coverage/
 
 .env
-.env.local
 .env.*
 !.env.example
+
 *.log
+*.tsbuildinfo
+*.bak
 .DS_Store

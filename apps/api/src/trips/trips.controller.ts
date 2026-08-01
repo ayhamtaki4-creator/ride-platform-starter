@@ -4,6 +4,7 @@ import { AuthUser } from '../iam/auth-user.type';
 import { CurrentUser } from '../iam/current-user.decorator';
 import { Permissions } from '../iam/permissions.decorator';
 import { CreateTripDto } from './dto/create-trip.dto';
+import { EstimateTripDto } from './dto/estimate-trip.dto';
 import { StartTripDto } from './dto/start-trip.dto';
 import { TransitionTripDto } from './dto/transition-trip.dto';
 import { TripsService } from './trips.service';
@@ -15,15 +16,39 @@ export class TripsController {
   constructor(private readonly tripsService: TripsService) {}
 
   @Permissions('trip:create')
-  @Post()
-  create(@CurrentUser() user: AuthUser, @Body() dto: CreateTripDto) {
-    return this.tripsService.create(user, dto);
+  @Post('estimate')
+  estimate(@Body() dto: EstimateTripDto) {
+    return this.tripsService.estimate(dto);
   }
 
   @Permissions('trip:read:own')
   @Get('me')
   mine(@CurrentUser() user: AuthUser) {
     return this.tripsService.mine(user);
+  }
+
+  @Permissions('trip:accept')
+  @Get('available')
+  available(@CurrentUser() user: AuthUser) {
+    return this.tripsService.available(user);
+  }
+
+  @Permissions('trip:read:any')
+  @Get()
+  all() {
+    return this.tripsService.all();
+  }
+
+  @Permissions('trip:create')
+  @Post()
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateTripDto) {
+    return this.tripsService.create(user, dto);
+  }
+
+  @Permissions('trip:update:own')
+  @Post(':id/start-pin')
+  rotateStartPin(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.tripsService.rotateStartPin(user, id);
   }
 
   @Permissions('trip:accept')

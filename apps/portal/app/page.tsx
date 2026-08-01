@@ -1,33 +1,51 @@
-import { DashboardHeader } from '@/components/dashboard-header';
-import { Shell } from '@/components/shell';
+import { DashboardHeader } from "@/components/dashboard-header";
+import { Shell } from "@/components/shell";
 
 export default function Home() {
   return (
     <Shell>
       <DashboardHeader
-        eyebrow="النواة البرمجية الأولى"
-        title="منصة نقل متعددة الطبقات"
-        subtitle="واجهة موحدة للتجربة، مع API وصلاحيات ودورة رحلة قابلة للتوسع."
+        eyebrow="Milestone 1"
+        title="منصة نقل متعددة الأدوار"
+        subtitle="مصادقة وصلاحيات ودورة رحلة فعلية بين الراكب والسائق والإدارة."
       />
 
       <section className="hero">
         <div>
-          <div className="eyebrow" style={{ color: '#70e2b5' }}>MVP FOUNDATION</div>
-          <h2>ابدأ بالأساس الصحيح، ثم أضف الخرائط والدفع والتتبع.</h2>
+          <div className="eyebrow" style={{ color: "#70e2b5" }}>
+            SECURE TRIP FLOW
+          </div>
+          <h2>دورة رحلة قابلة للتجربة قبل إضافة الخرائط الحية.</h2>
           <p>
-            هذه النسخة تفصل الواجهة عن الخادم وقاعدة البيانات. الصلاحيات لا تعتمد على
-            إخفاء الأزرار فقط، بل تُفحص داخل API لكل عملية محمية.
+            يحسب الخادم السعر، يمنع الرحلات المتكررة، يخفي رمز البدء عن
+            السائق، ويتحقق من الصلاحيات الحالية من قاعدة البيانات.
           </p>
-          <a className="button primary" href="/login">تجربة تسجيل الدخول</a>
+          <a className="button primary" href="/login">
+            تسجيل الدخول
+          </a>
         </div>
-        <div className="map-placeholder"><div className="pin" /></div>
+        <div className="map-placeholder">
+          <div className="pin" />
+        </div>
       </section>
 
       <section className="grid">
-        <div className="card"><div className="label">الأدوار الأولية</div><div className="value">7</div></div>
-        <div className="card"><div className="label">الصلاحيات الأولية</div><div className="value">13</div></div>
-        <div className="card"><div className="label">حالات الرحلة</div><div className="value">11</div></div>
-        <div className="card"><div className="label">واجهات المنصة</div><div className="value">3</div></div>
+        <div className="card">
+          <div className="label">مصادقة</div>
+          <div className="value">JWT</div>
+        </div>
+        <div className="card">
+          <div className="label">حماية الصلاحيات</div>
+          <div className="value">RBAC</div>
+        </div>
+        <div className="card">
+          <div className="label">دورة الرحلة</div>
+          <div className="value">كاملة</div>
+        </div>
+        <div className="card">
+          <div className="label">التحديث الحالي</div>
+          <div className="value">Polling</div>
+        </div>
       </section>
     </Shell>
   );

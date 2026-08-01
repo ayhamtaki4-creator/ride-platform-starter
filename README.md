@@ -1,26 +1,37 @@
-<<<<<<< HEAD
-# Ride Platform Starter
+# Ride Platform Starter — Milestone 1
 
-نواة أولية لمنصة نقل متعددة الأدوار، مبنية كـ Monorepo:
+نواة عملية لمنصة نقل متعددة الأدوار، مبنية كـ Monorepo:
 
-- `apps/portal`: واجهة Next.js لتجارب الراكب والسائق والإدارة.
+- `apps/portal`: واجهة Next.js للراكب والسائق والإدارة.
 - `apps/api`: خادم NestJS مع Prisma وPostgreSQL.
-- نظام RBAC للأدوار والصلاحيات.
+- نظام RBAC مع إعادة قراءة حالة المستخدم وصلاحياته من قاعدة البيانات.
 - دورة رحلة محكومة بـ State Machine.
 - Swagger API Documentation.
 - Docker Compose لتشغيل PostgreSQL/PostGIS وRedis.
-- Seed ينشئ أدوارًا وصلاحيات وحساب مدير تجريبي.
 
-## المتطلبات
+## ما تم تنفيذه في Milestone 1
 
-- Node.js إصدار LTS حديث
-- pnpm
-- Docker Desktop أو Docker Engine
+- تسجيل الدخول وتوجيه المستخدم حسب دوره.
+- حماية صفحات الراكب والسائق والإدارة.
+- تسجيل الخروج ومعالجة انتهاء الجلسة.
+- حساب السعر داخل الخادم.
+- منع الراكب من إنشاء رحلتين نشطتين.
+- حالة السائق: Offline / Online / On Trip.
+- عرض الرحلات المتاحة للسائق المتصل.
+- قبول الرحلة وتنفيذ حالات الوصول والبدء والإنهاء.
+- تخزين Hash لرمز PIN وعدم إعادته للسائق.
+- تحرير السائق تلقائيًا بعد انتهاء الرحلة أو إلغائها.
+- لوحة إدارة مرتبطة بالمستخدمين والرحلات وسجل العمليات.
+- Polling مؤقت للتحديث كل عدة ثوانٍ قبل إضافة WebSocket.
 
 ## التشغيل
 
-```bash
-cp .env.example .env
+```powershell
+Copy-Item .env.example .env -Force
+Copy-Item .env apps\api\.env -Force
+"NEXT_PUBLIC_API_URL=http://localhost:4000/api" |
+  Set-Content apps\portal\.env.local -Encoding ascii
+
 docker compose up -d
 pnpm install
 pnpm db:generate
@@ -29,57 +40,49 @@ pnpm db:seed
 pnpm dev
 ```
 
+عند طلب Prisma اسم Migration، استخدم:
+
+```text
+milestone_1
+```
+
 ثم افتح:
 
 - الواجهة: `http://localhost:3000`
 - Swagger: `http://localhost:4000/docs`
 - فحص API: `http://localhost:4000/api/health`
 
-## الحساب التجريبي
+## الحسابات التجريبية
 
-بعد تشغيل Seed:
+| الدور | البريد | كلمة المرور |
+|---|---|---|
+| مدير | `admin@example.com` | `ChangeMe123!` |
+| راكب | `rider@example.com` | `ChangeMe123!` |
+| سائق | `driver@example.com` | `ChangeMe123!` |
 
-```text
-مدير النظام:
-email: admin@example.com
-password: ChangeMe123!
+## سيناريو الاختبار
 
-راكب تجريبي:
-email: rider@example.com
-password: ChangeMe123!
+1. افتح نافذة عادية وسجل الدخول كراكب.
+2. افتح نافذة خاصة وسجل الدخول كسائق.
+3. اجعل السائق Online.
+4. أنشئ رحلة من حساب الراكب.
+5. اقبل الرحلة من حساب السائق.
+6. اضغط «أنا في الطريق»، ثم «وصلت إلى الراكب».
+7. من حساب الراكب أنشئ رمز PIN وشاركه مع السائق.
+8. ابدأ الرحلة ثم أنهها.
+9. سجل الدخول كمدير لمشاهدة الرحلة وسجل العمليات.
 
-سائق تجريبي معتمد:
-email: driver@example.com
-password: ChangeMe123!
+
+## اختبار آلي لدورة الرحلة
+
+بعد تشغيل المشروع، افتح PowerShell جديدًا ونفّذ:
+
+```powershell
+.\scripts\test-trip-flow.ps1
 ```
 
-غيّر كلمة المرور فورًا في أي بيئة غير محلية.
+ينفذ السكربت تسجيل الدخول، تشغيل السائق، إنشاء الرحلة، قبولها، بدءها بالـPIN، ثم إنهاءها.
 
-## ما تم تنفيذه
+## ملاحظات أمنية
 
-1. التسجيل وتسجيل الدخول بواسطة JWT.
-2. أدوار وصلاحيات مخزنة في قاعدة البيانات.
-3. Guard للصلاحيات على مستوى API.
-4. إنشاء رحلة للراكب.
-5. عرض الرحلات الخاصة بالمستخدم.
-6. قبول السائق للرحلة.
-7. انتقالات حالات الرحلة وفق قواعد محددة.
-8. تسجيل تاريخ حالات الرحلة.
-9. Audit Log للعمليات الحساسة الأساسية.
-10. واجهات أولية منفصلة للراكب والسائق والإدارة.
-
-## الخطوات التالية
-
-راجع `docs/NEXT_STEPS.md`.
-
-
-## ملاحظة التحقق
-
-تم التحقق من بنية الملفات وملفات JSON محليًا. تعذر تنزيل حزم npm داخل بيئة الإنشاء بسبب حظر الاتصال بسجل npm، لذلك يجب تنفيذ `pnpm install` ثم `pnpm typecheck` على جهازك بعد فك الضغط.
-
-## ملاحظة الإصدارات
-
-تم تثبيت Next.js وReact وNestJS على إصدارات حديثة محددة. تم تثبيت Prisma على خط 6.19 المتوافق مع إعداد NestJS/CommonJS الحالي، بدل استخدام وسم `latest` الذي يجلب Prisma 7 ويتطلب إعداد Driver Adapter وتهيئة مختلفة.
-=======
-# ride-platform-starter
->>>>>>> b5d6e4efa876bab828559d26bab807972feafbe1
+التخزين الحالي لرمز JWT في `localStorage` مناسب لمرحلة التطوير فقط. قبل الإنتاج يجب الانتقال إلى جلسات تعتمد على Cookies من نوع `HttpOnly + Secure + SameSite`.

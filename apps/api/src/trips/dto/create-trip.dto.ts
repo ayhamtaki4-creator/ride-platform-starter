@@ -1,9 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsLatitude, IsLongitude, IsNumber, IsPositive, IsString } from 'class-validator';
+import {
+  IsLatitude,
+  IsLongitude,
+  IsString,
+  MaxLength,
+  MinLength
+} from 'class-validator';
 
 export class CreateTripDto {
   @ApiProperty({ example: 'شارع فلسطين، بغداد' })
   @IsString()
+  @MinLength(3)
+  @MaxLength(180)
   pickupAddress!: string;
 
   @ApiProperty({ example: 33.324 })
@@ -16,18 +24,15 @@ export class CreateTripDto {
 
   @ApiProperty({ example: 'المنصور، بغداد' })
   @IsString()
+  @MinLength(3)
+  @MaxLength(180)
   dropoffAddress!: string;
 
   @ApiProperty({ example: 33.315 })
   @IsLatitude()
   dropoffLatitude!: number;
 
-  @ApiProperty({ example: 44.350 })
+  @ApiProperty({ example: 44.35 })
   @IsLongitude()
   dropoffLongitude!: number;
-
-  @ApiProperty({ example: 12000 })
-  @IsNumber()
-  @IsPositive()
-  estimatedFare!: number;
 }

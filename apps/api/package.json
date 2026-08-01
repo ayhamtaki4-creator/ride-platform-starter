@@ -8,7 +8,7 @@
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
@@ -35,10 +35,10 @@
     "@types/express": "latest",
     "@types/node": "latest",
     "@types/passport-jwt": "latest",
-    "eslint": "latest",
+    "eslint": "9",
     "prisma": "6.19.3",
     "tsx": "latest",
-    "typescript": "^6.0.2"
+    "typescript": "6.0.2"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

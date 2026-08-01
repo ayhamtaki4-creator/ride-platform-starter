@@ -24,6 +24,8 @@
 - `trip:accept`
 - `trip:update:own`
 - `trip:update:any`
+- `driver:read:own`
+- `driver:availability:update`
 - `user:read:any`
 - `user:update:any`
 - `driver:review`
@@ -31,3 +33,11 @@
 - `payment:refund`
 - `support:manage`
 - `role:manage`
+- `audit:read:any`
+
+## ملاحظات أمنية
+
+- فحص الصلاحيات يتم داخل API، وليس بإخفاء الأزرار فقط.
+- `PermissionsGuard` يعيد قراءة حالة المستخدم وأدواره وصلاحياته الحالية من قاعدة البيانات في كل طلب محمي.
+- ملكية الرحلة تُفحص داخل الخدمة حتى لو كان الدور يملك صلاحية عامة مثل `trip:update:own`.
+- السائق لا يحصل على `startPinHash` في أي استجابة.

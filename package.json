@@ -12,7 +12,7 @@
     "db:seed": "pnpm --filter api prisma:seed"
   },
   "devDependencies": {
-    "turbo": "latest",
-    "typescript": "^6.0.2"
+    "turbo": "2.10.7",
+    "typescript": "6.0.2"
   }
 }

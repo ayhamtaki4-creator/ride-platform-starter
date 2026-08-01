@@ -17,8 +17,8 @@
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "eslint": "latest",
+    "eslint": "9",
     "eslint-config-next": "16.2.12",
-    "typescript": "^6.0.2"
+    "typescript": "6.0.2"
   }
 }

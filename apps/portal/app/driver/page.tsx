@@ -1,31 +1,387 @@
-import { DashboardHeader } from '@/components/dashboard-header';
-import { Shell } from '@/components/shell';
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { DashboardHeader } from "@/components/dashboard-header";
+import { ProtectedRoute } from "@/components/protected-route";
+import { Shell } from "@/components/shell";
+import { apiFetch } from "@/lib/api";
+import {
+  ACTIVE_TRIP_STATUSES,
+  Trip,
+  TRIP_STATUS_LABELS,
+} from "@/lib/types";
+
+type DriverProfile = {
+  id: string;
+  status: string;
+  availability: "OFFLINE" | "ONLINE" | "ON_TRIP";
+  rating: number;
+  vehicles: Array<{
+    id: string;
+    make: string;
+    model: string;
+    year: number;
+    color: string;
+    plateNumber: string;
+  }>;
+};
 
 export default function DriverPage() {
+  const [profile, setProfile] = useState<DriverProfile | null>(null);
+  const [availableTrips, setAvailableTrips] = useState<Trip[]>([]);
+  const [myTrips, setMyTrips] = useState<Trip[]>([]);
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [isWorking, setIsWorking] = useState(false);
+
+  const activeTrip = useMemo(
+    () => myTrips.find((trip) => ACTIVE_TRIP_STATUSES.includes(trip.status)),
+    [myTrips]
+  );
+
+  const loadData = useCallback(async () => {
+    try {
+      const [driverProfile, trips] = await Promise.all([
+        apiFetch<DriverProfile>("/drivers/me"),
+        apiFetch<Trip[]>("/trips/me"),
+      ]);
+
+      setProfile(driverProfile);
+      setMyTrips(trips);
+
+      const hasActiveTrip = trips.some((trip) =>
+        ACTIVE_TRIP_STATUSES.includes(trip.status)
+      );
+
+      if (driverProfile.availability === "ONLINE" && !hasActiveTrip) {
+        const available = await apiFetch<Trip[]>("/trips/available");
+        setAvailableTrips(available);
+      } else {
+        setAvailableTrips([]);
+      }
+
+      setError("");
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "تعذر تحميل البيانات."
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadData();
+    const timer = window.setInterval(() => void loadData(), 5000);
+    return () => window.clearInterval(timer);
+  }, [loadData]);
+
+  async function setAvailability(availability: "OFFLINE" | "ONLINE") {
+    setIsWorking(true);
+    setError("");
+
+    try {
+      await apiFetch("/drivers/me/availability", {
+        method: "PATCH",
+        body: JSON.stringify({ availability }),
+      });
+      setMessage(
+        availability === "ONLINE"
+          ? "أصبحت متصلًا ويمكنك استقبال الرحلات."
+          : "أصبحت غير متصل."
+      );
+      await loadData();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "تعذر تحديث الحالة."
+      );
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
+  async function runTripAction(path: string, body?: object) {
+    setIsWorking(true);
+    setError("");
+    setMessage("");
+
+    try {
+      await apiFetch(path, {
+        method: "POST",
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      setMessage("تم تحديث الرحلة بنجاح.");
+      setPin("");
+      await loadData();
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "تعذر تحديث الرحلة."
+      );
+    } finally {
+      setIsWorking(false);
+    }
+  }
+
   return (
-    <Shell>
-      <DashboardHeader
-        eyebrow="تجربة السائق"
-        title="جاهز لاستقبال الرحلات"
-        subtitle="النسخة التالية ستربط حالة الاتصال والموقع المباشر عبر WebSocket."
-      />
-      <section className="grid">
-        <div className="card"><div className="label">الحالة</div><div className="value">متصل</div></div>
-        <div className="card"><div className="label">رحلات اليوم</div><div className="value">8</div></div>
-        <div className="card"><div className="label">التقييم</div><div className="value">4.9</div></div>
-        <div className="card"><div className="label">أرباح اليوم</div><div className="value">94,000 د.ع</div></div>
-      </section>
-      <section className="panel">
-        <h2>طلب قريب</h2>
-        <div className="step">
-          <div className="step-number">3</div>
-          <div>
-            <strong>3 دقائق إلى نقطة الالتقاط</strong>
-            <div className="subtitle">شارع فلسطين ← المنصور</div>
+    <ProtectedRoute roles={["DRIVER"]}>
+      <Shell>
+        <DashboardHeader
+          eyebrow="تجربة السائق"
+          title="لوحة تشغيل السائق"
+          subtitle="غيّر حالتك، شاهد الطلبات المتاحة، ونفذ دورة الرحلة كاملة."
+        />
+
+        {error ? <div className="notice error">{error}</div> : null}
+        {message ? <div className="notice success">{message}</div> : null}
+
+        <section className="grid">
+          <div className="card">
+            <div className="label">الحالة</div>
+            <div className="value">
+              {profile?.availability === "ONLINE"
+                ? "متصل"
+                : profile?.availability === "ON_TRIP"
+                  ? "في رحلة"
+                  : "غير متصل"}
+            </div>
           </div>
-          <button className="button primary" style={{ marginInlineStart: 'auto' }}>قبول</button>
-        </div>
-      </section>
-    </Shell>
+          <div className="card">
+            <div className="label">الاعتماد</div>
+            <div className="value">{profile?.status ?? "..."}</div>
+          </div>
+          <div className="card">
+            <div className="label">التقييم</div>
+            <div className="value">{profile?.rating ?? "..."}</div>
+          </div>
+          <div className="card">
+            <div className="label">المركبة</div>
+            <div className="value vehicle-value">
+              {profile?.vehicles[0]
+                ? `${profile.vehicles[0].make} ${profile.vehicles[0].model}`
+                : "غير محددة"}
+            </div>
+          </div>
+        </section>
+
+        {!activeTrip && profile?.availability !== "ON_TRIP" ? (
+          <section className="panel">
+            <div className="section-heading">
+              <div>
+                <h2>حالة استقبال الطلبات</h2>
+                <p className="subtitle">
+                  يجب أن تكون متصلًا حتى تظهر لك الرحلات المتاحة.
+                </p>
+              </div>
+              <div className="actions">
+                <button
+                  className="button primary"
+                  type="button"
+                  disabled={isWorking || profile?.availability === "ONLINE"}
+                  onClick={() => setAvailability("ONLINE")}
+                >
+                  اتصال
+                </button>
+                <button
+                  className="button"
+                  type="button"
+                  disabled={isWorking || profile?.availability === "OFFLINE"}
+                  onClick={() => setAvailability("OFFLINE")}
+                >
+                  عدم الاتصال
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {activeTrip ? (
+          <section className="panel">
+            <div className="section-heading">
+              <div>
+                <div className="eyebrow">الرحلة الحالية</div>
+                <h2>{TRIP_STATUS_LABELS[activeTrip.status]}</h2>
+              </div>
+              <span className="status">
+                {TRIP_STATUS_LABELS[activeTrip.status]}
+              </span>
+            </div>
+
+            <div className="trip-route">
+              <strong>{activeTrip.pickupAddress}</strong>
+              <span>←</span>
+              <strong>{activeTrip.dropoffAddress}</strong>
+            </div>
+
+            <div className="notice">
+              الراكب: {activeTrip.passenger?.firstName}{" "}
+              {activeTrip.passenger?.lastName}
+            </div>
+
+            <div className="actions">
+              {activeTrip.status === "DRIVER_ASSIGNED" ? (
+                <button
+                  className="button primary"
+                  disabled={isWorking}
+                  onClick={() =>
+                    runTripAction(`/trips/${activeTrip.id}/arriving`)
+                  }
+                >
+                  أنا في الطريق
+                </button>
+              ) : null}
+
+              {activeTrip.status === "DRIVER_ARRIVING" ? (
+                <button
+                  className="button primary"
+                  disabled={isWorking}
+                  onClick={() =>
+                    runTripAction(`/trips/${activeTrip.id}/arrived`)
+                  }
+                >
+                  وصلت إلى الراكب
+                </button>
+              ) : null}
+
+              {activeTrip.status === "DRIVER_ARRIVED" ? (
+                <>
+                  <input
+                    className="input pin-input"
+                    value={pin}
+                    onChange={(event) => setPin(event.target.value)}
+                    maxLength={4}
+                    inputMode="numeric"
+                    placeholder="رمز PIN"
+                  />
+                  <button
+                    className="button primary"
+                    disabled={isWorking || pin.length !== 4}
+                    onClick={() =>
+                      runTripAction(`/trips/${activeTrip.id}/start`, { pin })
+                    }
+                  >
+                    بدء الرحلة
+                  </button>
+                </>
+              ) : null}
+
+              {activeTrip.status === "IN_PROGRESS" ? (
+                <button
+                  className="button primary"
+                  disabled={isWorking}
+                  onClick={() =>
+                    runTripAction(`/trips/${activeTrip.id}/complete`, {
+                      note: "Completed from driver portal",
+                    })
+                  }
+                >
+                  إنهاء الرحلة
+                </button>
+              ) : null}
+
+              {activeTrip.status !== "IN_PROGRESS" ? (
+                <button
+                  className="button danger"
+                  disabled={isWorking}
+                  onClick={() =>
+                    runTripAction(`/trips/${activeTrip.id}/cancel`, {
+                      note: "Cancelled from driver portal",
+                    })
+                  }
+                >
+                  إلغاء الرحلة
+                </button>
+              ) : null}
+            </div>
+          </section>
+        ) : (
+          <section className="panel">
+            <h2>الرحلات المتاحة</h2>
+
+            {profile?.availability !== "ONLINE" ? (
+              <div className="empty-state">
+                فعّل حالة الاتصال لعرض الرحلات.
+              </div>
+            ) : availableTrips.length === 0 ? (
+              <div className="empty-state">
+                لا توجد طلبات متاحة حاليًا. يتم التحديث تلقائيًا.
+              </div>
+            ) : (
+              <div className="trip-list">
+                {availableTrips.map((trip) => (
+                  <article className="trip-card" key={trip.id}>
+                    <div>
+                      <strong>
+                        {trip.pickupAddress} ← {trip.dropoffAddress}
+                      </strong>
+                      <p className="subtitle">
+                        {trip.estimatedDistanceKm} كم ·{" "}
+                        {trip.estimatedDurationMinutes} دقيقة
+                      </p>
+                    </div>
+
+                    <div className="trip-price">
+                      {Number(trip.estimatedFare).toLocaleString("ar-IQ")}{" "}
+                      {trip.currency}
+                    </div>
+
+                    <button
+                      className="button primary"
+                      disabled={isWorking}
+                      onClick={() =>
+                        runTripAction(`/trips/${trip.id}/accept`)
+                      }
+                    >
+                      قبول
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        <section className="panel">
+          <h2>آخر الرحلات</h2>
+          {myTrips.length === 0 ? (
+            <div className="empty-state">لا توجد رحلات سابقة.</div>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>المسار</th>
+                    <th>الحالة</th>
+                    <th>الأجرة</th>
+                    <th>التاريخ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {myTrips.map((trip) => (
+                    <tr key={trip.id}>
+                      <td>
+                        {trip.pickupAddress} ← {trip.dropoffAddress}
+                      </td>
+                      <td>{TRIP_STATUS_LABELS[trip.status]}</td>
+                      <td>
+                        {Number(trip.estimatedFare).toLocaleString("ar-IQ")}{" "}
+                        {trip.currency}
+                      </td>
+                      <td>
+                        {new Date(trip.requestedAt).toLocaleString("ar-IQ")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </Shell>
+    </ProtectedRoute>
   );
 }
