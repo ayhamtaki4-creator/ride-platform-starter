@@ -27,6 +27,7 @@ enum DriverAvailability {
 }
 
 enum TripStatus {
+  PENDING_DISPATCH
   SEARCHING_DRIVER
   DRIVER_ASSIGNED
   DRIVER_ARRIVING
@@ -129,7 +130,7 @@ model Trip {
   id                       String              @id @default(uuid()) @db.Uuid
   passengerId              String              @db.Uuid
   driverId                 String?             @db.Uuid
-  status                   TripStatus          @default(SEARCHING_DRIVER)
+  status                   TripStatus          @default(PENDING_DISPATCH)
   pickupAddress            String
   pickupLatitude           Float
   pickupLongitude          Float
