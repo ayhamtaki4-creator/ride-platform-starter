@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ProtectedRoute } from "@/components/protected-route";
+import { RideMapClient } from "@/components/ride-map-client";
 import { Shell } from "@/components/shell";
 import { apiFetch } from "@/lib/api";
 import {
@@ -30,6 +31,7 @@ export default function DriverPage() {
   const [profile, setProfile] = useState<DriverProfile | null>(null);
   const [availableTrips, setAvailableTrips] = useState<Trip[]>([]);
   const [myTrips, setMyTrips] = useState<Trip[]>([]);
+  const [previewTripId, setPreviewTripId] = useState<string | null>(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -39,6 +41,15 @@ export default function DriverPage() {
     () => myTrips.find((trip) => ACTIVE_TRIP_STATUSES.includes(trip.status)),
     [myTrips]
   );
+
+  const previewTrip = useMemo(() => {
+    if (activeTrip) return activeTrip;
+    return (
+      availableTrips.find((trip) => trip.id === previewTripId) ??
+      availableTrips[0] ??
+      null
+    );
+  }, [activeTrip, availableTrips, previewTripId]);
 
   const loadData = useCallback(async () => {
     try {
@@ -57,8 +68,15 @@ export default function DriverPage() {
       if (driverProfile.availability === "ONLINE" && !hasActiveTrip) {
         const available = await apiFetch<Trip[]>("/trips/available");
         setAvailableTrips(available);
+        setPreviewTripId((current) => {
+          if (current && available.some((trip) => trip.id === current)) {
+            return current;
+          }
+          return available[0]?.id ?? null;
+        });
       } else {
         setAvailableTrips([]);
+        setPreviewTripId(null);
       }
 
       setError("");
@@ -133,7 +151,7 @@ export default function DriverPage() {
         <DashboardHeader
           eyebrow="تجربة السائق"
           title="لوحة تشغيل السائق"
-          subtitle="غيّر حالتك، شاهد الطلبات المتاحة، ونفذ دورة الرحلة كاملة."
+          subtitle="شاهد مسار الطلب على الخريطة قبل القبول ونفذ دورة الرحلة كاملة."
         />
 
         {error ? <div className="notice error">{error}</div> : null}
@@ -199,6 +217,47 @@ export default function DriverPage() {
           </section>
         ) : null}
 
+        {previewTrip ? (
+          <section className="panel map-preview-panel">
+            <div className="section-heading">
+              <div>
+                <div className="eyebrow">
+                  {activeTrip ? "مسار الرحلة الحالية" : "معاينة الطلب المحدد"}
+                </div>
+                <h2>
+                  {previewTrip.pickupAddress} ← {previewTrip.dropoffAddress}
+                </h2>
+              </div>
+              <span className="status">
+                {TRIP_STATUS_LABELS[previewTrip.status]}
+              </span>
+            </div>
+
+            <RideMapClient
+              pickup={{
+                latitude: previewTrip.pickupLatitude,
+                longitude: previewTrip.pickupLongitude,
+                label: previewTrip.pickupAddress,
+              }}
+              dropoff={{
+                latitude: previewTrip.dropoffLatitude,
+                longitude: previewTrip.dropoffLongitude,
+                label: previewTrip.dropoffAddress,
+              }}
+              height={410}
+            />
+
+            <div className="route-summary-row">
+              <span>{previewTrip.estimatedDistanceKm} كم</span>
+              <span>{previewTrip.estimatedDurationMinutes} دقيقة</span>
+              <strong>
+                {Number(previewTrip.estimatedFare).toLocaleString("ar-IQ")} {" "}
+                {previewTrip.currency}
+              </strong>
+            </div>
+          </section>
+        ) : null}
+
         {activeTrip ? (
           <section className="panel">
             <div className="section-heading">
@@ -218,7 +277,7 @@ export default function DriverPage() {
             </div>
 
             <div className="notice">
-              الراكب: {activeTrip.passenger?.firstName}{" "}
+              الراكب: {activeTrip.passenger?.firstName} {" "}
               {activeTrip.passenger?.lastName}
             </div>
 
@@ -313,31 +372,44 @@ export default function DriverPage() {
             ) : (
               <div className="trip-list">
                 {availableTrips.map((trip) => (
-                  <article className="trip-card" key={trip.id}>
+                  <article
+                    className={`trip-card ${previewTrip?.id === trip.id ? "is-selected" : ""}`}
+                    key={trip.id}
+                  >
                     <div>
                       <strong>
                         {trip.pickupAddress} ← {trip.dropoffAddress}
                       </strong>
                       <p className="subtitle">
-                        {trip.estimatedDistanceKm} كم ·{" "}
+                        {trip.estimatedDistanceKm} كم · {" "}
                         {trip.estimatedDurationMinutes} دقيقة
                       </p>
                     </div>
 
                     <div className="trip-price">
-                      {Number(trip.estimatedFare).toLocaleString("ar-IQ")}{" "}
+                      {Number(trip.estimatedFare).toLocaleString("ar-IQ")} {" "}
                       {trip.currency}
                     </div>
 
-                    <button
-                      className="button primary"
-                      disabled={isWorking}
-                      onClick={() =>
-                        runTripAction(`/trips/${trip.id}/accept`)
-                      }
-                    >
-                      قبول
-                    </button>
+                    <div className="actions">
+                      <button
+                        className="button"
+                        type="button"
+                        disabled={isWorking}
+                        onClick={() => setPreviewTripId(trip.id)}
+                      >
+                        عرض المسار
+                      </button>
+                      <button
+                        className="button primary"
+                        disabled={isWorking}
+                        onClick={() =>
+                          runTripAction(`/trips/${trip.id}/accept`)
+                        }
+                      >
+                        قبول
+                      </button>
+                    </div>
                   </article>
                 ))}
               </div>
@@ -368,7 +440,7 @@ export default function DriverPage() {
                       </td>
                       <td>{TRIP_STATUS_LABELS[trip.status]}</td>
                       <td>
-                        {Number(trip.estimatedFare).toLocaleString("ar-IQ")}{" "}
+                        {Number(trip.estimatedFare).toLocaleString("ar-IQ")} {" "}
                         {trip.currency}
                       </td>
                       <td>

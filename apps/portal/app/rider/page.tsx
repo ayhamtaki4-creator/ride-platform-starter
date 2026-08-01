@@ -3,6 +3,8 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ProtectedRoute } from "@/components/protected-route";
+import { RideMapClient } from "@/components/ride-map-client";
+import type { MapPoint } from "@/components/ride-map";
 import { Shell } from "@/components/shell";
 import { apiFetch } from "@/lib/api";
 import {
@@ -18,6 +20,8 @@ type Estimate = {
   currency: string;
 };
 
+type SelectionMode = "pickup" | "dropoff";
+
 const initialForm = {
   pickupAddress: "شارع فلسطين، بغداد",
   pickupLatitude: 33.324,
@@ -27,18 +31,42 @@ const initialForm = {
   dropoffLongitude: 44.35,
 };
 
+function coordinateLabel(point: MapPoint) {
+  return `${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`;
+}
+
 export default function RiderPage() {
   const [form, setForm] = useState(initialForm);
+  const [selectionMode, setSelectionMode] = useState<SelectionMode>("pickup");
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [startPin, setStartPin] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [isWorking, setIsWorking] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
 
   const activeTrip = useMemo(
     () => trips.find((trip) => ACTIVE_TRIP_STATUSES.includes(trip.status)),
     [trips]
+  );
+
+  const pickupPoint = useMemo<MapPoint>(
+    () => ({
+      latitude: Number(form.pickupLatitude),
+      longitude: Number(form.pickupLongitude),
+      label: form.pickupAddress,
+    }),
+    [form.pickupAddress, form.pickupLatitude, form.pickupLongitude]
+  );
+
+  const dropoffPoint = useMemo<MapPoint>(
+    () => ({
+      latitude: Number(form.dropoffLatitude),
+      longitude: Number(form.dropoffLongitude),
+      label: form.dropoffAddress,
+    }),
+    [form.dropoffAddress, form.dropoffLatitude, form.dropoffLongitude]
   );
 
   const loadTrips = useCallback(async () => {
@@ -61,6 +89,79 @@ export default function RiderPage() {
     return () => window.clearInterval(timer);
   }, [loadTrips]);
 
+  function applyPoint(mode: SelectionMode, point: MapPoint, address?: string) {
+    setEstimate(null);
+    setForm((current) => {
+      if (mode === "pickup") {
+        return {
+          ...current,
+          pickupAddress:
+            address ?? `نقطة انطلاق محددة على الخريطة (${coordinateLabel(point)})`,
+          pickupLatitude: point.latitude,
+          pickupLongitude: point.longitude,
+        };
+      }
+
+      return {
+        ...current,
+        dropoffAddress:
+          address ?? `وجهة محددة على الخريطة (${coordinateLabel(point)})`,
+        dropoffLatitude: point.latitude,
+        dropoffLongitude: point.longitude,
+      };
+    });
+  }
+
+  function handleMapSelect(point: MapPoint) {
+    applyPoint(selectionMode, point);
+    setMessage(
+      selectionMode === "pickup"
+        ? "تم تحديث نقطة الانطلاق من الخريطة."
+        : "تم تحديث الوجهة من الخريطة."
+    );
+    setError("");
+  }
+
+  function useCurrentLocation() {
+    setError("");
+    setMessage("");
+
+    if (!navigator.geolocation) {
+      setError("المتصفح لا يدعم تحديد الموقع الجغرافي.");
+      return;
+    }
+
+    setIsLocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const point = {
+          latitude: Number(position.coords.latitude.toFixed(6)),
+          longitude: Number(position.coords.longitude.toFixed(6)),
+        };
+
+        applyPoint("pickup", point, "موقعي الحالي");
+        setSelectionMode("dropoff");
+        setMessage("تم تحديد موقعك كنقطة انطلاق. اختر الوجهة على الخريطة.");
+        setIsLocating(false);
+      },
+      (locationError) => {
+        const locationMessage =
+          locationError.code === locationError.PERMISSION_DENIED
+            ? "تم رفض إذن الوصول إلى الموقع. فعّل الإذن من إعدادات المتصفح."
+            : "تعذر تحديد موقعك الحالي. حاول مرة أخرى.";
+
+        setError(locationMessage);
+        setIsLocating(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 30000,
+      }
+    );
+  }
+
   async function handleEstimate() {
     setError("");
     setMessage("");
@@ -77,6 +178,7 @@ export default function RiderPage() {
         }),
       });
       setEstimate(result);
+      setMessage("تم حساب السعر التقديري داخل الخادم.");
     } catch (caughtError) {
       setError(
         caughtError instanceof Error ? caughtError.message : "تعذر حساب السعر."
@@ -164,6 +266,7 @@ export default function RiderPage() {
   }
 
   function updateField(field: keyof typeof initialForm, value: string) {
+    setEstimate(null);
     setForm((current) => {
       switch (field) {
         case "pickupAddress":
@@ -187,8 +290,8 @@ export default function RiderPage() {
       <Shell>
         <DashboardHeader
           eyebrow="تجربة الراكب"
-          title="اطلب رحلتك"
-          subtitle="السعر يحسب داخل الخادم ولا يمكن للمتصفح تحديده."
+          title="اطلب رحلتك من الخريطة"
+          subtitle="حدد الانطلاق والوجهة بصريًا، ثم احصل على سعر يحسب داخل الخادم."
         />
 
         {error ? <div className="notice error">{error}</div> : null}
@@ -212,6 +315,20 @@ export default function RiderPage() {
               <strong>{activeTrip.dropoffAddress}</strong>
             </div>
 
+            <RideMapClient
+              pickup={{
+                latitude: activeTrip.pickupLatitude,
+                longitude: activeTrip.pickupLongitude,
+                label: activeTrip.pickupAddress,
+              }}
+              dropoff={{
+                latitude: activeTrip.dropoffLatitude,
+                longitude: activeTrip.dropoffLongitude,
+                label: activeTrip.dropoffAddress,
+              }}
+              height={390}
+            />
+
             <div className="grid trip-metrics">
               <div className="card">
                 <div className="label">المسافة التقديرية</div>
@@ -226,7 +343,7 @@ export default function RiderPage() {
               <div className="card">
                 <div className="label">الأجرة</div>
                 <div className="value">
-                  {Number(activeTrip.estimatedFare).toLocaleString("ar-IQ")}{" "}
+                  {Number(activeTrip.estimatedFare).toLocaleString("ar-IQ")} {" "}
                   {activeTrip.currency}
                 </div>
               </div>
@@ -234,7 +351,7 @@ export default function RiderPage() {
 
             {activeTrip.driver ? (
               <div className="notice">
-                السائق: {activeTrip.driver.firstName}{" "}
+                السائق: {activeTrip.driver.firstName} {" "}
                 {activeTrip.driver.lastName}
               </div>
             ) : (
@@ -277,10 +394,70 @@ export default function RiderPage() {
           </section>
         ) : (
           <section className="panel">
-            <h2>رحلة جديدة</h2>
-            <form className="form-grid" onSubmit={handleCreate}>
+            <div className="section-heading">
+              <div>
+                <h2>رحلة جديدة</h2>
+                <p className="subtitle">
+                  اختر ما تريد تعديله ثم انقر على الخريطة.
+                </p>
+              </div>
+
+              <button
+                className="button"
+                type="button"
+                onClick={useCurrentLocation}
+                disabled={isLocating || isWorking}
+              >
+                {isLocating ? "جارٍ تحديد الموقع..." : "استخدم موقعي الحالي"}
+              </button>
+            </div>
+
+            <div className="map-toolbar" role="group" aria-label="اختيار نقطة الخريطة">
+              <button
+                className={`map-mode-button ${selectionMode === "pickup" ? "is-active" : ""}`}
+                type="button"
+                onClick={() => setSelectionMode("pickup")}
+              >
+                تحديد الانطلاق
+              </button>
+              <button
+                className={`map-mode-button ${selectionMode === "dropoff" ? "is-active" : ""}`}
+                type="button"
+                onClick={() => setSelectionMode("dropoff")}
+              >
+                تحديد الوجهة
+              </button>
+            </div>
+
+            <RideMapClient
+              pickup={pickupPoint}
+              dropoff={dropoffPoint}
+              editable
+              selectionMode={selectionMode}
+              onSelect={handleMapSelect}
+              height={460}
+            />
+
+            <div className="coordinate-summary">
+              <div>
+                <span className="map-dot pickup" />
+                <div>
+                  <strong>الانطلاق</strong>
+                  <small>{coordinateLabel(pickupPoint)}</small>
+                </div>
+              </div>
+              <div>
+                <span className="map-dot dropoff" />
+                <div>
+                  <strong>الوجهة</strong>
+                  <small>{coordinateLabel(dropoffPoint)}</small>
+                </div>
+              </div>
+            </div>
+
+            <form className="form-grid ride-request-form" onSubmit={handleCreate}>
               <label className="full-width">
-                <span className="label">نقطة الانطلاق</span>
+                <span className="label">عنوان نقطة الانطلاق</span>
                 <input
                   className="input"
                   value={form.pickupAddress}
@@ -291,36 +468,8 @@ export default function RiderPage() {
                 />
               </label>
 
-              <label>
-                <span className="label">خط عرض الانطلاق</span>
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  value={form.pickupLatitude}
-                  onChange={(event) =>
-                    updateField("pickupLatitude", event.target.value)
-                  }
-                  required
-                />
-              </label>
-
-              <label>
-                <span className="label">خط طول الانطلاق</span>
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  value={form.pickupLongitude}
-                  onChange={(event) =>
-                    updateField("pickupLongitude", event.target.value)
-                  }
-                  required
-                />
-              </label>
-
               <label className="full-width">
-                <span className="label">الوجهة</span>
+                <span className="label">عنوان الوجهة</span>
                 <input
                   className="input"
                   value={form.dropoffAddress}
@@ -331,33 +480,66 @@ export default function RiderPage() {
                 />
               </label>
 
-              <label>
-                <span className="label">خط عرض الوجهة</span>
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  value={form.dropoffLatitude}
-                  onChange={(event) =>
-                    updateField("dropoffLatitude", event.target.value)
-                  }
-                  required
-                />
-              </label>
+              <details className="coordinates-details full-width">
+                <summary>عرض الإحداثيات الدقيقة</summary>
+                <div className="form-grid coordinates-grid">
+                  <label>
+                    <span className="label">خط عرض الانطلاق</span>
+                    <input
+                      className="input"
+                      type="number"
+                      step="any"
+                      value={form.pickupLatitude}
+                      onChange={(event) =>
+                        updateField("pickupLatitude", event.target.value)
+                      }
+                      required
+                    />
+                  </label>
 
-              <label>
-                <span className="label">خط طول الوجهة</span>
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  value={form.dropoffLongitude}
-                  onChange={(event) =>
-                    updateField("dropoffLongitude", event.target.value)
-                  }
-                  required
-                />
-              </label>
+                  <label>
+                    <span className="label">خط طول الانطلاق</span>
+                    <input
+                      className="input"
+                      type="number"
+                      step="any"
+                      value={form.pickupLongitude}
+                      onChange={(event) =>
+                        updateField("pickupLongitude", event.target.value)
+                      }
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    <span className="label">خط عرض الوجهة</span>
+                    <input
+                      className="input"
+                      type="number"
+                      step="any"
+                      value={form.dropoffLatitude}
+                      onChange={(event) =>
+                        updateField("dropoffLatitude", event.target.value)
+                      }
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    <span className="label">خط طول الوجهة</span>
+                    <input
+                      className="input"
+                      type="number"
+                      step="any"
+                      value={form.dropoffLongitude}
+                      onChange={(event) =>
+                        updateField("dropoffLongitude", event.target.value)
+                      }
+                      required
+                    />
+                  </label>
+                </div>
+              </details>
 
               <div className="actions full-width">
                 <button
@@ -381,11 +563,11 @@ export default function RiderPage() {
             {estimate ? (
               <div className="estimate-box">
                 <strong>
-                  {estimate.estimatedFare.toLocaleString("ar-IQ")}{" "}
+                  {estimate.estimatedFare.toLocaleString("ar-IQ")} {" "}
                   {estimate.currency}
                 </strong>
                 <span>
-                  {estimate.estimatedDistanceKm} كم ·{" "}
+                  {estimate.estimatedDistanceKm} كم · {" "}
                   {estimate.estimatedDurationMinutes} دقيقة
                 </span>
               </div>
@@ -416,7 +598,7 @@ export default function RiderPage() {
                       </td>
                       <td>{TRIP_STATUS_LABELS[trip.status]}</td>
                       <td>
-                        {Number(trip.estimatedFare).toLocaleString("ar-IQ")}{" "}
+                        {Number(trip.estimatedFare).toLocaleString("ar-IQ")} {" "}
                         {trip.currency}
                       </td>
                       <td>
