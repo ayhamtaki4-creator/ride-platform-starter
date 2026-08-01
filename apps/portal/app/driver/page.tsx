@@ -29,9 +29,7 @@ type DriverProfile = {
 
 export default function DriverPage() {
   const [profile, setProfile] = useState<DriverProfile | null>(null);
-  const [availableTrips, setAvailableTrips] = useState<Trip[]>([]);
   const [myTrips, setMyTrips] = useState<Trip[]>([]);
-  const [previewTripId, setPreviewTripId] = useState<string | null>(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -42,15 +40,6 @@ export default function DriverPage() {
     [myTrips]
   );
 
-  const previewTrip = useMemo(() => {
-    if (activeTrip) return activeTrip;
-    return (
-      availableTrips.find((trip) => trip.id === previewTripId) ??
-      availableTrips[0] ??
-      null
-    );
-  }, [activeTrip, availableTrips, previewTripId]);
-
   const loadData = useCallback(async () => {
     try {
       const [driverProfile, trips] = await Promise.all([
@@ -60,61 +49,44 @@ export default function DriverPage() {
 
       setProfile(driverProfile);
       setMyTrips(trips);
-
-      const hasActiveTrip = trips.some((trip) =>
-        ACTIVE_TRIP_STATUSES.includes(trip.status)
-      );
-
-      if (driverProfile.availability === "ONLINE" && !hasActiveTrip) {
-        const available = await apiFetch<Trip[]>("/trips/available");
-        setAvailableTrips(available);
-        setPreviewTripId((current) => {
-          if (current && available.some((trip) => trip.id === current)) {
-            return current;
-          }
-          return available[0]?.id ?? null;
-        });
-      } else {
-        setAvailableTrips([]);
-        setPreviewTripId(null);
-      }
-
       setError("");
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "تعذر تحميل البيانات."
+          : "تعذر تحميل بيانات السائق."
       );
     }
   }, []);
 
   useEffect(() => {
     void loadData();
-    const timer = window.setInterval(() => void loadData(), 5000);
+    const timer = window.setInterval(() => void loadData(), 4000);
     return () => window.clearInterval(timer);
   }, [loadData]);
 
   async function setAvailability(availability: "OFFLINE" | "ONLINE") {
     setIsWorking(true);
     setError("");
+    setMessage("");
 
     try {
       await apiFetch("/drivers/me/availability", {
         method: "PATCH",
         body: JSON.stringify({ availability }),
       });
+
       setMessage(
         availability === "ONLINE"
-          ? "أصبحت متصلًا ويمكنك استقبال الرحلات."
-          : "أصبحت غير متصل."
+          ? "أصبحت متصلًا. ستظهر الرحلة هنا بعد أن يعيّنها المشرف لك."
+          : "أصبحت غير متصل ولن تظهر ضمن قائمة التوزيع."
       );
       await loadData();
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "تعذر تحديث الحالة."
+          : "تعذر تحديث حالة الاتصال."
       );
     } finally {
       setIsWorking(false);
@@ -151,7 +123,7 @@ export default function DriverPage() {
         <DashboardHeader
           eyebrow="تجربة السائق"
           title="لوحة تشغيل السائق"
-          subtitle="شاهد مسار الطلب على الخريطة قبل القبول ونفذ دورة الرحلة كاملة."
+          subtitle="فعّل حالة الاتصال، ثم انتظر تعيين الرحلة من مركز العمليات."
         />
 
         {error ? <div className="notice error">{error}</div> : null}
@@ -159,7 +131,7 @@ export default function DriverPage() {
 
         <section className="grid">
           <div className="card">
-            <div className="label">الحالة</div>
+            <div className="label">حالة الاتصال</div>
             <div className="value">
               {profile?.availability === "ONLINE"
                 ? "متصل"
@@ -190,9 +162,10 @@ export default function DriverPage() {
           <section className="panel">
             <div className="section-heading">
               <div>
-                <h2>حالة استقبال الطلبات</h2>
+                <h2>الاستعداد لاستلام رحلة</h2>
                 <p className="subtitle">
-                  يجب أن تكون متصلًا حتى تظهر لك الرحلات المتاحة.
+                  عندما تكون Online سيظهر اسمك للمشرف ضمن السائقين المتاحين.
+                  السائق لا يختار الطلب بنفسه.
                 </p>
               </div>
               <div className="actions">
@@ -200,7 +173,7 @@ export default function DriverPage() {
                   className="button primary"
                   type="button"
                   disabled={isWorking || profile?.availability === "ONLINE"}
-                  onClick={() => setAvailability("ONLINE")}
+                  onClick={() => void setAvailability("ONLINE")}
                 >
                   اتصال
                 </button>
@@ -208,7 +181,7 @@ export default function DriverPage() {
                   className="button"
                   type="button"
                   disabled={isWorking || profile?.availability === "OFFLINE"}
-                  onClick={() => setAvailability("OFFLINE")}
+                  onClick={() => void setAvailability("OFFLINE")}
                 >
                   عدم الاتصال
                 </button>
@@ -217,201 +190,166 @@ export default function DriverPage() {
           </section>
         ) : null}
 
-        {previewTrip ? (
-          <section className="panel map-preview-panel">
-            <div className="section-heading">
-              <div>
-                <div className="eyebrow">
-                  {activeTrip ? "مسار الرحلة الحالية" : "معاينة الطلب المحدد"}
-                </div>
-                <h2>
-                  {previewTrip.pickupAddress} ← {previewTrip.dropoffAddress}
-                </h2>
-              </div>
-              <span className="status">
-                {TRIP_STATUS_LABELS[previewTrip.status]}
-              </span>
-            </div>
-
-            <RideMapClient
-              pickup={{
-                latitude: previewTrip.pickupLatitude,
-                longitude: previewTrip.pickupLongitude,
-                label: previewTrip.pickupAddress,
-              }}
-              dropoff={{
-                latitude: previewTrip.dropoffLatitude,
-                longitude: previewTrip.dropoffLongitude,
-                label: previewTrip.dropoffAddress,
-              }}
-              height={410}
-            />
-
-            <div className="route-summary-row">
-              <span>{previewTrip.estimatedDistanceKm} كم</span>
-              <span>{previewTrip.estimatedDurationMinutes} دقيقة</span>
-              <strong>
-                {Number(previewTrip.estimatedFare).toLocaleString("ar-IQ")} {" "}
-                {previewTrip.currency}
-              </strong>
-            </div>
-          </section>
-        ) : null}
-
         {activeTrip ? (
-          <section className="panel">
-            <div className="section-heading">
-              <div>
-                <div className="eyebrow">الرحلة الحالية</div>
-                <h2>{TRIP_STATUS_LABELS[activeTrip.status]}</h2>
+          <>
+            <section className="panel map-preview-panel">
+              <div className="section-heading">
+                <div>
+                  <div className="eyebrow">رحلة عيّنها مركز العمليات</div>
+                  <h2>
+                    {activeTrip.pickupAddress} ← {activeTrip.dropoffAddress}
+                  </h2>
+                </div>
+                <span className="status">
+                  {TRIP_STATUS_LABELS[activeTrip.status]}
+                </span>
               </div>
-              <span className="status">
-                {TRIP_STATUS_LABELS[activeTrip.status]}
-              </span>
-            </div>
 
-            <div className="trip-route">
-              <strong>{activeTrip.pickupAddress}</strong>
-              <span>←</span>
-              <strong>{activeTrip.dropoffAddress}</strong>
-            </div>
+              <RideMapClient
+                pickup={{
+                  latitude: activeTrip.pickupLatitude,
+                  longitude: activeTrip.pickupLongitude,
+                  label: activeTrip.pickupAddress,
+                }}
+                dropoff={{
+                  latitude: activeTrip.dropoffLatitude,
+                  longitude: activeTrip.dropoffLongitude,
+                  label: activeTrip.dropoffAddress,
+                }}
+                height={410}
+              />
 
-            <div className="notice">
-              الراكب: {activeTrip.passenger?.firstName} {" "}
-              {activeTrip.passenger?.lastName}
-            </div>
+              <div className="route-summary-row">
+                <span>{activeTrip.estimatedDistanceKm} كم</span>
+                <span>{activeTrip.estimatedDurationMinutes} دقيقة</span>
+                <strong>
+                  {Number(activeTrip.estimatedFare).toLocaleString("ar-IQ")}{" "}
+                  {activeTrip.currency}
+                </strong>
+              </div>
+            </section>
 
-            <div className="actions">
-              {activeTrip.status === "DRIVER_ASSIGNED" ? (
-                <button
-                  className="button primary"
-                  disabled={isWorking}
-                  onClick={() =>
-                    runTripAction(`/trips/${activeTrip.id}/arriving`)
-                  }
-                >
-                  أنا في الطريق
-                </button>
-              ) : null}
+            <section className="panel">
+              <div className="section-heading">
+                <div>
+                  <div className="eyebrow">الرحلة الحالية</div>
+                  <h2>{TRIP_STATUS_LABELS[activeTrip.status]}</h2>
+                </div>
+                <span className="status">
+                  {TRIP_STATUS_LABELS[activeTrip.status]}
+                </span>
+              </div>
 
-              {activeTrip.status === "DRIVER_ARRIVING" ? (
-                <button
-                  className="button primary"
-                  disabled={isWorking}
-                  onClick={() =>
-                    runTripAction(`/trips/${activeTrip.id}/arrived`)
-                  }
-                >
-                  وصلت إلى الراكب
-                </button>
-              ) : null}
+              <div className="trip-route">
+                <strong>{activeTrip.pickupAddress}</strong>
+                <span>←</span>
+                <strong>{activeTrip.dropoffAddress}</strong>
+              </div>
 
-              {activeTrip.status === "DRIVER_ARRIVED" ? (
-                <>
-                  <input
-                    className="input pin-input"
-                    value={pin}
-                    onChange={(event) => setPin(event.target.value)}
-                    maxLength={4}
-                    inputMode="numeric"
-                    placeholder="رمز PIN"
-                  />
+              <div className="notice">
+                الراكب: {activeTrip.passenger?.firstName}{" "}
+                {activeTrip.passenger?.lastName}
+                {activeTrip.passenger?.phone
+                  ? ` · ${activeTrip.passenger.phone}`
+                  : ""}
+              </div>
+
+              <div className="actions">
+                {activeTrip.status === "DRIVER_ASSIGNED" ? (
                   <button
                     className="button primary"
-                    disabled={isWorking || pin.length !== 4}
+                    disabled={isWorking}
                     onClick={() =>
-                      runTripAction(`/trips/${activeTrip.id}/start`, { pin })
+                      void runTripAction(`/trips/${activeTrip.id}/arriving`)
                     }
                   >
-                    بدء الرحلة
+                    أنا في الطريق
                   </button>
-                </>
-              ) : null}
+                ) : null}
 
-              {activeTrip.status === "IN_PROGRESS" ? (
-                <button
-                  className="button primary"
-                  disabled={isWorking}
-                  onClick={() =>
-                    runTripAction(`/trips/${activeTrip.id}/complete`, {
-                      note: "Completed from driver portal",
-                    })
-                  }
-                >
-                  إنهاء الرحلة
-                </button>
-              ) : null}
+                {activeTrip.status === "DRIVER_ARRIVING" ? (
+                  <button
+                    className="button primary"
+                    disabled={isWorking}
+                    onClick={() =>
+                      void runTripAction(`/trips/${activeTrip.id}/arrived`)
+                    }
+                  >
+                    وصلت إلى الراكب
+                  </button>
+                ) : null}
 
-              {activeTrip.status !== "IN_PROGRESS" ? (
-                <button
-                  className="button danger"
-                  disabled={isWorking}
-                  onClick={() =>
-                    runTripAction(`/trips/${activeTrip.id}/cancel`, {
-                      note: "Cancelled from driver portal",
-                    })
-                  }
-                >
-                  إلغاء الرحلة
-                </button>
-              ) : null}
-            </div>
-          </section>
+                {activeTrip.status === "DRIVER_ARRIVED" ? (
+                  <>
+                    <input
+                      className="input pin-input"
+                      value={pin}
+                      onChange={(event) =>
+                        setPin(event.target.value.replace(/\D/g, "").slice(0, 4))
+                      }
+                      maxLength={4}
+                      inputMode="numeric"
+                      placeholder="رمز PIN"
+                    />
+                    <button
+                      className="button primary"
+                      disabled={isWorking || pin.length !== 4}
+                      onClick={() =>
+                        void runTripAction(`/trips/${activeTrip.id}/start`, {
+                          pin,
+                        })
+                      }
+                    >
+                      بدء الرحلة
+                    </button>
+                  </>
+                ) : null}
+
+                {activeTrip.status === "IN_PROGRESS" ? (
+                  <button
+                    className="button primary"
+                    disabled={isWorking}
+                    onClick={() =>
+                      void runTripAction(`/trips/${activeTrip.id}/complete`, {
+                        note: "Completed from driver portal",
+                      })
+                    }
+                  >
+                    إنهاء الرحلة
+                  </button>
+                ) : null}
+
+                {activeTrip.status !== "IN_PROGRESS" ? (
+                  <button
+                    className="button danger"
+                    disabled={isWorking}
+                    onClick={() =>
+                      void runTripAction(`/trips/${activeTrip.id}/cancel`, {
+                        note: "Driver unable to execute assigned trip",
+                      })
+                    }
+                  >
+                    تعذر تنفيذ الرحلة
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          </>
         ) : (
           <section className="panel">
-            <h2>الرحلات المتاحة</h2>
-
-            {profile?.availability !== "ONLINE" ? (
+            <h2>الرحلة المعيّنة</h2>
+            {profile?.availability === "ONLINE" ? (
               <div className="empty-state">
-                فعّل حالة الاتصال لعرض الرحلات.
+                أنت متصل وتظهر الآن لمركز العمليات. لا توجد رحلة معيّنة لك
+                حاليًا، ويتم التحديث تلقائيًا.
               </div>
-            ) : availableTrips.length === 0 ? (
+            ) : profile?.availability === "ON_TRIP" ? (
               <div className="empty-state">
-                لا توجد طلبات متاحة حاليًا. يتم التحديث تلقائيًا.
+                جارٍ تحميل الرحلة التي عيّنها المشرف...
               </div>
             ) : (
-              <div className="trip-list">
-                {availableTrips.map((trip) => (
-                  <article
-                    className={`trip-card ${previewTrip?.id === trip.id ? "is-selected" : ""}`}
-                    key={trip.id}
-                  >
-                    <div>
-                      <strong>
-                        {trip.pickupAddress} ← {trip.dropoffAddress}
-                      </strong>
-                      <p className="subtitle">
-                        {trip.estimatedDistanceKm} كم · {" "}
-                        {trip.estimatedDurationMinutes} دقيقة
-                      </p>
-                    </div>
-
-                    <div className="trip-price">
-                      {Number(trip.estimatedFare).toLocaleString("ar-IQ")} {" "}
-                      {trip.currency}
-                    </div>
-
-                    <div className="actions">
-                      <button
-                        className="button"
-                        type="button"
-                        disabled={isWorking}
-                        onClick={() => setPreviewTripId(trip.id)}
-                      >
-                        عرض المسار
-                      </button>
-                      <button
-                        className="button primary"
-                        disabled={isWorking}
-                        onClick={() =>
-                          runTripAction(`/trips/${trip.id}/accept`)
-                        }
-                      >
-                        قبول
-                      </button>
-                    </div>
-                  </article>
-                ))}
+              <div className="empty-state">
+                فعّل حالة الاتصال حتى يتمكن المشرف من تعيين رحلة لك.
               </div>
             )}
           </section>
@@ -440,7 +378,7 @@ export default function DriverPage() {
                       </td>
                       <td>{TRIP_STATUS_LABELS[trip.status]}</td>
                       <td>
-                        {Number(trip.estimatedFare).toLocaleString("ar-IQ")} {" "}
+                        {Number(trip.estimatedFare).toLocaleString("ar-IQ")}{" "}
                         {trip.currency}
                       </td>
                       <td>

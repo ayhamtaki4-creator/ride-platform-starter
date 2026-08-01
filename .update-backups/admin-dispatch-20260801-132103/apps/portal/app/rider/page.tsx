@@ -207,7 +207,7 @@ export default function RiderPage() {
       });
 
       setStartPin(created.startPin ?? "");
-      setMessage("تم إرسال طلب الرحلة إلى مركز العمليات لتعيين السائق.");
+      setMessage("تم إرسال طلب الرحلة إلى السائقين المتصلين.");
       await loadTrips();
     } catch (caughtError) {
       setError(
@@ -355,7 +355,7 @@ export default function RiderPage() {
                 {activeTrip.driver.lastName}
               </div>
             ) : (
-              <div className="notice">تم استلام الطلب. بانتظار تعيين سائق من مركز العمليات...</div>
+              <div className="notice">جارٍ البحث عن سائق متصل...</div>
             )}
 
             {startPin ? (

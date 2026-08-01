@@ -14,8 +14,14 @@ import { EstimateTripDto } from './dto/estimate-trip.dto';
 import { TripStateMachine } from './trip-state-machine';
 
 const ACTIVE_PASSENGER_TRIP_STATUSES: TripStatus[] = [
-  'PENDING_DISPATCH',
   'SEARCHING_DRIVER',
+  'DRIVER_ASSIGNED',
+  'DRIVER_ARRIVING',
+  'DRIVER_ARRIVED',
+  'IN_PROGRESS'
+];
+
+const ACTIVE_DRIVER_TRIP_STATUSES: TripStatus[] = [
   'DRIVER_ASSIGNED',
   'DRIVER_ARRIVING',
   'DRIVER_ARRIVED',
@@ -86,7 +92,6 @@ export class TripsService {
     const trip = await this.prisma.trip.create({
       data: {
         passengerId: user.sub,
-        status: 'PENDING_DISPATCH',
         pickupAddress: dto.pickupAddress.trim(),
         pickupLatitude: dto.pickupLatitude,
         pickupLongitude: dto.pickupLongitude,
@@ -99,9 +104,9 @@ export class TripsService {
         startPinHash,
         statusHistory: {
           create: {
-            to: 'PENDING_DISPATCH',
+            to: 'SEARCHING_DRIVER',
             actorId: user.sub,
-            note: 'Trip requested and sent to dispatch'
+            note: 'Trip requested'
           }
         }
       },
@@ -110,10 +115,7 @@ export class TripsService {
       }
     });
 
-    await this.audit(user.sub, 'trip.create', trip.id, {
-      ...estimate,
-      dispatchMode: 'ADMIN'
-    });
+    await this.audit(user.sub, 'trip.create', trip.id, estimate);
 
     return {
       ...this.sanitizeTrip(trip),
@@ -133,8 +135,7 @@ export class TripsService {
           select: {
             id: true,
             firstName: true,
-            lastName: true,
-            phone: true
+            lastName: true
           }
         },
         driver: {
@@ -142,7 +143,6 @@ export class TripsService {
             id: true,
             firstName: true,
             lastName: true,
-            phone: true,
             driverProfile: {
               select: {
                 rating: true,
@@ -177,8 +177,7 @@ export class TripsService {
             id: true,
             firstName: true,
             lastName: true,
-            email: true,
-            phone: true
+            email: true
           }
         },
         driver: {
@@ -186,29 +185,66 @@ export class TripsService {
             id: true,
             firstName: true,
             lastName: true,
-            email: true,
-            phone: true,
-            driverProfile: {
-              select: {
-                rating: true,
-                vehicles: {
-                  where: { isActive: true },
-                  take: 1,
-                  select: {
-                    make: true,
-                    model: true,
-                    color: true,
-                    plateNumber: true
-                  }
-                }
-              }
-            }
+            email: true
           }
         }
       }
     });
 
     return trips.map((trip) => this.sanitizeTrip(trip));
+  }
+
+  async available(user: AuthUser) {
+    const driver = await this.prisma.driverProfile.findUnique({
+      where: { userId: user.sub }
+    });
+
+    if (!driver || driver.status !== 'APPROVED') {
+      throw new ForbiddenException('يجب اعتماد حساب السائق أولًا.');
+    }
+
+    if (driver.availability !== 'ONLINE') {
+      throw new ForbiddenException('يجب أن تكون متصلًا لرؤية الرحلات المتاحة.');
+    }
+
+    const activeTrip = await this.prisma.trip.findFirst({
+      where: {
+        driverId: user.sub,
+        status: { in: ACTIVE_DRIVER_TRIP_STATUSES }
+      },
+      select: { id: true }
+    });
+
+    if (activeTrip) {
+      return [];
+    }
+
+    return this.prisma.trip.findMany({
+      where: { status: 'SEARCHING_DRIVER', driverId: null },
+      orderBy: { requestedAt: 'asc' },
+      take: 50,
+      select: {
+        id: true,
+        status: true,
+        pickupAddress: true,
+        pickupLatitude: true,
+        pickupLongitude: true,
+        dropoffAddress: true,
+        dropoffLatitude: true,
+        dropoffLongitude: true,
+        estimatedDistanceKm: true,
+        estimatedDurationMinutes: true,
+        estimatedFare: true,
+        currency: true,
+        requestedAt: true,
+        passenger: {
+          select: {
+            firstName: true,
+            passengerProfile: { select: { rating: true } }
+          }
+        }
+      }
+    });
   }
 
   async rotateStartPin(user: AuthUser, id: string) {
@@ -239,6 +275,79 @@ export class TripsService {
     await this.audit(user.sub, 'trip.pin.rotate', id);
 
     return { tripId: id, startPin };
+  }
+
+  async accept(user: AuthUser, id: string) {
+    const trip = await this.findTrip(id);
+
+    if (trip.status !== 'SEARCHING_DRIVER') {
+      throw new ConflictException('الرحلة لم تعد متاحة.');
+    }
+
+    const activeTrip = await this.prisma.trip.findFirst({
+      where: {
+        driverId: user.sub,
+        status: { in: ACTIVE_DRIVER_TRIP_STATUSES }
+      },
+      select: { id: true }
+    });
+
+    if (activeTrip) {
+      throw new ConflictException('لدى السائق رحلة نشطة بالفعل.');
+    }
+
+    TripStateMachine.assertTransition(trip.status, 'DRIVER_ASSIGNED');
+
+    return this.prisma.$transaction(async (tx) => {
+      const driverLock = await tx.driverProfile.updateMany({
+        where: {
+          userId: user.sub,
+          status: 'APPROVED',
+          availability: 'ONLINE'
+        },
+        data: { availability: 'ON_TRIP' }
+      });
+
+      if (driverLock.count !== 1) {
+        throw new ConflictException(
+          'يجب أن يكون السائق معتمدًا ومتصلًا لقبول الرحلة.'
+        );
+      }
+
+      const updated = await tx.trip.updateMany({
+        where: { id, status: 'SEARCHING_DRIVER', driverId: null },
+        data: {
+          driverId: user.sub,
+          status: 'DRIVER_ASSIGNED',
+          acceptedAt: new Date()
+        }
+      });
+
+      if (updated.count !== 1) {
+        throw new ConflictException('قبل سائق آخر الرحلة.');
+      }
+
+      await tx.tripStatusHistory.create({
+        data: {
+          tripId: id,
+          from: trip.status,
+          to: 'DRIVER_ASSIGNED',
+          actorId: user.sub
+        }
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId: user.sub,
+          action: 'trip.accept',
+          entityType: 'Trip',
+          entityId: id
+        }
+      });
+
+      const accepted = await tx.trip.findUniqueOrThrow({ where: { id } });
+      return this.sanitizeTrip(accepted);
+    });
   }
 
   async driverTransition(user: AuthUser, id: string, to: TripStatus) {

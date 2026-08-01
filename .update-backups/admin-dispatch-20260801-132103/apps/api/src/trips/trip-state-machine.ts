@@ -2,12 +2,6 @@ import { BadRequestException } from '@nestjs/common';
 import { TripStatus } from '@prisma/client';
 
 const transitions: Record<TripStatus, TripStatus[]> = {
-  PENDING_DISPATCH: [
-    'DRIVER_ASSIGNED',
-    'CANCELLED_BY_PASSENGER',
-    'NO_DRIVER_AVAILABLE'
-  ],
-  // Kept for compatibility with requests created before the dispatch update.
   SEARCHING_DRIVER: [
     'DRIVER_ASSIGNED',
     'CANCELLED_BY_PASSENGER',
@@ -42,9 +36,7 @@ const transitions: Record<TripStatus, TripStatus[]> = {
 export class TripStateMachine {
   static assertTransition(from: TripStatus, to: TripStatus) {
     if (!transitions[from].includes(to)) {
-      throw new BadRequestException(
-        `انتقال حالة الرحلة غير مسموح: ${from} → ${to}`
-      );
+      throw new BadRequestException(`انتقال حالة الرحلة غير مسموح: ${from} → ${to}`);
     }
   }
 }

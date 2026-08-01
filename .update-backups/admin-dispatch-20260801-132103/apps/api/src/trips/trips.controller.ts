@@ -27,6 +27,12 @@ export class TripsController {
     return this.tripsService.mine(user);
   }
 
+  @Permissions('trip:accept')
+  @Get('available')
+  available(@CurrentUser() user: AuthUser) {
+    return this.tripsService.available(user);
+  }
+
   @Permissions('trip:read:any')
   @Get()
   all() {
@@ -43,6 +49,12 @@ export class TripsController {
   @Post(':id/start-pin')
   rotateStartPin(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.tripsService.rotateStartPin(user, id);
+  }
+
+  @Permissions('trip:accept')
+  @Post(':id/accept')
+  accept(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.tripsService.accept(user, id);
   }
 
   @Permissions('trip:update:own')

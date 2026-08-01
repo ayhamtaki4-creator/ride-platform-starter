@@ -13,7 +13,6 @@ export type LoginResponse = {
 };
 
 export type TripStatus =
-  | "PENDING_DISPATCH"
   | "SEARCHING_DRIVER"
   | "DRIVER_ASSIGNED"
   | "DRIVER_ARRIVING"
@@ -51,7 +50,6 @@ export type Trip = {
     firstName: string;
     lastName?: string;
     email?: string;
-    phone?: string | null;
     rating?: number;
     passengerProfile?: { rating: number } | null;
   };
@@ -60,7 +58,6 @@ export type Trip = {
     firstName: string;
     lastName?: string;
     email?: string;
-    phone?: string | null;
     driverProfile?: {
       rating: number;
       vehicles: Array<{
@@ -81,7 +78,6 @@ export type Trip = {
 };
 
 export const ACTIVE_TRIP_STATUSES: TripStatus[] = [
-  "PENDING_DISPATCH",
   "SEARCHING_DRIVER",
   "DRIVER_ASSIGNED",
   "DRIVER_ARRIVING",
@@ -90,8 +86,7 @@ export const ACTIVE_TRIP_STATUSES: TripStatus[] = [
 ];
 
 export const TRIP_STATUS_LABELS: Record<TripStatus, string> = {
-  PENDING_DISPATCH: "بانتظار تعيين سائق",
-  SEARCHING_DRIVER: "بانتظار تعيين سائق",
+  SEARCHING_DRIVER: "البحث عن سائق",
   DRIVER_ASSIGNED: "تم تعيين سائق",
   DRIVER_ARRIVING: "السائق في الطريق",
   DRIVER_ARRIVED: "السائق وصل",

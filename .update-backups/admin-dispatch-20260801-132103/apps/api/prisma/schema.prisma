@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum DriverStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum DriverAvailability {
+  OFFLINE
+  ONLINE
+  ON_TRIP
+}
+
+enum TripStatus {
+  SEARCHING_DRIVER
+  DRIVER_ASSIGNED
+  DRIVER_ARRIVING
+  DRIVER_ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED_BY_PASSENGER
+  CANCELLED_BY_DRIVER
+  NO_DRIVER_AVAILABLE
+  PASSENGER_NO_SHOW
+  DRIVER_NO_SHOW
+}
+
+model User {
+  id               String            @id @default(uuid()) @db.Uuid
+  email            String            @unique
+  phone            String?           @unique
+  passwordHash     String
+  firstName        String
+  lastName         String
+  status           UserStatus        @default(ACTIVE)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  roles            UserRole[]
+  passengerTrips   Trip[]            @relation("PassengerTrips")
+  driverTrips      Trip[]            @relation("DriverTrips")
+  passengerProfile PassengerProfile?
+  driverProfile    DriverProfile?
+  auditLogs        AuditLog[]        @relation("AuditActor")
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  code        String           @unique
+  name        String
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id    String           @id @default(uuid()) @db.Uuid
+  code  String           @unique
+  name  String
+  roles RolePermission[]
+}
+
+model UserRole {
+  userId String @db.Uuid
+  roleId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String     @db.Uuid
+  permissionId String     @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model PassengerProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+  rating    Float    @default(5)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DriverProfile {
+  id           String             @id @default(uuid()) @db.Uuid
+  userId       String             @unique @db.Uuid
+  status       DriverStatus       @default(PENDING_REVIEW)
+  availability DriverAvailability @default(OFFLINE)
+  rating       Float              @default(5)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicles     Vehicle[]
+
+  @@index([status, availability])
+}
+
+model Vehicle {
+  id              String        @id @default(uuid()) @db.Uuid
+  driverProfileId String        @db.Uuid
+  make            String
+  model           String
+  year            Int
+  color           String
+  plateNumber     String        @unique
+  isActive        Boolean       @default(true)
+  driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+}
+
+model Trip {
+  id                       String              @id @default(uuid()) @db.Uuid
+  passengerId              String              @db.Uuid
+  driverId                 String?             @db.Uuid
+  status                   TripStatus          @default(SEARCHING_DRIVER)
+  pickupAddress            String
+  pickupLatitude           Float
+  pickupLongitude          Float
+  dropoffAddress           String
+  dropoffLatitude          Float
+  dropoffLongitude         Float
+  estimatedDistanceKm      Float               @default(0)
+  estimatedDurationMinutes Int                 @default(0)
+  estimatedFare            Decimal             @db.Decimal(12, 3)
+  finalFare                Decimal?            @db.Decimal(12, 3)
+  currency                 String              @default("IQD")
+  startPinHash             String              @map("startPin")
+  requestedAt              DateTime            @default(now())
+  acceptedAt               DateTime?
+  startedAt                DateTime?
+  completedAt              DateTime?
+  cancelledAt              DateTime?
+  passenger                User                @relation("PassengerTrips", fields: [passengerId], references: [id])
+  driver                   User?               @relation("DriverTrips", fields: [driverId], references: [id])
+  statusHistory            TripStatusHistory[]
+
+  @@index([passengerId, requestedAt])
+  @@index([driverId, requestedAt])
+  @@index([status, requestedAt])
+}
+
+model TripStatusHistory {
+  id        String     @id @default(uuid()) @db.Uuid
+  tripId    String     @db.Uuid
+  from      TripStatus?
+  to        TripStatus
+  actorId   String     @db.Uuid
+  note      String?
+  createdAt DateTime   @default(now())
+  trip      Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+}
