@@ -5,10 +5,9 @@ import {
   NotFoundException
 } from '@nestjs/common';
 import { Prisma, Trip, TripStatus } from '@prisma/client';
-import bcrypt from 'bcryptjs';
-import { randomInt } from 'crypto';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { EstimateTripDto } from './dto/estimate-trip.dto';
 import { TripStateMachine } from './trip-state-machine';
@@ -32,7 +31,10 @@ const DRIVER_RELEASE_STATUSES: TripStatus[] = [
 
 @Injectable()
 export class TripsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeEventsService
+  ) {}
 
   estimate(dto: EstimateTripDto) {
     const straightLineKm = this.haversineKm(
@@ -80,8 +82,6 @@ export class TripsService {
     }
 
     const estimate = this.estimate(dto);
-    const startPin = String(randomInt(1000, 10000));
-    const startPinHash = await bcrypt.hash(startPin, 10);
 
     const trip = await this.prisma.trip.create({
       data: {
@@ -96,7 +96,6 @@ export class TripsService {
         estimatedDistanceKm: estimate.estimatedDistanceKm,
         estimatedDurationMinutes: estimate.estimatedDurationMinutes,
         estimatedFare: estimate.estimatedFare,
-        startPinHash,
         statusHistory: {
           create: {
             to: 'PENDING_DISPATCH',
@@ -115,10 +114,9 @@ export class TripsService {
       dispatchMode: 'ADMIN'
     });
 
-    return {
-      ...this.sanitizeTrip(trip),
-      startPin
-    };
+    this.realtime.tripCreated(this.toRealtimeEvent(trip));
+
+    return this.sanitizeTrip(trip);
   }
 
   async mine(user: AuthUser) {
@@ -153,9 +151,35 @@ export class TripsService {
                     make: true,
                     model: true,
                     color: true,
-                    plateNumber: true
+                    plateNumber: true,
+                    seatCapacity: true
                   }
                 }
+              }
+            }
+          }
+        },
+        serviceRun: {
+          include: {
+            vehicle: {
+              select: {
+                make: true,
+                model: true,
+                color: true,
+                plateNumber: true,
+                seatCapacity: true
+              }
+            },
+            bookings: {
+              orderBy: { requestedAt: 'asc' },
+              select: {
+                id: true,
+                bookingReference: true,
+                passengerCount: true,
+                luggageCount: true,
+                contactName: true,
+                contactPhone: true,
+                driverAssignmentStatus: true
               }
             }
           }
@@ -198,9 +222,35 @@ export class TripsService {
                     make: true,
                     model: true,
                     color: true,
-                    plateNumber: true
+                    plateNumber: true,
+                    seatCapacity: true
                   }
                 }
+              }
+            }
+          }
+        },
+        serviceRun: {
+          include: {
+            vehicle: {
+              select: {
+                make: true,
+                model: true,
+                color: true,
+                plateNumber: true,
+                seatCapacity: true
+              }
+            },
+            bookings: {
+              orderBy: { requestedAt: 'asc' },
+              select: {
+                id: true,
+                bookingReference: true,
+                passengerCount: true,
+                luggageCount: true,
+                contactName: true,
+                contactPhone: true,
+                driverAssignmentStatus: true
               }
             }
           }
@@ -211,49 +261,28 @@ export class TripsService {
     return trips.map((trip) => this.sanitizeTrip(trip));
   }
 
-  async rotateStartPin(user: AuthUser, id: string) {
-    const trip = await this.findTrip(id);
-
-    if (trip.passengerId !== user.sub) {
-      throw new ForbiddenException('لا يمكنك إدارة رمز هذه الرحلة.');
-    }
-
-    if (
-      !['DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'DRIVER_ARRIVED'].includes(
-        trip.status
-      )
-    ) {
-      throw new ConflictException(
-        'يمكن إنشاء رمز جديد بعد إسناد سائق وقبل بدء الرحلة.'
-      );
-    }
-
-    const startPin = String(randomInt(1000, 10000));
-    const startPinHash = await bcrypt.hash(startPin, 10);
-
-    await this.prisma.trip.update({
-      where: { id },
-      data: { startPinHash }
-    });
-
-    await this.audit(user.sub, 'trip.pin.rotate', id);
-
-    return { tripId: id, startPin };
-  }
-
   async driverTransition(user: AuthUser, id: string, to: TripStatus) {
     const trip = await this.findTrip(id);
     this.assertDriverOwnsTrip(user, trip.driverId);
+
+    if (
+      trip.status === 'DRIVER_ASSIGNED' &&
+      trip.driverAssignmentStatus !== 'ACCEPTED'
+    ) {
+      throw new ConflictException(
+        'يجب قبول المهمة المجدولة قبل بدء تنفيذها.'
+      );
+    }
+
     return this.transition(user.sub, trip, to);
   }
 
-  async start(user: AuthUser, id: string, pin: string) {
+  async start(user: AuthUser, id: string) {
     const trip = await this.findTrip(id);
     this.assertDriverOwnsTrip(user, trip.driverId);
 
-    const isValidPin = await bcrypt.compare(pin, trip.startPinHash);
-    if (!isValidPin) {
-      throw new ForbiddenException('رمز بدء الرحلة غير صحيح.');
+    if (trip.driverAssignmentStatus !== 'ACCEPTED') {
+      throw new ConflictException('يجب قبول المهمة قبل بدء الرحلة.');
     }
 
     return this.transition(user.sub, trip, 'IN_PROGRESS', {
@@ -308,7 +337,7 @@ export class TripsService {
   ) {
     TripStateMachine.assertTransition(trip.status, to);
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.trip.updateMany({
         where: { id: trip.id, status: trip.status },
         data: { ...extraData, status: to }
@@ -338,25 +367,141 @@ export class TripsService {
         }
       });
 
-      if (trip.driverId && DRIVER_RELEASE_STATUSES.includes(to)) {
+      if (trip.driverId && to === 'DRIVER_ARRIVING') {
         await tx.driverProfile.updateMany({
           where: {
             userId: trip.driverId,
             status: 'APPROVED'
           },
-          data: { availability: 'ONLINE' }
+          data: { availability: 'ON_TRIP' }
         });
       }
 
-      const updated = await tx.trip.findUniqueOrThrow({
+      if (trip.serviceRunId && to === 'IN_PROGRESS') {
+        await tx.serviceRun.updateMany({
+          where: { id: trip.serviceRunId },
+          data: { status: 'IN_PROGRESS' }
+        });
+      }
+
+      if (
+        trip.serviceRunId &&
+        [
+          'CANCELLED_BY_PASSENGER',
+          'CANCELLED_BY_DRIVER',
+          'PASSENGER_NO_SHOW',
+          'DRIVER_NO_SHOW'
+        ].includes(to)
+      ) {
+        const run = await tx.serviceRun.findUnique({
+          where: { id: trip.serviceRunId }
+        });
+
+        if (run) {
+          await tx.serviceRun.update({
+            where: { id: run.id },
+            data: {
+              reservedSeats: Math.max(
+                0,
+                run.reservedSeats - trip.passengerCount
+              )
+            }
+          });
+        }
+      }
+
+      if (trip.driverId && DRIVER_RELEASE_STATUSES.includes(to)) {
+        const remainingDriverTrips = await tx.trip.count({
+          where: {
+            id: { not: trip.id },
+            driverId: trip.driverId,
+            status: {
+              in: [
+                'DRIVER_ARRIVING',
+                'DRIVER_ARRIVED',
+                'IN_PROGRESS'
+              ]
+            }
+          }
+        });
+
+        if (remainingDriverTrips === 0) {
+          await tx.driverProfile.updateMany({
+            where: {
+              userId: trip.driverId,
+              status: 'APPROVED'
+            },
+            data: { availability: 'ONLINE' }
+          });
+        }
+
+        if (trip.serviceRunId) {
+          const remainingRunBookings = await tx.trip.count({
+            where: {
+              id: { not: trip.id },
+              serviceRunId: trip.serviceRunId,
+              status: {
+                in: [
+                  'DRIVER_ASSIGNED',
+                  'DRIVER_ARRIVING',
+                  'DRIVER_ARRIVED',
+                  'IN_PROGRESS'
+                ]
+              }
+            }
+          });
+
+          if (remainingRunBookings === 0) {
+            await tx.serviceRun.updateMany({
+              where: { id: trip.serviceRunId },
+              data: {
+                status:
+                  to === 'COMPLETED' ? 'COMPLETED' : 'CANCELLED'
+              }
+            });
+          }
+        }
+      }
+
+      return tx.trip.findUniqueOrThrow({
         where: { id: trip.id },
         include: {
           statusHistory: { orderBy: { createdAt: 'asc' } }
         }
       });
-
-      return this.sanitizeTrip(updated);
     });
+
+    this.realtime.tripUpdated(this.toRealtimeEvent(updated));
+
+    if (trip.driverId && to === 'DRIVER_ARRIVING') {
+      this.realtime.driverAvailabilityUpdated({
+        driverId: trip.driverId,
+        availability: 'ON_TRIP',
+        occurredAt: new Date().toISOString()
+      });
+    }
+
+    if (trip.driverId && DRIVER_RELEASE_STATUSES.includes(to)) {
+      const remainingDriverTrips = await this.prisma.trip.count({
+        where: {
+          id: { not: trip.id },
+          driverId: trip.driverId,
+          status: {
+            in: ['DRIVER_ARRIVING', 'DRIVER_ARRIVED', 'IN_PROGRESS']
+          }
+        }
+      });
+
+      if (remainingDriverTrips === 0) {
+        this.realtime.driverAvailabilityUpdated({
+          driverId: trip.driverId,
+          availability: 'ONLINE',
+          occurredAt: new Date().toISOString()
+        });
+      }
+    }
+
+    return this.sanitizeTrip(updated);
   }
 
   private async findTrip(id: string) {
@@ -371,11 +516,23 @@ export class TripsService {
     }
   }
 
-  private sanitizeTrip<T extends { startPinHash: string }>(
+  private sanitizeTrip<T extends { startPinHash: string | null }>(
     trip: T
   ): Omit<T, 'startPinHash'> {
     const { startPinHash: _hidden, ...safeTrip } = trip;
     return safeTrip;
+  }
+
+  private toRealtimeEvent(
+    trip: Pick<Trip, 'id' | 'passengerId' | 'driverId' | 'status'>
+  ) {
+    return {
+      tripId: trip.id,
+      passengerId: trip.passengerId,
+      driverId: trip.driverId,
+      status: trip.status,
+      occurredAt: new Date().toISOString()
+    };
   }
 
   private audit(

@@ -5,6 +5,8 @@ import { CurrentUser } from '../iam/current-user.decorator';
 import { Permissions } from '../iam/permissions.decorator';
 import { AdminService } from './admin.service';
 import { AssignDriverDto } from './dto/assign-driver.dto';
+import { ReassignDriverDto } from './dto/reassign-driver.dto';
+import { UnassignDriverDto } from './dto/unassign-driver.dto';
 
 @ApiTags('Administration')
 @ApiBearerAuth()
@@ -31,7 +33,33 @@ export class AdminController {
     @Param('tripId') tripId: string,
     @Body() dto: AssignDriverDto
   ) {
-    return this.adminService.assignDriver(user, tripId, dto.driverId);
+    return this.adminService.assignDriver(user, tripId, dto.driverId, dto.vehicleId);
+  }
+
+  @Permissions('trip:update:any')
+  @Post('trips/:tripId/unassign-driver')
+  unassignDriver(
+    @CurrentUser() user: AuthUser,
+    @Param('tripId') tripId: string,
+    @Body() dto: UnassignDriverDto
+  ) {
+    return this.adminService.unassignDriver(user, tripId, dto.note);
+  }
+
+  @Permissions('trip:update:any')
+  @Post('trips/:tripId/reassign-driver')
+  reassignDriver(
+    @CurrentUser() user: AuthUser,
+    @Param('tripId') tripId: string,
+    @Body() dto: ReassignDriverDto
+  ) {
+    return this.adminService.reassignDriver(
+      user,
+      tripId,
+      dto.driverId,
+      dto.vehicleId,
+      dto.note
+    );
   }
 
   @Permissions('audit:read:any')

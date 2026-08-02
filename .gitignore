@@ -13,4 +13,13 @@ coverage/
 *.bak
 .DS_Store
 
+.update-backups/
+
+storage/
+apps/api/storage/
+playwright-report/
+test-results/
+blob-report/
+e2e/.env
+
 .turbo/

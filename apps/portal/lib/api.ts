@@ -1,5 +1,13 @@
-const API_URL =
+export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
+
+export function getRealtimeUrl() {
+  try {
+    return `${new URL(API_URL).origin}/realtime`;
+  } catch {
+    return "http://localhost:4000/realtime";
+  }
+}
 
 export class ApiError extends Error {
   constructor(
@@ -27,7 +35,8 @@ export async function apiFetch<T>(
       ? localStorage.getItem("ride_access_token")
       : null);
 
-  if (!headers.has("Content-Type") && options.body) {
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  if (!headers.has("Content-Type") && options.body && !isFormData) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -35,8 +44,9 @@ export async function apiFetch<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
+  const { token: _token, skipAuth: _skipAuth, ...requestOptions } = options;
   const response = await fetch(`${API_URL}${path}`, {
-    ...options,
+    ...requestOptions,
     headers,
     cache: "no-store",
   });
@@ -56,7 +66,11 @@ export async function apiFetch<T>(
       }
     }
 
-    if (response.status === 401 && !options.skipAuth && typeof window !== "undefined") {
+    if (
+      response.status === 401 &&
+      !options.skipAuth &&
+      typeof window !== "undefined"
+    ) {
       window.dispatchEvent(new Event("ride-auth-expired"));
     }
 
@@ -64,4 +78,23 @@ export async function apiFetch<T>(
   }
 
   return body as T;
+}
+
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  options: Omit<ApiOptions, "body" | "method"> = {}
+): Promise<T> {
+  return apiFetch<T>(path, { ...options, method: "POST", body: formData });
+}
+
+export async function fetchProtectedBlob(pathOrUrl: string) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("ride_access_token") : null;
+  const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${API_URL}${pathOrUrl}`;
+  const response = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    cache: "no-store",
+  });
+  if (!response.ok) throw new ApiError("تعذر فتح الملف.", response.status);
+  return response.blob();
 }

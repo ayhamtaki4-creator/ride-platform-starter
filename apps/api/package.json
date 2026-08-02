@@ -26,7 +26,13 @@
     "passport": "latest",
     "passport-jwt": "latest",
     "reflect-metadata": "latest",
-    "rxjs": "latest"
+    "rxjs": "latest",
+    "@nestjs/platform-socket.io": "11.1.28",
+    "@nestjs/websockets": "11.1.28",
+    "@socket.io/redis-adapter": "8.3.0",
+    "redis": "6.1.0",
+    "socket.io": "4.8.3",
+    "multer": "latest"
   },
   "devDependencies": {
     "@nestjs/cli": "latest",
@@ -38,7 +44,8 @@
     "eslint": "9",
     "prisma": "6.19.3",
     "tsx": "latest",
-    "typescript": "6.0.2"
+    "typescript": "6.0.2",
+    "@types/multer": "latest"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

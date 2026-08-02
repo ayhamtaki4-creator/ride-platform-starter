@@ -1,0 +1,82 @@
+{
+  "generatedAt": "2026-08-01T23:25:48.121Z",
+  "project": "C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter",
+  "counts": {
+    "error": 0,
+    "warning": 3,
+    "info": 1
+  },
+  "findings": [
+    {
+      "severity": "warning",
+      "code": "PIN_REFERENCE_FOUND",
+      "message": "PIN-related reference still exists after PIN removal.",
+      "file": "apps/api/src/bookings/bookings.service.ts",
+      "details": "startPin"
+    },
+    {
+      "severity": "warning",
+      "code": "PIN_REFERENCE_FOUND",
+      "message": "PIN-related reference still exists after PIN removal.",
+      "file": "apps/api/src/trips/trips.service.ts",
+      "details": "startPin"
+    },
+    {
+      "severity": "warning",
+      "code": "RIDER_GALLERY_WRONG_POSITION",
+      "message": "VehicleGallery is not positioned between order details and booking stages.",
+      "file": "apps/portal/app/rider/bookings/[id]/page.tsx",
+      "details": null
+    },
+    {
+      "severity": "info",
+      "code": "DRIVER_LINK_USES_USER_ID",
+      "message": "Admin driver details link uses driver.userId. Verify that the API endpoint expects userId rather than driverId.",
+      "file": "apps/portal/app/admin/drivers/page.tsx",
+      "details": "/admin/drivers/${driver.userId}"
+    }
+  ],
+  "commands": [
+    {
+      "label": "Portal typecheck",
+      "command": "pnpm --filter portal typecheck",
+      "exitCode": 0,
+      "durationMs": 8382,
+      "stdout": "\n> portal@ typecheck C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter\\apps\\portal\n> tsc --noEmit\n\n",
+      "stderr": ""
+    },
+    {
+      "label": "API typecheck",
+      "command": "pnpm --filter api typecheck",
+      "exitCode": 0,
+      "durationMs": 4905,
+      "stdout": "\n> api@ typecheck C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter\\apps\\api\n> tsc --noEmit\n\n",
+      "stderr": ""
+    },
+    {
+      "label": "Workspace typecheck",
+      "command": "pnpm typecheck",
+      "exitCode": 0,
+      "durationMs": 4265,
+      "stdout": "\n> ride-platform-starter@ typecheck C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter\n> turbo typecheck\n\n\n   • Packages in scope: api, portal\n   • Running typecheck in 2 packages\n   • Remote caching disabled\n\nportal:typecheck: cache miss, executing 663bce737d83e394\napi:typecheck: cache hit, replaying logs 724e6ada00ca72ff\napi:typecheck: \napi:typecheck: > api@ typecheck C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter\\apps\\api\napi:typecheck: > tsc --noEmit\napi:typecheck: \nportal:typecheck: \nportal:typecheck: > portal@ typecheck C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter\\apps\\portal\nportal:typecheck: > tsc --noEmit\nportal:typecheck: \n\n Tasks:    2 successful, 2 total\nCached:    1 cached, 2 total\n  Time:    3.478s \n\n",
+      "stderr": "• turbo 2.10.7\n"
+    }
+  ],
+  "serviceChecks": [
+    {
+      "url": "http://localhost:3000",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "url": "http://localhost:4000/api/health",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "url": "http://localhost:4000/docs",
+      "status": 200,
+      "ok": true
+    }
+  ]
+}

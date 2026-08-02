@@ -1,0 +1,400 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException
+} from '@nestjs/common';
+import { BookingDirection, Prisma } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+import { randomInt } from 'crypto';
+import { AuthUser } from '../iam/auth-user.type';
+import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeEventsService } from '../realtime/realtime-events.service';
+import { BookingQuoteDto } from './dto/booking-quote.dto';
+import { CreateBookingDto } from './dto/create-booking.dto';
+
+const LEGACY_ROUTE_DEFAULTS: Record<BookingDirection, {
+  pickupLatitude: number;
+  pickupLongitude: number;
+  dropoffLatitude: number;
+  dropoffLongitude: number;
+  distanceKm: number;
+  durationMinutes: number;
+}> = {
+  BEIRUT_AIRPORT_TO_DAMASCUS: {
+    pickupLatitude: 33.8209,
+    pickupLongitude: 35.4884,
+    dropoffLatitude: 33.5138,
+    dropoffLongitude: 36.2765,
+    distanceKm: 115,
+    durationMinutes: 150
+  },
+  DAMASCUS_TO_BEIRUT_AIRPORT: {
+    pickupLatitude: 33.5138,
+    pickupLongitude: 36.2765,
+    dropoffLatitude: 33.8209,
+    dropoffLongitude: 35.4884,
+    distanceKm: 115,
+    durationMinutes: 150
+  }
+};
+
+const bookingInclude = {
+  statusHistory: { orderBy: { createdAt: 'asc' as const } },
+  passenger: {
+    select: { id: true, firstName: true, lastName: true, email: true, phone: true }
+  },
+  route: {
+    include: {
+      origin: true,
+      destination: true,
+      requiredRegions: { include: { region: true } }
+    }
+  },
+  driver: {
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      driverTrips: {
+        where: { status: 'COMPLETED' as const },
+        select: { id: true }
+      },
+      driverProfile: {
+        select: {
+          rating: true,
+          avatarUrl: true,
+          baseRegion: true,
+          vehicles: {
+            where: { isActive: true },
+            orderBy: { year: 'desc' as const },
+            select: {
+              id: true,
+              make: true,
+              model: true,
+              year: true,
+              color: true,
+              plateNumber: true,
+              seatCapacity: true,
+              primaryImageUrl: true,
+              baseRegion: true,
+              images: {
+                where: { isApproved: true },
+                orderBy: [{ isPrimary: 'desc' as const }, { sortOrder: 'asc' as const }],
+                select: { url: true, isPrimary: true }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  pricingRule: true,
+  serviceRun: {
+    include: {
+      route: { include: { origin: true, destination: true } },
+      vehicle: {
+        select: {
+          id: true,
+          make: true,
+          model: true,
+          year: true,
+          color: true,
+          plateNumber: true,
+          seatCapacity: true,
+          primaryImageUrl: true,
+          baseRegion: true,
+          images: {
+            where: { isApproved: true },
+            orderBy: [{ isPrimary: 'desc' as const }, { sortOrder: 'asc' as const }],
+            select: { url: true, isPrimary: true }
+          }
+        }
+      },
+      bookings: {
+        orderBy: { requestedAt: 'asc' as const },
+        select: {
+          id: true,
+          bookingReference: true,
+          passengerCount: true,
+          luggageCount: true,
+          contactName: true,
+          contactPhone: true,
+          driverAssignmentStatus: true,
+          status: true
+        }
+      }
+    }
+  }
+} satisfies Prisma.TripInclude;
+
+type BookingWithRelations = Prisma.TripGetPayload<{ include: typeof bookingInclude }>;
+
+@Injectable()
+export class BookingsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeEventsService
+  ) {}
+
+  async quote(dto: BookingQuoteDto) {
+    const resolved = await this.resolveQuote(dto);
+    const { driverFee: _driverFee, platformMargin: _platformMargin, ...publicQuote } = resolved;
+    return publicQuote;
+  }
+
+  private async resolveQuote(dto: BookingQuoteDto) {
+    if (Boolean(dto.routeId) === Boolean(dto.direction)) {
+      throw new BadRequestException('يجب تحديد routeId أو direction، وليس كليهما.');
+    }
+
+    const rule = await this.prisma.pricingRule.findFirst({
+      where: {
+        ...(dto.routeId ? { routeId: dto.routeId } : { direction: dto.direction }),
+        bookingType: dto.bookingType,
+        isActive: true,
+        ...(dto.routeId ? { route: { isActive: true } } : {})
+      },
+      include: {
+        route: { include: { origin: true, destination: true } }
+      }
+    });
+
+    if (!rule) {
+      throw new NotFoundException('لا توجد قاعدة سعر فعالة لهذا المسار ونوع الحجز.');
+    }
+
+    const multiplier = dto.bookingType === 'SHARED_SEAT' ? dto.passengerCount : 1;
+    const passengerPrice = Number(rule.passengerPrice) * multiplier;
+    const driverFee = Number(rule.driverFee) * multiplier;
+    const platformMargin = Number(rule.platformMargin) * multiplier;
+
+    return {
+      pricingRuleId: rule.id,
+      routeId: rule.routeId,
+      route: rule.route,
+      direction: rule.direction,
+      bookingType: dto.bookingType,
+      passengerCount: dto.passengerCount,
+      unitPassengerPrice: Number(rule.passengerPrice),
+      passengerPrice,
+      driverFee,
+      platformMargin,
+      currency: rule.currency
+    };
+  }
+
+  async create(user: AuthUser, dto: CreateBookingDto) {
+    const travelDate = new Date(dto.travelDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (Number.isNaN(travelDate.getTime()) || travelDate < today) {
+      throw new BadRequestException('يجب اختيار تاريخ رحلة صالح وغير ماضٍ.');
+    }
+
+    const quote = await this.resolveQuote({
+      routeId: dto.routeId,
+      direction: dto.direction,
+      bookingType: dto.bookingType,
+      passengerCount: dto.passengerCount
+    });
+
+    const route = quote.route;
+    const legacyDefaults = dto.direction ? LEGACY_ROUTE_DEFAULTS[dto.direction] : null;
+    const pickupLatitude = Number(route?.origin.latitude ?? legacyDefaults?.pickupLatitude ?? 0);
+    const pickupLongitude = Number(route?.origin.longitude ?? legacyDefaults?.pickupLongitude ?? 0);
+    const dropoffLatitude = Number(route?.destination.latitude ?? legacyDefaults?.dropoffLatitude ?? 0);
+    const dropoffLongitude = Number(route?.destination.longitude ?? legacyDefaults?.dropoffLongitude ?? 0);
+    const estimatedDistanceKm = Number(route?.distanceKm ?? legacyDefaults?.distanceKm ?? 0);
+    const estimatedDurationMinutes = route?.estimatedMinutes ?? legacyDefaults?.durationMinutes ?? 0;
+
+    const startPin = String(randomInt(1000, 10000));
+    const startPinHash = await bcrypt.hash(startPin, 10);
+    const bookingReference = await this.generateReference();
+
+    const booking = await this.prisma.trip.create({
+      data: {
+        passengerId: user.sub,
+        pricingRuleId: quote.pricingRuleId,
+        routeId: quote.routeId,
+        status: 'PENDING_DISPATCH',
+        bookingReviewStatus: 'NEW',
+        bookingReference,
+        direction: quote.direction,
+        bookingType: dto.bookingType,
+        travelDate,
+        flightArrivalTime: dto.flightArrivalTime?.trim() || null,
+        flightNumber: dto.flightNumber?.trim() || null,
+        passengerCount: dto.passengerCount,
+        luggageCount: dto.luggageCount,
+        contactName: dto.passengerName.trim(),
+        contactPhone: dto.passengerPhone.trim(),
+        notes: dto.notes?.trim() || null,
+        pickupAddress: dto.pickupAddress.trim(),
+        pickupLatitude,
+        pickupLongitude,
+        dropoffAddress: dto.dropoffAddress.trim(),
+        dropoffLatitude,
+        dropoffLongitude,
+        estimatedDistanceKm,
+        estimatedDurationMinutes,
+        estimatedFare: quote.passengerPrice,
+        driverFee: quote.driverFee,
+        platformMargin: quote.platformMargin,
+        currency: quote.currency,
+        startPinHash,
+        statusHistory: {
+          create: {
+            to: 'PENDING_DISPATCH',
+            actorId: user.sub,
+            note: 'Booking submitted and awaiting administration confirmation'
+          }
+        }
+      },
+      include: bookingInclude
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: user.sub,
+        action: 'booking.create',
+        entityType: 'Trip',
+        entityId: booking.id,
+        metadata: {
+          bookingReference,
+          routeId: quote.routeId,
+          routeCode: quote.route?.code ?? null,
+          direction: quote.direction,
+          bookingType: dto.bookingType,
+          travelDate: dto.travelDate,
+          passengerCount: dto.passengerCount
+        }
+      }
+    });
+
+    this.realtime.bookingCreated({
+      tripId: booking.id,
+      passengerId: booking.passengerId,
+      driverId: booking.driverId,
+      status: booking.status,
+      bookingStatus: booking.bookingReviewStatus,
+      bookingReference: booking.bookingReference,
+      occurredAt: new Date().toISOString()
+    });
+
+    return this.serialize(booking);
+  }
+
+  async mine(user: AuthUser) {
+    const bookings = await this.prisma.trip.findMany({
+      where: {
+        passengerId: user.sub,
+        bookingReference: { not: null }
+      },
+      orderBy: [{ travelDate: 'desc' }, { requestedAt: 'desc' }],
+      include: bookingInclude
+    });
+
+    return bookings.map((booking) => this.serialize(booking));
+  }
+
+  private serialize(booking: BookingWithRelations) {
+    const {
+      startPinHash: _hidden,
+      driverFee: _driverFee,
+      platformMargin: _platformMargin,
+      pricingRule: _pricingRule,
+      driver: rawDriver,
+      serviceRun: rawServiceRun,
+      ...safe
+    } = booking;
+
+    const fallbackVehicle = rawDriver?.driverProfile?.vehicles[0] ?? null;
+    const vehicle = rawServiceRun?.vehicle ?? fallbackVehicle;
+    const imageUrls = vehicle?.images.map((image) => image.url) ?? [];
+    const primaryImageUrl =
+      vehicle?.primaryImageUrl ??
+      vehicle?.images.find((image) => image.isPrimary)?.url ??
+      imageUrls[0] ??
+      null;
+    const canContactDriver = booking.driverAssignmentStatus === 'ACCEPTED';
+    const publicVehicle = vehicle
+      ? {
+          id: vehicle.id,
+          make: vehicle.make,
+          model: vehicle.model,
+          year: vehicle.year,
+          color: vehicle.color,
+          plateNumber: this.maskPlate(vehicle.plateNumber),
+          maskedPlateNumber: this.maskPlate(vehicle.plateNumber),
+          seatCapacity: vehicle.seatCapacity,
+          baseRegion: vehicle.baseRegion,
+          primaryImageUrl,
+          images: imageUrls
+        }
+      : null;
+
+    return {
+      ...safe,
+      driver: rawDriver
+        ? {
+            id: rawDriver.id,
+            firstName: rawDriver.firstName,
+            lastName: rawDriver.lastName,
+            phone: canContactDriver ? rawDriver.phone : null,
+            driverProfile: rawDriver.driverProfile
+              ? {
+                  rating: rawDriver.driverProfile.rating,
+                  avatarUrl: rawDriver.driverProfile.avatarUrl,
+                  baseRegion: rawDriver.driverProfile.baseRegion,
+                  vehicles: publicVehicle ? [publicVehicle] : []
+                }
+              : null
+          }
+        : null,
+      serviceRun: rawServiceRun
+        ? {
+            ...rawServiceRun,
+            vehicle: publicVehicle,
+            bookings: rawServiceRun.bookings.map(
+              ({ contactName: _contactName, contactPhone: _contactPhone, ...item }) => item
+            )
+          }
+        : null,
+      driverPublicProfile: rawDriver
+        ? {
+            userId: rawDriver.id,
+            displayName: `${rawDriver.firstName} ${rawDriver.lastName}`.trim(),
+            phone: canContactDriver ? rawDriver.phone : null,
+            avatarUrl: rawDriver.driverProfile?.avatarUrl ?? null,
+            rating: rawDriver.driverProfile?.rating ?? null,
+            completedTrips: rawDriver.driverTrips.length,
+            baseRegion: rawDriver.driverProfile?.baseRegion ?? null,
+            vehicle: publicVehicle
+          }
+        : null
+    };
+  }
+
+  private maskPlate(value: string) {
+    const clean = value.trim();
+    if (clean.length <= 4) return clean;
+    return `${clean.slice(0, Math.min(3, clean.length - 3))} ••• ${clean.slice(-3)}`;
+  }
+
+  private async generateReference() {
+    const year = new Date().getFullYear().toString().slice(-2);
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const reference = `TS-${year}${randomInt(1000, 10000)}`;
+      const exists = await this.prisma.trip.findUnique({
+        where: { bookingReference: reference },
+        select: { id: true }
+      });
+      if (!exists) return reference;
+    }
+
+    throw new BadRequestException('تعذر إنشاء رقم حجز فريد. أعد المحاولة.');
+  }
+}

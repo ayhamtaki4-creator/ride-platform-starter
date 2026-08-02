@@ -5,7 +5,6 @@ import { CurrentUser } from '../iam/current-user.decorator';
 import { Permissions } from '../iam/permissions.decorator';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { EstimateTripDto } from './dto/estimate-trip.dto';
-import { StartTripDto } from './dto/start-trip.dto';
 import { TransitionTripDto } from './dto/transition-trip.dto';
 import { TripsService } from './trips.service';
 
@@ -39,11 +38,6 @@ export class TripsController {
     return this.tripsService.create(user, dto);
   }
 
-  @Permissions('trip:update:own')
-  @Post(':id/start-pin')
-  rotateStartPin(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.tripsService.rotateStartPin(user, id);
-  }
 
   @Permissions('trip:update:own')
   @Post(':id/arriving')
@@ -59,12 +53,8 @@ export class TripsController {
 
   @Permissions('trip:update:own')
   @Post(':id/start')
-  start(
-    @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-    @Body() dto: StartTripDto
-  ) {
-    return this.tripsService.start(user, id, dto.pin);
+  start(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.tripsService.start(user, id);
   }
 
   @Permissions('trip:update:own')

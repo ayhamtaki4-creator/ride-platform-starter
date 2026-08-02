@@ -1,34 +1,35 @@
-# Ride Platform Starter — Milestone 1
+# Ride Platform Starter — Milestone 3
 
-نواة عملية لمنصة نقل متعددة الأدوار، مبنية كـ Monorepo:
+منصة نقل متعددة الأدوار مبنية كـ Monorepo:
 
-- `apps/portal`: واجهة Next.js للراكب والسائق والإدارة.
-- `apps/api`: خادم NestJS مع Prisma وPostgreSQL.
-- نظام RBAC مع إعادة قراءة حالة المستخدم وصلاحياته من قاعدة البيانات.
-- دورة رحلة محكومة بـ State Machine.
-- Swagger API Documentation.
-- Docker Compose لتشغيل PostgreSQL/PostGIS وRedis.
+- `apps/portal`: Next.js للراكب والسائق والإدارة.
+- `apps/api`: NestJS وPrisma وPostgreSQL.
+- Redis وSocket.IO للتحديث المباشر.
+- OpenStreetMap وLeaflet لاختيار الانطلاق والوجهة.
+- RBAC للأدوار والصلاحيات.
+- مركز عمليات يعيّن السائقين للطلبات.
 
-## ما تم تنفيذه في Milestone 1
+## المنجز
 
-- تسجيل الدخول وتوجيه المستخدم حسب دوره.
-- حماية صفحات الراكب والسائق والإدارة.
-- تسجيل الخروج ومعالجة انتهاء الجلسة.
-- حساب السعر داخل الخادم.
-- منع الراكب من إنشاء رحلتين نشطتين.
-- حالة السائق: Offline / Online / On Trip.
-- عرض الرحلات المتاحة للسائق المتصل.
-- قبول الرحلة وتنفيذ حالات الوصول والبدء والإنهاء.
-- تخزين Hash لرمز PIN وعدم إعادته للسائق.
-- تحرير السائق تلقائيًا بعد انتهاء الرحلة أو إلغائها.
-- لوحة إدارة مرتبطة بالمستخدمين والرحلات وسجل العمليات.
-- Polling مؤقت للتحديث كل عدة ثوانٍ قبل إضافة WebSocket.
+- تسجيل الدخول وحماية الصفحات حسب الدور.
+- إنشاء رحلة وحساب السعر داخل الخادم.
+- عدم كشف PIN للسائق وتخزينه بصورة مشفرة.
+- حالات السائق `OFFLINE / ONLINE / ON_TRIP`.
+- وصول الطلب إلى الإدارة وتعيين سائق محدد.
+- إلغاء التعيين وإعادة التعيين قبل بدء الرحلة.
+- WebSocket مصادق بواسطة JWT.
+- إشعارات مباشرة للراكب والسائق والإدارة.
+- تنبيه مرئي وصوتي اختياري للطلبات الجديدة.
+- Redis Adapter لدعم أكثر من نسخة API، مع fallback محلي.
+- Polling احتياطي كل 30 ثانية.
+- Audit Log وتاريخ حالات الرحلة.
 
 ## التشغيل
 
 ```powershell
 Copy-Item .env.example .env -Force
 Copy-Item .env apps\api\.env -Force
+
 "NEXT_PUBLIC_API_URL=http://localhost:4000/api" |
   Set-Content apps\portal\.env.local -Encoding ascii
 
@@ -40,17 +41,7 @@ pnpm db:seed
 pnpm dev
 ```
 
-عند طلب Prisma اسم Migration، استخدم:
-
-```text
-milestone_1
-```
-
-ثم افتح:
-
-- الواجهة: `http://localhost:3000`
-- Swagger: `http://localhost:4000/docs`
-- فحص API: `http://localhost:4000/api/health`
+لا توجد Migration جديدة خاصة بـMilestone 3.
 
 ## الحسابات التجريبية
 
@@ -60,29 +51,69 @@ milestone_1
 | راكب | `rider@example.com` | `ChangeMe123!` |
 | سائق | `driver@example.com` | `ChangeMe123!` |
 
-## سيناريو الاختبار
+## اختبار التحديث المباشر
 
-1. افتح نافذة عادية وسجل الدخول كراكب.
-2. افتح نافذة خاصة وسجل الدخول كسائق.
-3. اجعل السائق Online.
-4. أنشئ رحلة من حساب الراكب.
-5. اقبل الرحلة من حساب السائق.
-6. اضغط «أنا في الطريق»، ثم «وصلت إلى الراكب».
-7. من حساب الراكب أنشئ رمز PIN وشاركه مع السائق.
-8. ابدأ الرحلة ثم أنهها.
-9. سجل الدخول كمدير لمشاهدة الرحلة وسجل العمليات.
-
-
-## اختبار آلي لدورة الرحلة
-
-بعد تشغيل المشروع، افتح PowerShell جديدًا ونفّذ:
+بعد تشغيل المشروع:
 
 ```powershell
-.\scripts\test-trip-flow.ps1
+pnpm test:realtime
 ```
 
-ينفذ السكربت تسجيل الدخول، تشغيل السائق، إنشاء الرحلة، قبولها، بدءها بالـPIN، ثم إنهاءها.
+ينشئ الاختبار رحلة، ويتحقق من وصولها فورًا للإدارة، ثم من وصول التعيين للسائق والراكب، ثم يختبر إلغاء التعيين.
 
-## ملاحظات أمنية
+## الهاتف والشبكة المحلية
 
-التخزين الحالي لرمز JWT في `localStorage` مناسب لمرحلة التطوير فقط. قبل الإنتاج يجب الانتقال إلى جلسات تعتمد على Cookies من نوع `HttpOnly + Secure + SameSite`.
+ضع عنوان الكمبيوتر الفعلي بدل المثال:
+
+```env
+# apps/api/.env
+WEB_ORIGINS="http://localhost:3000,http://172.20.10.2:3000"
+
+# apps/portal/.env.local
+NEXT_PUBLIC_API_URL=http://172.20.10.2:4000/api
+NEXT_ALLOWED_DEV_ORIGINS=172.20.10.2
+```
+
+ثم افتح من الهاتف:
+
+```text
+http://172.20.10.2:3000
+```
+
+## ملاحظة أمنية
+
+JWT مخزن حاليًا في `localStorage` للتطوير فقط. قبل الإنتاج يجب استخدام Cookies آمنة من نوع `HttpOnly + Secure + SameSite` مع Refresh Tokens وإلغاء الجلسات.
+
+## Operational Runs milestone
+
+The operations center can now create and manage daily service runs at `/admin/runs`, add confirmed bookings, control capacity, replace drivers, print passenger manifests, and monitor financial summaries. Drivers manage each run at `/driver/runs/:id`, including acceptance, boarding, no-show handling, starting, and completion.
+
+Automated test:
+
+```powershell
+pnpm test:runs
+```
+
+## Rider UI V2
+
+Passenger-facing pages are available at `/rider`, `/rider/bookings`, `/rider/bookings/:id`, and `/rider/profile`. See `docs/RIDER_UI_V2.md`.
+
+## Dynamic routes and fleet access
+
+أضيفت إدارة ديناميكية للمواقع والمسارات، ومراكز تشغيل دمشق وبيروت وعمّان، وصلاحيات دخول مستقلة للسائق والمركبة إلى سوريا ولبنان والأردن. كما أضيفت إدارة الحسابات من الـAPI وعرض الملف العام للسائق وصورة السيارة للمسافر بعد التعيين.
+
+راجع `docs/DYNAMIC_ROUTES_FLEET_ACCESS.md` وشغّل:
+
+```powershell
+pnpm test:routes
+```
+
+## Fleet compliance and media
+
+أضيف رفع فعلي لصور السائق والمركبة ووثائق التصاريح، مع مراجعة واعتماد الملفات، ومتطلبات وثائق قابلة للإدارة لكل دولة، وفحص تلقائي لانتهاء الصلاحية. لا يظهر السائق أو المركبة لمسار دولي عندما تكون الوثائق المطلوبة ناقصة أو منتهية.
+
+راجع `docs/FLEET_COMPLIANCE_MEDIA.md` وشغّل:
+
+```powershell
+pnpm test:compliance
+```

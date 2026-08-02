@@ -1,11 +1,19 @@
 import type { NextConfig } from "next";
 
+const configuredOrigins = (
+  process.env.NEXT_ALLOWED_DEV_ORIGINS ?? ""
+)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-
-  // السماح بالوصول إلى خادم التطوير من الهاتف عبر الشبكة المحلية
   allowedDevOrigins: [
-    "172.20.10.2",
+    "localhost",
+    "127.0.0.1",
+    "192.168.1.106",
+    ...configuredOrigins,
   ],
 };
 

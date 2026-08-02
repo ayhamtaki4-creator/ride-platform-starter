@@ -1,0 +1,23 @@
+{
+  "name": "ride-platform-starter",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "db:generate": "pnpm --filter api prisma:generate",
+    "db:migrate": "pnpm --filter api prisma:migrate",
+    "db:seed": "pnpm --filter api prisma:seed",
+    "test:realtime": "pnpm --filter portal test:realtime",
+    "test:schedule": "powershell -ExecutionPolicy Bypass -File \".\\scripts\\test-scheduled-shared-flow.ps1\"",
+    "test:runs": "powershell -ExecutionPolicy Bypass -File \".\\scripts\\test-operational-run-flow.ps1\"",
+    "test:routes": "powershell -ExecutionPolicy Bypass -File \".\\scripts\\test-dynamic-routes-fleet-flow.ps1\"",
+    "test:compliance": "powershell -ExecutionPolicy Bypass -File \".\\scripts\\test-fleet-compliance-flow.ps1\""
+  },
+  "devDependencies": {
+    "turbo": "2.10.7",
+    "typescript": "6.0.2"
+  }
+}

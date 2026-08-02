@@ -71,7 +71,6 @@ if ($trip.status -ne "PENDING_DISPATCH") {
 }
 
 Write-Host "Trip ID: $($trip.id)"
-Write-Host "PIN: $($trip.startPin)"
 
 Write-Host "6/12 Confirm request in admin queue..." -ForegroundColor Cyan
 $pendingTrips = Invoke-Api -Method Get -Path "/admin/trips/pending" `
@@ -107,6 +106,11 @@ if ($assigned.status -ne "DRIVER_ASSIGNED") {
   throw "Expected DRIVER_ASSIGNED, got $($assigned.status)."
 }
 
+Write-Host "Driver accepts assignment..." -ForegroundColor Cyan
+Invoke-Api -Method Post -Path "/drivers/me/bookings/$($trip.id)/accept" `
+  -Token $driverLogin.accessToken `
+  -Body @{} | Out-Null
+
 Write-Host "9/12 Driver is arriving..." -ForegroundColor Cyan
 Invoke-Api -Method Post -Path "/trips/$($trip.id)/arriving" `
   -Token $driverLogin.accessToken | Out-Null
@@ -115,10 +119,9 @@ Write-Host "10/12 Driver arrived..." -ForegroundColor Cyan
 Invoke-Api -Method Post -Path "/trips/$($trip.id)/arrived" `
   -Token $driverLogin.accessToken | Out-Null
 
-Write-Host "11/12 Start trip with PIN..." -ForegroundColor Cyan
+Write-Host "11/12 Start trip..." -ForegroundColor Cyan
 Invoke-Api -Method Post -Path "/trips/$($trip.id)/start" `
-  -Token $driverLogin.accessToken `
-  -Body @{ pin = "$($trip.startPin)" } | Out-Null
+  -Token $driverLogin.accessToken | Out-Null
 
 Write-Host "12/12 Complete trip..." -ForegroundColor Cyan
 $completed = Invoke-Api -Method Post -Path "/trips/$($trip.id)/complete" `

@@ -1,0 +1,90 @@
+{
+  "generatedAt": "2026-08-01T23:27:32.533Z",
+  "project": "C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter",
+  "counts": {
+    "error": 0,
+    "warning": 3,
+    "info": 1
+  },
+  "findings": [
+    {
+      "severity": "warning",
+      "code": "PIN_REFERENCE_FOUND",
+      "message": "PIN-related reference still exists after PIN removal.",
+      "file": "apps/api/src/bookings/bookings.service.ts",
+      "details": "startPin"
+    },
+    {
+      "severity": "warning",
+      "code": "PIN_REFERENCE_FOUND",
+      "message": "PIN-related reference still exists after PIN removal.",
+      "file": "apps/api/src/trips/trips.service.ts",
+      "details": "startPin"
+    },
+    {
+      "severity": "warning",
+      "code": "RIDER_GALLERY_WRONG_POSITION",
+      "message": "VehicleGallery is not positioned between order details and booking stages.",
+      "file": "apps/portal/app/rider/bookings/[id]/page.tsx",
+      "details": null
+    },
+    {
+      "severity": "info",
+      "code": "DRIVER_LINK_USES_USER_ID",
+      "message": "Admin driver details link uses driver.userId. Verify that the API endpoint expects userId rather than driverId.",
+      "file": "apps/portal/app/admin/drivers/page.tsx",
+      "details": "/admin/drivers/${driver.userId}"
+    }
+  ],
+  "commands": [
+    {
+      "label": "Portal typecheck",
+      "command": "pnpm --filter portal typecheck",
+      "exitCode": 0,
+      "durationMs": 3258,
+      "stdout": "\n> portal@ typecheck C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter\\apps\\portal\n> tsc --noEmit\n\n",
+      "stderr": ""
+    },
+    {
+      "label": "API typecheck",
+      "command": "pnpm --filter api typecheck",
+      "exitCode": 0,
+      "durationMs": 4866,
+      "stdout": "\n> api@ typecheck C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter\\apps\\api\n> tsc --noEmit\n\n",
+      "stderr": ""
+    },
+    {
+      "label": "Workspace typecheck",
+      "command": "pnpm typecheck",
+      "exitCode": 0,
+      "durationMs": 833,
+      "stdout": "\n> ride-platform-starter@ typecheck C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter\n> turbo typecheck\n\n\n   • Packages in scope: api, portal\n   • Running typecheck in 2 packages\n   • Remote caching disabled\n\nportal:typecheck: cache hit, replaying logs 663bce737d83e394\nportal:typecheck: \nportal:typecheck: > portal@ typecheck C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter\\apps\\portal\nportal:typecheck: > tsc --noEmit\nportal:typecheck: \napi:typecheck: cache hit, replaying logs 724e6ada00ca72ff\napi:typecheck: \napi:typecheck: > api@ typecheck C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter\\apps\\api\napi:typecheck: > tsc --noEmit\napi:typecheck: \n\n Tasks:    2 successful, 2 total\nCached:    2 cached, 2 total\n  Time:    49ms >>> FULL TURBO\n\n",
+      "stderr": "• turbo 2.10.7\n"
+    },
+    {
+      "label": "Workspace build",
+      "command": "pnpm build",
+      "exitCode": 0,
+      "durationMs": 27078,
+      "stdout": "\n> ride-platform-starter@ build C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter\n> turbo build\n\n\n   • Packages in scope: api, portal\n   • Running build in 2 packages\n   • Remote caching disabled\n\nportal:build: cache miss, executing 70680eb265aff766\napi:build: cache hit, replaying logs 46b82735b938baa2\napi:build: \napi:build: > api@ build C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter\\apps\\api\napi:build: > nest build\napi:build: \nportal:build: \nportal:build: > portal@ build C:\\Users\\ayham\\Downloads\\ride-platform-starter\\ride-platform-starter\\apps\\portal\nportal:build: > next build\nportal:build: \nportal:build: ▲ Next.js 16.2.12 (Turbopack)\nportal:build: - Environments: .env.local\nportal:build: \nportal:build:   Creating an optimized production build ...\nportal:build: ✓ Compiled successfully in 6.0s\nportal:build:   Running TypeScript ...\nportal:build:   Finished TypeScript in 9.5s ...\nportal:build:   Collecting page data using 7 workers ...\nportal:build:   Generating static pages using 7 workers (0/16) ...\nportal:build:   Generating static pages using 7 workers (4/16) \r\nportal:build:   Generating static pages using 7 workers (8/16) \r\nportal:build:   Generating static pages using 7 workers (12/16) \r\nportal:build: ✓ Generating static pages using 7 workers (16/16) in 1524ms\nportal:build:   Finalizing page optimization ...\nportal:build: \nportal:build: Route (app)\nportal:build: ┌ ○ /\nportal:build: ├ ○ /_not-found\nportal:build: ├ ○ /admin\nportal:build: ├ ○ /admin/bookings\nportal:build: ├ ƒ /admin/bookings/[id]\nportal:build: ├ ○ /admin/compliance\nportal:build: ├ ○ /admin/drivers\nportal:build: ├ ƒ /admin/drivers/[id]\nportal:build: ├ ○ /admin/pricing\nportal:build: ├ ○ /admin/routes\nportal:build: ├ ○ /admin/runs\nportal:build: ├ ƒ /admin/runs/[id]\nportal:build: ├ ○ /admin/users\nportal:build: ├ ○ /driver\nportal:build: ├ ƒ /driver/runs/[id]\nportal:build: ├ ○ /login\nportal:build: ├ ○ /rider\nportal:build: ├ ○ /rider/bookings\nportal:build: ├ ƒ /rider/bookings/[id]\nportal:build: └ ○ /rider/profile\nportal:build: \nportal:build: \nportal:build: ○  (Static)   prerendered as static content\nportal:build: ƒ  (Dynamic)  server-rendered on demand\nportal:build: \n\n Tasks:    2 successful, 2 total\nCached:    1 cached, 2 total\n  Time:    21.604s \n\n",
+      "stderr": "• turbo 2.10.7\n"
+    }
+  ],
+  "serviceChecks": [
+    {
+      "url": "http://localhost:3000",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "url": "http://localhost:4000/api/health",
+      "status": 200,
+      "ok": true
+    },
+    {
+      "url": "http://localhost:4000/docs",
+      "status": 200,
+      "ok": true
+    }
+  ]
+}

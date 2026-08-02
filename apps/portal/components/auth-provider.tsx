@@ -9,12 +9,15 @@ import {
   useMemo,
   useState,
 } from "react";
-import { apiFetch } from "@/lib/api";
+import { io, Socket } from "socket.io-client";
+import { apiFetch, getRealtimeUrl } from "@/lib/api";
 import { AuthUser, LoginResponse } from "@/lib/types";
 
 type AuthContextValue = {
   user: AuthUser | null;
   isLoading: boolean;
+  socket: Socket | null;
+  isRealtimeConnected: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -25,6 +28,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
 
   const clearSession = useCallback(() => {
     localStorage.removeItem("ride_access_token");
@@ -64,6 +69,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("ride-auth-expired", handleExpired);
   }, [clearSession, refreshUser]);
 
+  useEffect(() => {
+    const token = localStorage.getItem("ride_access_token");
+
+    if (!user || !token) {
+      setSocket((current) => {
+        current?.disconnect();
+        return null;
+      });
+      setIsRealtimeConnected(false);
+      return;
+    }
+
+    const realtimeSocket = io(getRealtimeUrl(), {
+      auth: { token },
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 8000,
+      timeout: 10000,
+    });
+
+    const handleConnect = () => setIsRealtimeConnected(true);
+    const handleDisconnect = () => setIsRealtimeConnected(false);
+    const handleAuthError = () => {
+      window.dispatchEvent(new Event("ride-auth-expired"));
+    };
+
+    realtimeSocket.on("connect", handleConnect);
+    realtimeSocket.on("disconnect", handleDisconnect);
+    realtimeSocket.on("realtime.auth.error", handleAuthError);
+
+    setSocket(realtimeSocket);
+
+    return () => {
+      realtimeSocket.off("connect", handleConnect);
+      realtimeSocket.off("disconnect", handleDisconnect);
+      realtimeSocket.off("realtime.auth.error", handleAuthError);
+      realtimeSocket.disconnect();
+      setIsRealtimeConnected(false);
+      setSocket((current) =>
+        current === realtimeSocket ? null : current
+      );
+    };
+  }, [user?.id]);
+
   const login = useCallback(async (email: string, password: string) => {
     const response = await apiFetch<LoginResponse>("/auth/login", {
       method: "POST",
@@ -83,8 +134,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession]);
 
   const value = useMemo(
-    () => ({ user, isLoading, login, logout, refreshUser }),
-    [user, isLoading, login, logout, refreshUser]
+    () => ({
+      user,
+      isLoading,
+      socket,
+      isRealtimeConnected,
+      login,
+      logout,
+      refreshUser,
+    }),
+    [
+      user,
+      isLoading,
+      socket,
+      isRealtimeConnected,
+      login,
+      logout,
+      refreshUser,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

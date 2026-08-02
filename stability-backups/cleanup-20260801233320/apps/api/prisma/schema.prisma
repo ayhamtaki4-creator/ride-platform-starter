@@ -1,0 +1,633 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum DriverStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum DriverAvailability {
+  OFFLINE
+  ONLINE
+  ON_TRIP
+}
+
+enum TripStatus {
+  PENDING_DISPATCH
+  SEARCHING_DRIVER
+  DRIVER_ASSIGNED
+  DRIVER_ARRIVING
+  DRIVER_ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED_BY_PASSENGER
+  CANCELLED_BY_DRIVER
+  NO_DRIVER_AVAILABLE
+  PASSENGER_NO_SHOW
+  DRIVER_NO_SHOW
+}
+
+enum BookingDirection {
+  BEIRUT_AIRPORT_TO_DAMASCUS
+  DAMASCUS_TO_BEIRUT_AIRPORT
+}
+
+enum BookingType {
+  SHARED_SEAT
+  PRIVATE_CAR
+}
+
+enum BookingReviewStatus {
+  NEW
+  CONFIRMED
+  REJECTED
+  CANCELLED
+}
+
+enum DriverAssignmentStatus {
+  UNASSIGNED
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum ServiceRunStatus {
+  DRAFT
+  PLANNED
+  SCHEDULED
+  DRIVER_PENDING
+  DRIVER_ACCEPTED
+  BOARDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DRIVER_REPLACEMENT_REQUIRED
+}
+
+enum ServiceRunPassengerStatus {
+  WAITING
+  PICKED_UP
+  NO_SHOW
+  DROPPED_OFF
+}
+
+enum LocationType {
+  CITY
+  AIRPORT
+  GOVERNORATE
+  BORDER
+  STATION
+}
+
+enum RouteType {
+  INTERCITY
+  INTERNATIONAL
+  AIRPORT_TRANSFER
+  PRIVATE_TRANSFER
+}
+
+enum AccessStatus {
+  PENDING
+  APPROVED
+  EXPIRED
+  SUSPENDED
+  REJECTED
+}
+
+enum RegionKind {
+  COUNTRY_ACCESS
+  OPERATING_HUB
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  SUSPENDED
+}
+
+enum ComplianceSubject {
+  DRIVER
+  VEHICLE
+}
+
+enum MediaStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DELETED
+}
+
+enum MediaVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum MediaPurpose {
+  DRIVER_AVATAR
+  VEHICLE_IMAGE
+  DRIVER_DOCUMENT
+  VEHICLE_DOCUMENT
+  OTHER
+}
+
+model User {
+  id               String            @id @default(uuid()) @db.Uuid
+  email            String            @unique
+  phone            String?           @unique
+  passwordHash     String
+  firstName        String
+  lastName         String
+  status           UserStatus        @default(ACTIVE)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  roles            UserRole[]
+  passengerTrips   Trip[]            @relation("PassengerTrips")
+  driverTrips      Trip[]            @relation("DriverTrips")
+  passengerProfile PassengerProfile?
+  driverProfile    DriverProfile?
+  driverServiceRuns ServiceRun[]     @relation("DriverServiceRuns")
+  auditLogs        AuditLog[]        @relation("AuditActor")
+  uploadedMedia    MediaAsset[]      @relation("MediaUploadedBy")
+  approvedMedia    MediaAsset[]      @relation("MediaApprovedBy")
+  reviewedDriverDocuments DriverDocument[] @relation("DriverDocumentReviewer")
+  reviewedVehicleDocuments VehicleDocument[] @relation("VehicleDocumentReviewer")
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  code        String           @unique
+  name        String
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id    String           @id @default(uuid()) @db.Uuid
+  code  String           @unique
+  name  String
+  roles RolePermission[]
+}
+
+model UserRole {
+  userId String @db.Uuid
+  roleId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String     @db.Uuid
+  permissionId String     @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model PassengerProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+  rating    Float    @default(5)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DriverProfile {
+  id             String             @id @default(uuid()) @db.Uuid
+  userId         String             @unique @db.Uuid
+  status         DriverStatus       @default(PENDING_REVIEW)
+  availability   DriverAvailability @default(OFFLINE)
+  rating         Float              @default(5)
+  licenseNumber  String?            @unique
+  avatarUrl      String?
+  avatarMediaId  String?            @unique @db.Uuid
+  baseRegionId   String?            @db.Uuid
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  baseRegion     ServiceRegion?     @relation("DriverBaseRegion", fields: [baseRegionId], references: [id], onDelete: SetNull)
+  avatarMedia    MediaAsset?        @relation("DriverAvatarMedia", fields: [avatarMediaId], references: [id], onDelete: SetNull)
+  vehicles       Vehicle[]
+  regionAccesses DriverRegionAccess[]
+  documents      DriverDocument[]
+
+  @@index([status, availability])
+  @@index([baseRegionId])
+}
+
+model Vehicle {
+  id               String                @id @default(uuid()) @db.Uuid
+  driverProfileId  String                @db.Uuid
+  make             String
+  model            String
+  year             Int
+  color            String
+  plateNumber      String                @unique
+  seatCapacity     Int                   @default(4)
+  primaryImageUrl  String?
+  primaryImageMediaId String?             @unique @db.Uuid
+  baseRegionId     String?               @db.Uuid
+  isActive         Boolean               @default(true)
+  driverProfile    DriverProfile         @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  baseRegion       ServiceRegion?        @relation("VehicleBaseRegion", fields: [baseRegionId], references: [id], onDelete: SetNull)
+  primaryImageMedia MediaAsset?           @relation("VehiclePrimaryMedia", fields: [primaryImageMediaId], references: [id], onDelete: SetNull)
+  serviceRuns      ServiceRun[]
+  regionAccesses   VehicleRegionAccess[]
+  images           VehicleImage[]
+  documents        VehicleDocument[]
+
+  @@index([driverProfileId, isActive])
+  @@index([baseRegionId])
+}
+
+model VehicleImage {
+  id         String   @id @default(uuid()) @db.Uuid
+  vehicleId  String   @db.Uuid
+  url        String
+  mediaAssetId String? @unique @db.Uuid
+  isPrimary  Boolean  @default(false)
+  isApproved Boolean  @default(false)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  mediaAsset MediaAsset? @relation("VehicleImageMedia", fields: [mediaAssetId], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, isApproved, sortOrder])
+}
+
+model PricingRule {
+  id             String            @id @default(uuid()) @db.Uuid
+  scopeKey       String
+  direction      BookingDirection?
+  routeId         String?           @db.Uuid
+  bookingType    BookingType
+  passengerPrice Decimal           @db.Decimal(12, 2)
+  driverFee      Decimal           @db.Decimal(12, 2)
+  platformMargin Decimal           @db.Decimal(12, 2)
+  currency       String            @default("USD")
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  route          ServiceRoute?     @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  trips          Trip[]
+
+  @@unique([scopeKey, bookingType])
+  @@index([isActive, direction, bookingType])
+  @@index([isActive, routeId, bookingType])
+}
+
+model Trip {
+  id                       String               @id @default(uuid()) @db.Uuid
+  passengerId              String               @db.Uuid
+  driverId                 String?              @db.Uuid
+  pricingRuleId            String?                 @db.Uuid
+  routeId                  String?                 @db.Uuid
+  serviceRunId             String?                 @db.Uuid
+  serviceRunPassengerStatus ServiceRunPassengerStatus @default(WAITING)
+  pickupOrder              Int?
+  pickedUpAt               DateTime?
+  noShowAt                 DateTime?
+  droppedOffAt             DateTime?
+  status                   TripStatus              @default(PENDING_DISPATCH)
+  bookingReviewStatus      BookingReviewStatus     @default(CONFIRMED)
+  driverAssignmentStatus   DriverAssignmentStatus  @default(UNASSIGNED)
+  bookingReference         String?              @unique
+  direction                BookingDirection?
+  bookingType              BookingType?
+  travelDate               DateTime?
+  flightArrivalTime        String?
+  flightNumber             String?
+  passengerCount           Int                  @default(1)
+  luggageCount             Int                  @default(0)
+  contactName              String?
+  contactPhone             String?
+  notes                    String?
+  pickupAddress            String
+  pickupLatitude           Float
+  pickupLongitude          Float
+  dropoffAddress           String
+  dropoffLatitude          Float
+  dropoffLongitude         Float
+  estimatedDistanceKm      Float                @default(0)
+  estimatedDurationMinutes Int                  @default(0)
+  estimatedFare            Decimal              @db.Decimal(12, 3)
+  driverFee                Decimal              @default(0) @db.Decimal(12, 3)
+  platformMargin           Decimal              @default(0) @db.Decimal(12, 3)
+  finalFare                Decimal?             @db.Decimal(12, 3)
+  currency                 String               @default("USD")
+  startPinHash             String               @map("startPin")
+  requestedAt              DateTime             @default(now())
+  confirmedAt              DateTime?
+  rejectedAt               DateTime?
+  assignedAt               DateTime?
+  driverRespondedAt        DateTime?
+  driverRejectionReason    String?
+  acceptedAt               DateTime?
+  startedAt                DateTime?
+  completedAt              DateTime?
+  cancelledAt              DateTime?
+  passenger                User                 @relation("PassengerTrips", fields: [passengerId], references: [id])
+  driver                   User?                @relation("DriverTrips", fields: [driverId], references: [id])
+  pricingRule              PricingRule?         @relation(fields: [pricingRuleId], references: [id])
+  route                    ServiceRoute?        @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  serviceRun               ServiceRun?          @relation(fields: [serviceRunId], references: [id], onDelete: SetNull)
+  statusHistory            TripStatusHistory[]
+
+  @@index([passengerId, requestedAt])
+  @@index([driverId, requestedAt])
+  @@index([status, requestedAt])
+  @@index([bookingReviewStatus, requestedAt])
+  @@index([travelDate, direction])
+  @@index([travelDate, routeId])
+  @@index([serviceRunId, driverAssignmentStatus])
+  @@index([serviceRunId, serviceRunPassengerStatus])
+}
+
+model ServiceRun {
+  id                      String            @id @default(uuid()) @db.Uuid
+  runReference            String            @unique
+  direction               BookingDirection?
+  routeId                  String?           @db.Uuid
+  bookingType             BookingType
+  travelDate              DateTime
+  driverId                String            @db.Uuid
+  vehicleId               String            @db.Uuid
+  status                   ServiceRunStatus  @default(PLANNED)
+  seatCapacity             Int
+  reservedSeats            Int               @default(0)
+  notes                    String?
+  driverAcceptedAt         DateTime?
+  boardingStartedAt        DateTime?
+  startedAt                DateTime?
+  completedAt              DateTime?
+  cancelledAt              DateTime?
+  driverRejectionReason    String?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  driver                   User               @relation("DriverServiceRuns", fields: [driverId], references: [id])
+  vehicle                  Vehicle            @relation(fields: [vehicleId], references: [id])
+  route                    ServiceRoute?      @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  bookings                 Trip[]
+
+  @@index([driverId, travelDate])
+  @@index([direction, bookingType, travelDate])
+  @@index([routeId, bookingType, travelDate])
+  @@index([status, travelDate])
+}
+
+model ServiceRegion {
+  id                 String                @id @default(uuid()) @db.Uuid
+  code               String                @unique
+  nameAr             String
+  nameEn             String?
+  countryCode        String
+  kind               RegionKind
+  isActive           Boolean               @default(true)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  baseDrivers        DriverProfile[]       @relation("DriverBaseRegion")
+  baseVehicles       Vehicle[]             @relation("VehicleBaseRegion")
+  driverAccesses     DriverRegionAccess[]
+  vehicleAccesses    VehicleRegionAccess[]
+  requiredByRoutes   RouteRequiredRegion[]
+  documentRequirements RegionDocumentRequirement[]
+  driverDocuments    DriverDocument[]
+  vehicleDocuments   VehicleDocument[]
+
+  @@index([kind, countryCode, isActive])
+}
+
+model ServiceLocation {
+  id                 String         @id @default(uuid()) @db.Uuid
+  code               String         @unique
+  nameAr             String
+  nameEn             String?
+  type               LocationType
+  countryCode        String
+  city               String?
+  governorate        String?
+  latitude           Decimal?       @db.Decimal(10, 7)
+  longitude          Decimal?       @db.Decimal(10, 7)
+  isActive           Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  outgoingRoutes     ServiceRoute[] @relation("RouteOrigin")
+  incomingRoutes     ServiceRoute[] @relation("RouteDestination")
+
+  @@index([countryCode, type, isActive])
+}
+
+model ServiceRoute {
+  id                    String                @id @default(uuid()) @db.Uuid
+  code                  String                @unique
+  nameAr                String
+  nameEn                String?
+  originId              String                @db.Uuid
+  destinationId         String                @db.Uuid
+  routeType             RouteType
+  requiresFlightDetails Boolean               @default(false)
+  estimatedMinutes      Int?
+  distanceKm            Decimal?              @db.Decimal(10, 2)
+  isActive              Boolean               @default(true)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  origin                ServiceLocation       @relation("RouteOrigin", fields: [originId], references: [id])
+  destination           ServiceLocation       @relation("RouteDestination", fields: [destinationId], references: [id])
+  requiredRegions       RouteRequiredRegion[]
+  pricingRules          PricingRule[]
+  trips                 Trip[]
+  serviceRuns           ServiceRun[]
+
+  @@unique([originId, destinationId])
+  @@index([isActive, routeType])
+}
+
+model RouteRequiredRegion {
+  routeId   String        @db.Uuid
+  regionId  String        @db.Uuid
+  route     ServiceRoute  @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  region    ServiceRegion @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
+  @@id([routeId, regionId])
+  @@index([regionId])
+}
+
+model DriverRegionAccess {
+  id                String         @id @default(uuid()) @db.Uuid
+  driverProfileId   String         @db.Uuid
+  regionId          String         @db.Uuid
+  status            AccessStatus   @default(PENDING)
+  validFrom         DateTime?
+  validUntil        DateTime?
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  driverProfile     DriverProfile  @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  region            ServiceRegion  @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
+  @@unique([driverProfileId, regionId])
+  @@index([regionId, status])
+}
+
+model VehicleRegionAccess {
+  id             String         @id @default(uuid()) @db.Uuid
+  vehicleId      String         @db.Uuid
+  regionId       String         @db.Uuid
+  status         AccessStatus   @default(PENDING)
+  permitNumber   String?
+  validFrom      DateTime?
+  validUntil     DateTime?
+  documentUrl    String?
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  vehicle        Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  region         ServiceRegion  @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
+  @@unique([vehicleId, regionId])
+  @@index([regionId, status])
+}
+
+model MediaAsset {
+  id              String          @id @default(uuid()) @db.Uuid
+  originalName    String
+  storedName      String          @unique
+  mimeType        String
+  sizeBytes       Int
+  sha256          String
+  storagePath     String          @unique
+  purpose         MediaPurpose
+  visibility      MediaVisibility @default(PRIVATE)
+  status          MediaStatus     @default(PENDING)
+  uploadedById    String          @db.Uuid
+  approvedById    String?         @db.Uuid
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  deletedAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  uploadedBy      User            @relation("MediaUploadedBy", fields: [uploadedById], references: [id])
+  approvedBy      User?           @relation("MediaApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  avatarFor       DriverProfile?  @relation("DriverAvatarMedia")
+  primaryFor      Vehicle?        @relation("VehiclePrimaryMedia")
+  vehicleImage    VehicleImage?   @relation("VehicleImageMedia")
+  driverDocument  DriverDocument?
+  vehicleDocument VehicleDocument?
+
+  @@index([purpose, status, createdAt])
+  @@index([uploadedById, createdAt])
+}
+
+model DriverDocument {
+  id              String         @id @default(uuid()) @db.Uuid
+  driverProfileId String         @db.Uuid
+  mediaAssetId    String         @unique @db.Uuid
+  regionId        String?        @db.Uuid
+  documentType    String
+  documentNumber  String?
+  issuedAt        DateTime?
+  expiresAt       DateTime?
+  status          DocumentStatus @default(PENDING)
+  notes           String?
+  reviewedById    String?        @db.Uuid
+  reviewedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  driverProfile   DriverProfile  @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  mediaAsset      MediaAsset     @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+  region          ServiceRegion? @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  reviewedBy      User?          @relation("DriverDocumentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([driverProfileId, documentType, status])
+  @@index([regionId, documentType, status])
+  @@index([expiresAt, status])
+}
+
+model VehicleDocument {
+  id              String         @id @default(uuid()) @db.Uuid
+  vehicleId       String         @db.Uuid
+  mediaAssetId    String         @unique @db.Uuid
+  regionId        String?        @db.Uuid
+  documentType    String
+  documentNumber  String?
+  issuedAt        DateTime?
+  expiresAt       DateTime?
+  status          DocumentStatus @default(PENDING)
+  notes           String?
+  reviewedById    String?        @db.Uuid
+  reviewedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  vehicle         Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  mediaAsset      MediaAsset     @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+  region          ServiceRegion? @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  reviewedBy      User?          @relation("VehicleDocumentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, documentType, status])
+  @@index([regionId, documentType, status])
+  @@index([expiresAt, status])
+}
+
+model RegionDocumentRequirement {
+  id              String            @id @default(uuid()) @db.Uuid
+  regionId        String            @db.Uuid
+  subject         ComplianceSubject
+  documentType    String
+  minValidityDays Int               @default(0)
+  regionScoped    Boolean           @default(false)
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  region          ServiceRegion     @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
+  @@unique([regionId, subject, documentType])
+  @@index([subject, isActive])
+}
+
+model TripStatusHistory {
+  id        String     @id @default(uuid()) @db.Uuid
+  tripId    String     @db.Uuid
+  from      TripStatus?
+  to        TripStatus
+  actorId   String     @db.Uuid
+  note      String?
+  createdAt DateTime   @default(now())
+  trip      Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+}
