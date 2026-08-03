@@ -8,6 +8,7 @@ import { useToast } from "./ui/toast-provider";
 import { apiFetch } from "@/lib/api";
 import { ServiceRoute, ROUTE_TYPE_LABELS } from "@/lib/admin-operations";
 import { BookingQuote, BookingType, BOOKING_TYPE_LABELS, Trip, VEHICLE_CLASS_LABELS } from "@/lib/types";
+import type { VehicleClass } from "@/lib/types";
 
 const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
 const stepTitles = ["المسار", "الموعد", "بيانات المسافر", "المراجعة"];
@@ -16,11 +17,14 @@ type CapacityPolicy = NonNullable<ServiceRoute["capacityPolicy"]>;
 
 const DEFAULT_CAPACITY_POLICY: CapacityPolicy = {
   minPassengers: 1,
-  maxPassengers: 12,
+  maxPassengers: 5,
   minLuggage: 0,
-  maxLuggage: 24,
-  standardMaxPassengers: 4,
-  standardMaxLuggage: 6,
+  maxLuggage: 12,
+  classes: [
+    { vehicleClass: "SMALL", maxPassengers: 3, maxLuggage: 5 },
+    { vehicleClass: "MEDIUM", maxPassengers: 4, maxLuggage: 7 },
+    { vehicleClass: "LARGE", maxPassengers: 5, maxLuggage: 12 },
+  ],
 };
 
 type BookingFormState = {
@@ -70,9 +74,28 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   const availableBookingTypes = selectedRoute?.bookingTypes ?? [];
   const isPassenger = Boolean(user?.roles.includes("PASSENGER"));
   const capacityPolicy = selectedRoute?.capacityPolicy ?? DEFAULT_CAPACITY_POLICY;
-  const requiresFamilyVehicle = form.bookingType === "PRIVATE_CAR"
-    && (form.passengerCount > capacityPolicy.standardMaxPassengers
-      || form.luggageCount > capacityPolicy.standardMaxLuggage);
+  const capacityClasses = capacityPolicy.classes?.length
+    ? capacityPolicy.classes
+    : DEFAULT_CAPACITY_POLICY.classes;
+  const selectedCapacityTier = capacityClasses.find(
+    (tier) => form.passengerCount <= tier.maxPassengers && form.luggageCount <= tier.maxLuggage,
+  ) ?? capacityClasses[capacityClasses.length - 1];
+  const selectedVehicleClass = form.bookingType === "PRIVATE_CAR"
+    ? selectedCapacityTier?.vehicleClass ?? "LARGE"
+    : "SMALL";
+
+  function tierPrice(vehicleClass: VehicleClass) {
+    const rule = selectedRoute?.pricingRules.find(
+      (item) => item.bookingType === form.bookingType && item.vehicleClass === vehicleClass && item.isActive !== false,
+    );
+    if (!rule) return null;
+
+    const unitPrice = Number(rule.passengerPrice);
+    return {
+      amount: unitPrice,
+      currency: rule.currency,
+    };
+  }
 
   useEffect(() => {
     void apiFetch<ServiceRoute[]>("/routes", { skipAuth: true })
@@ -249,7 +272,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                 <input className="input" value={form.flightNumber} onChange={(e) => update("flightNumber", e.target.value)} required={selectedRoute?.requiresFlightDetails} />
               </label>
               <label>
-                <span className="label">عدد الحقائب</span>
+                <span className="label">إجمالي الحقائب (كبيرة + يد)</span>
                 <input
                   className="input"
                   type="number"
@@ -261,34 +284,49 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                   onChange={(e) => update("luggageCount", Number(e.target.value))}
                   required
                 />
-                <small className="field-help">من {capacityPolicy.minLuggage} إلى {capacityPolicy.maxLuggage} حقيبة.</small>
+                <small className="field-help">احسب الحقائب الكبيرة وحقائب اليد معًا، بحد أقصى {capacityPolicy.maxLuggage}.</small>
               </label>
             </div>
-            <div className={`capacity-policy-card ${requiresFamilyVehicle ? "is-family" : ""}`} aria-live="polite">
+            <div className={`capacity-policy-card is-${selectedVehicleClass.toLowerCase()}`} aria-live="polite">
               <span className="capacity-policy-icon"><Icon name="car" size={24} /></span>
               <div>
-                <strong>
-                  {form.bookingType === "PRIVATE_CAR"
-                    ? `الاختيار الحالي: ${requiresFamilyVehicle ? "سيارة عائلية" : "سيارة عادية"}`
-                    : "الحجز الحالي: مقاعد مشتركة"}
-                </strong>
-                {form.bookingType === "PRIVATE_CAR" ? (
-                  <p>
-                    السيارة العادية حتى {capacityPolicy.standardMaxPassengers} ركاب و{capacityPolicy.standardMaxLuggage} حقائب.
-                    عند تجاوز أي حد يختار النظام السيارة العائلية وسعرها تلقائيًا.
-                  </p>
-                ) : (
-                  <p>يُحسب السعر لكل مسافر، ويُراجع النظام سعة المركبة قبل تعيينها.</p>
-                )}
-                <small>
-                  الحد الأعلى للحجز الإلكتروني: {capacityPolicy.maxPassengers} راكبًا و{capacityPolicy.maxLuggage} حقيبة.
-                </small>
+                <strong>{form.bookingType === "PRIVATE_CAR" ? `الاختيار التلقائي: ${VEHICLE_CLASS_LABELS[selectedVehicleClass]}` : "الحجز الحالي: مقاعد مشتركة"}</strong>
+                <p>{form.bookingType === "PRIVATE_CAR" ? "يختار النظام أصغر فئة تناسب عدد المسافرين وإجمالي الحقائب، ويطبّق سعرها مباشرة." : "يُحسب السعر لكل مسافر، ويختار مركز العمليات مركبة تستوعب المجموعة والحقائب."}</p>
+                <small>الحد الأعلى للحجز الإلكتروني: {capacityPolicy.maxPassengers} ركاب و{capacityPolicy.maxLuggage} حقيبة بالمجموع.</small>
               </div>
             </div>
+            {form.bookingType === "PRIVATE_CAR" ? <div className="capacity-tier-grid">
+              {capacityClasses.map((tier) => {
+                const price = tierPrice(tier.vehicleClass);
+                const isSelected = tier.vehicleClass === selectedVehicleClass;
+                return (
+                  <article
+                    className={`capacity-tier-card ${isSelected ? "is-selected" : ""}`}
+                    data-vehicle-class={tier.vehicleClass}
+                    key={tier.vehicleClass}
+                  >
+                    <div className="capacity-tier-heading">
+                      <strong>{VEHICLE_CLASS_LABELS[tier.vehicleClass]}</strong>
+                      {isSelected ? <span><Icon name="check" size={13} />مناسبة لطلبك</span> : null}
+                    </div>
+                    <div className="capacity-tier-limits">
+                      <span><Icon name="users" size={17} />حتى {tier.maxPassengers} ركاب</span>
+                      <span><Icon name="luggage" size={17} />حتى {tier.maxLuggage} حقائب</span>
+                    </div>
+                    <small className="capacity-tier-price">
+                      {price
+                        ? `${formatMoney(price.amount, price.currency)} للسيارة`
+                        : "السعر غير متاح حاليًا"}
+                    </small>
+                  </article>
+                );
+              })}
+            </div> : null}
+            <p className="capacity-luggage-note"><Icon name="luggage" size={17} />الحقائب هنا إجمالي مختلط من الحقائب الكبيرة وحقائب اليد.</p>
           </div>
         ) : null}
         {step === 3 ? <div className="wizard-pane"><div className="pane-heading"><h4>بيانات المسافر والعناوين</h4></div><div className="form-grid wizard-form-grid"><label><span className="label">الاسم الكامل</span><input className="input" value={form.passengerName} onChange={(e) => update("passengerName", e.target.value)} required /></label><label><span className="label">رقم الهاتف</span><input className="input" value={form.passengerPhone} onChange={(e) => update("passengerPhone", e.target.value)} placeholder="+963..." required /></label><label><span className="label">عنوان الالتقاط</span><input className="input" value={form.pickupAddress} onChange={(e) => update("pickupAddress", e.target.value)} required /></label><label><span className="label">عنوان الوصول</span><input className="input" value={form.dropoffAddress} onChange={(e) => update("dropoffAddress", e.target.value)} required /></label><label className="full-width"><span className="label">ملاحظات</span><textarea className="input" rows={4} value={form.notes} onChange={(e) => update("notes", e.target.value)} /></label></div></div> : null}
-        {step === 4 ? <div className="wizard-pane"><div className="pane-heading"><h4>راجع طلبك</h4><p>السعر مأخوذ من قاعدة السعر الفعالة للمسار.</p></div><div className="review-grid"><div><span>المسار</span><strong>{selectedRoute?.nameAr}</strong></div><div><span>نوع الحجز</span><strong>{BOOKING_TYPE_LABELS[form.bookingType]}</strong></div><div><span>فئة السيارة</span><strong>{quote ? VEHICLE_CLASS_LABELS[quote.vehicleClass] : "—"}</strong></div><div><span>التاريخ</span><strong>{new Date(form.travelDate).toLocaleDateString("ar")}</strong></div><div><span>المسافرون والحقائب</span><strong>{form.passengerCount} مسافر · {form.luggageCount} حقيبة</strong></div><div><span>الانطلاق</span><strong>{form.pickupAddress}</strong></div><div><span>الوصول</span><strong>{form.dropoffAddress}</strong></div></div><div className="quote-card"><span>السعر التقديري</span><strong>{quote ? formatMoney(quote.passengerPrice, quote.currency) : "—"}</strong></div>{!isPassenger ? <div className="notice">يجب تسجيل الدخول بحساب مسافر لإرسال الطلب.</div> : null}</div> : null}
+        {step === 4 ? <div className="wizard-pane"><div className="pane-heading"><h4>راجع طلبك</h4><p>السعر مأخوذ من قاعدة السعر الفعالة للمسار.</p></div><div className="review-grid"><div><span>المسار</span><strong>{selectedRoute?.nameAr}</strong></div><div><span>نوع الحجز</span><strong>{BOOKING_TYPE_LABELS[form.bookingType]}</strong></div><div><span>فئة السيارة</span><strong>{quote ? VEHICLE_CLASS_LABELS[quote.vehicleClass] : "—"}</strong></div><div><span>التاريخ</span><strong>{new Date(form.travelDate).toLocaleDateString("ar")}</strong></div><div><span>المسافرون والحقائب</span><strong>{form.passengerCount} مسافر · {form.luggageCount} حقيبة إجمالًا</strong></div><div><span>الانطلاق</span><strong>{form.pickupAddress}</strong></div><div><span>الوصول</span><strong>{form.dropoffAddress}</strong></div></div><div className="quote-card"><span>السعر التقديري</span><strong>{quote ? formatMoney(quote.passengerPrice, quote.currency) : "—"}</strong></div>{!isPassenger ? <div className="notice">يجب تسجيل الدخول بحساب مسافر لإرسال الطلب.</div> : null}</div> : null}
       </div>
       {error ? <div className="notice error">{error}</div> : null}
       <div className="wizard-actions">{step > 1 ? <button className="button" type="button" onClick={() => setStep((current) => current - 1)}>السابق</button> : <span />}{step < 4 ? <button className="button primary" type="button" disabled={working} onClick={() => void nextStep()}>التالي</button> : isPassenger ? <button className="button primary" type="submit" disabled={working}>{working ? "جارٍ الإرسال..." : "إرسال الحجز"}</button> : <Link className="button primary" href="/login">تسجيل الدخول</Link>}</div>

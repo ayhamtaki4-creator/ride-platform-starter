@@ -11,8 +11,8 @@ import { DynamicPricingRule, ServiceRoute } from "@/lib/admin-operations";
 
 const emptyForm = {
   routeId: "",
-  bookingType: "SHARED_SEAT" as "SHARED_SEAT" | "PRIVATE_CAR",
-  vehicleClass: "STANDARD" as "STANDARD" | "FAMILY",
+  bookingType: "PRIVATE_CAR" as "SHARED_SEAT" | "PRIVATE_CAR",
+  vehicleClass: "SMALL" as "SMALL" | "MEDIUM" | "LARGE",
   passengerPrice: 0,
   driverFee: 0,
   platformMargin: 0,

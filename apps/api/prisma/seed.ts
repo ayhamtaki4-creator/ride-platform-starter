@@ -581,7 +581,7 @@ async function main() {
       direction: 'BEIRUT_AIRPORT_TO_DAMASCUS' as BookingDirection,
       routeId: legacyRoutes.BEIRUT_AIRPORT_TO_DAMASCUS.id,
       bookingType: 'PRIVATE_CAR' as BookingType,
-      vehicleClass: 'STANDARD' as VehicleClass,
+      vehicleClass: 'SMALL' as VehicleClass,
       passengerPrice: 100,
       driverFee: 80,
       platformMargin: 20
@@ -590,7 +590,7 @@ async function main() {
       direction: 'DAMASCUS_TO_BEIRUT_AIRPORT' as BookingDirection,
       routeId: legacyRoutes.DAMASCUS_TO_BEIRUT_AIRPORT.id,
       bookingType: 'PRIVATE_CAR' as BookingType,
-      vehicleClass: 'STANDARD' as VehicleClass,
+      vehicleClass: 'SMALL' as VehicleClass,
       passengerPrice: 100,
       driverFee: 80,
       platformMargin: 20
@@ -599,7 +599,25 @@ async function main() {
       direction: 'BEIRUT_AIRPORT_TO_DAMASCUS' as BookingDirection,
       routeId: legacyRoutes.BEIRUT_AIRPORT_TO_DAMASCUS.id,
       bookingType: 'PRIVATE_CAR' as BookingType,
-      vehicleClass: 'FAMILY' as VehicleClass,
+      vehicleClass: 'MEDIUM' as VehicleClass,
+      passengerPrice: 125,
+      driverFee: 105,
+      platformMargin: 20
+    },
+    {
+      direction: 'DAMASCUS_TO_BEIRUT_AIRPORT' as BookingDirection,
+      routeId: legacyRoutes.DAMASCUS_TO_BEIRUT_AIRPORT.id,
+      bookingType: 'PRIVATE_CAR' as BookingType,
+      vehicleClass: 'MEDIUM' as VehicleClass,
+      passengerPrice: 125,
+      driverFee: 105,
+      platformMargin: 20
+    },
+    {
+      direction: 'BEIRUT_AIRPORT_TO_DAMASCUS' as BookingDirection,
+      routeId: legacyRoutes.BEIRUT_AIRPORT_TO_DAMASCUS.id,
+      bookingType: 'PRIVATE_CAR' as BookingType,
+      vehicleClass: 'LARGE' as VehicleClass,
       passengerPrice: 150,
       driverFee: 130,
       platformMargin: 20
@@ -608,7 +626,7 @@ async function main() {
       direction: 'DAMASCUS_TO_BEIRUT_AIRPORT' as BookingDirection,
       routeId: legacyRoutes.DAMASCUS_TO_BEIRUT_AIRPORT.id,
       bookingType: 'PRIVATE_CAR' as BookingType,
-      vehicleClass: 'FAMILY' as VehicleClass,
+      vehicleClass: 'LARGE' as VehicleClass,
       passengerPrice: 150,
       driverFee: 130,
       platformMargin: 20

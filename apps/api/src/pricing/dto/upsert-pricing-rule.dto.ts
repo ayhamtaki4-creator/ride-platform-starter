@@ -28,10 +28,10 @@ export class UpsertPricingRuleDto {
   @IsEnum(BookingType)
   bookingType!: BookingType;
 
-  @ApiPropertyOptional({ enum: VehicleClass, default: VehicleClass.STANDARD })
+  @ApiPropertyOptional({ enum: VehicleClass, default: VehicleClass.SMALL })
   @IsOptional()
   @IsEnum(VehicleClass)
-  vehicleClass: VehicleClass = VehicleClass.STANDARD;
+  vehicleClass: VehicleClass = VehicleClass.SMALL;
 
   @ApiProperty({ example: 40 })
   @Type(() => Number)

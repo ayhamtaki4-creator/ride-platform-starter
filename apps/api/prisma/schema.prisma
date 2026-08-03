@@ -53,8 +53,9 @@ enum BookingType {
 }
 
 enum VehicleClass {
-  STANDARD
-  FAMILY
+  SMALL
+  MEDIUM
+  LARGE
 }
 
 enum BookingReviewStatus {
@@ -286,7 +287,7 @@ model PricingRule {
   direction      BookingDirection?
   routeId         String?           @db.Uuid
   bookingType    BookingType
-  vehicleClass   VehicleClass      @default(STANDARD)
+  vehicleClass   VehicleClass      @default(SMALL)
   passengerPrice Decimal           @db.Decimal(12, 2)
   driverFee      Decimal           @db.Decimal(12, 2)
   platformMargin Decimal           @db.Decimal(12, 2)
