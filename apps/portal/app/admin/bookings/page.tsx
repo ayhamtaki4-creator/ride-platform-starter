@@ -75,7 +75,11 @@ export default function AdminBookingsPage() {
     }
     setWorking(`eligible-${booking.id}`); setError(""); setMessage("");
     try {
-      const params = new URLSearchParams({ travelDate: new Date(booking.travelDate).toISOString(), passengerCount: String(booking.passengerCount ?? 1) });
+      const params = new URLSearchParams({
+        travelDate: new Date(booking.travelDate).toISOString(),
+        passengerCount: String(booking.passengerCount ?? 1),
+        luggageCount: String(booking.luggageCount ?? 0),
+      });
       const rows = await apiFetch<EligibleDriver[]>(`/admin/routes/${booking.routeId}/eligible-drivers?${params}`);
       setEligible((current) => ({ ...current, [booking.id]: rows }));
       const firstDriver = rows.find((driver) => !driver.hasScheduleConflict && driver.vehicles.length > 0) ?? rows[0];

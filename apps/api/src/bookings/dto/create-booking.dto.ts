@@ -14,6 +14,12 @@ import {
   MinLength,
   ValidateIf
 } from 'class-validator';
+import {
+  BOOKING_MAX_LUGGAGE,
+  BOOKING_MAX_PASSENGERS,
+  BOOKING_MIN_LUGGAGE,
+  BOOKING_MIN_PASSENGERS
+} from '../../pricing/vehicle-class';
 
 export class CreateBookingDto {
   @ApiPropertyOptional({ format: 'uuid', description: 'المسار الديناميكي المفضل' })
@@ -45,16 +51,28 @@ export class CreateBookingDto {
   @MaxLength(40)
   flightNumber?: string;
 
-  @ApiProperty({ example: 2, minimum: 1, maximum: 12 })
-  @IsInt()
-  @Min(1)
-  @Max(12)
+  @ApiProperty({
+    example: 2,
+    minimum: BOOKING_MIN_PASSENGERS,
+    maximum: BOOKING_MAX_PASSENGERS
+  })
+  @IsInt({ message: 'عدد الركاب يجب أن يكون رقمًا صحيحًا.' })
+  @Min(BOOKING_MIN_PASSENGERS, { message: 'يجب أن يكون عدد الركاب راكبًا واحدًا على الأقل.' })
+  @Max(BOOKING_MAX_PASSENGERS, {
+    message: `الحد الأعلى للحجز الإلكتروني هو ${BOOKING_MAX_PASSENGERS} راكبًا.`
+  })
   passengerCount!: number;
 
-  @ApiProperty({ example: 3, minimum: 0, maximum: 24 })
-  @IsInt()
-  @Min(0)
-  @Max(24)
+  @ApiProperty({
+    example: 3,
+    minimum: BOOKING_MIN_LUGGAGE,
+    maximum: BOOKING_MAX_LUGGAGE
+  })
+  @IsInt({ message: 'عدد الحقائب يجب أن يكون رقمًا صحيحًا.' })
+  @Min(BOOKING_MIN_LUGGAGE, { message: 'لا يمكن أن يكون عدد الحقائب سالبًا.' })
+  @Max(BOOKING_MAX_LUGGAGE, {
+    message: `الحد الأعلى للحجز الإلكتروني هو ${BOOKING_MAX_LUGGAGE} حقيبة.`
+  })
   luggageCount!: number;
 
   @ApiProperty({ example: 'مطار بيروت الدولي' })

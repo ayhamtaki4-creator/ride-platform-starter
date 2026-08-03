@@ -2261,6 +2261,53 @@ textarea {
   gap: 18px;
 }
 
+.capacity-policy-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 13px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #b9dccc;
+  border-radius: 16px;
+  color: var(--primary-dark);
+  background: #f0faf5;
+}
+
+.capacity-policy-card.is-family {
+  border-color: #e7c878;
+  color: #704d00;
+  background: #fff9e8;
+}
+
+.capacity-policy-icon {
+  width: 43px;
+  height: 43px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: #fff;
+  background: var(--primary);
+}
+
+.capacity-policy-card.is-family .capacity-policy-icon {
+  background: #b47b00;
+}
+
+.capacity-policy-card strong,
+.capacity-policy-card small {
+  display: block;
+}
+
+.capacity-policy-card p {
+  margin: 5px 0;
+  line-height: 1.75;
+}
+
+.capacity-policy-card small {
+  color: var(--muted);
+}
+
 .input-with-icon {
   position: relative;
 }

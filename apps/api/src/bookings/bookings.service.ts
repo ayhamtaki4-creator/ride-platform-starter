@@ -7,6 +7,7 @@ import { BookingDirection, Prisma } from '@prisma/client';
 import { randomInt } from 'crypto';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveVehicleClass } from '../pricing/vehicle-class';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { BookingQuoteDto } from './dto/booking-quote.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
@@ -147,10 +148,16 @@ export class BookingsService {
       throw new BadRequestException('يجب تحديد routeId أو direction، وليس كليهما.');
     }
 
+    const vehicleClass = resolveVehicleClass(
+      dto.bookingType,
+      dto.passengerCount,
+      dto.luggageCount
+    );
     const rule = await this.prisma.pricingRule.findFirst({
       where: {
         ...(dto.routeId ? { routeId: dto.routeId } : { direction: dto.direction }),
         bookingType: dto.bookingType,
+        vehicleClass,
         isActive: true,
         ...(dto.routeId ? { route: { isActive: true } } : {})
       },
@@ -174,7 +181,9 @@ export class BookingsService {
       route: rule.route,
       direction: rule.direction,
       bookingType: dto.bookingType,
+      vehicleClass,
       passengerCount: dto.passengerCount,
+      luggageCount: dto.luggageCount,
       unitPassengerPrice: Number(rule.passengerPrice),
       passengerPrice,
       driverFee,
@@ -196,7 +205,8 @@ export class BookingsService {
       routeId: dto.routeId,
       direction: dto.direction,
       bookingType: dto.bookingType,
-      passengerCount: dto.passengerCount
+      passengerCount: dto.passengerCount,
+      luggageCount: dto.luggageCount
     });
 
     const route = quote.route;
@@ -263,8 +273,10 @@ export class BookingsService {
           routeCode: quote.route?.code ?? null,
           direction: quote.direction,
           bookingType: dto.bookingType,
+          vehicleClass: quote.vehicleClass,
           travelDate: dto.travelDate,
-          passengerCount: dto.passengerCount
+          passengerCount: dto.passengerCount,
+          luggageCount: dto.luggageCount
         }
       }
     });

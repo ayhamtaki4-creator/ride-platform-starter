@@ -10,7 +10,12 @@ export class PricingService {
   async listActive() {
     const rules = await this.prisma.pricingRule.findMany({
       where: { isActive: true },
-      orderBy: [{ routeId: 'asc' }, { direction: 'asc' }, { bookingType: 'asc' }],
+      orderBy: [
+        { routeId: 'asc' },
+        { direction: 'asc' },
+        { bookingType: 'asc' },
+        { vehicleClass: 'asc' }
+      ],
       include: {
         route: { include: { origin: true, destination: true } }
       }
@@ -21,6 +26,7 @@ export class PricingService {
       routeId: rule.routeId,
       direction: rule.direction,
       bookingType: rule.bookingType,
+      vehicleClass: rule.vehicleClass,
       passengerPrice: rule.passengerPrice,
       currency: rule.currency,
       route: rule.route
@@ -29,7 +35,12 @@ export class PricingService {
 
   listAll() {
     return this.prisma.pricingRule.findMany({
-      orderBy: [{ routeId: 'asc' }, { direction: 'asc' }, { bookingType: 'asc' }],
+      orderBy: [
+        { routeId: 'asc' },
+        { direction: 'asc' },
+        { bookingType: 'asc' },
+        { vehicleClass: 'asc' }
+      ],
       include: {
         route: { include: { origin: true, destination: true } }
       }
@@ -72,7 +83,8 @@ export class PricingService {
     const existing = await this.prisma.pricingRule.findFirst({
       where: {
         ...(dto.routeId ? { routeId: dto.routeId } : { direction: dto.direction }),
-        bookingType: dto.bookingType
+        bookingType: dto.bookingType,
+        vehicleClass: dto.vehicleClass
       },
       select: { id: true, scopeKey: true }
     });
@@ -82,6 +94,8 @@ export class PricingService {
           where: { id: existing.id },
           data: {
             ...values,
+            scopeKey,
+            vehicleClass: dto.vehicleClass,
             ...(dto.routeId ? { routeId: dto.routeId } : { direction: dto.direction! })
           },
           include: { route: { include: { origin: true, destination: true } } }
@@ -92,6 +106,7 @@ export class PricingService {
             routeId: dto.routeId ?? null,
             direction: dto.direction ?? null,
             bookingType: dto.bookingType,
+            vehicleClass: dto.vehicleClass,
             ...values
           },
           include: { route: { include: { origin: true, destination: true } } }
@@ -107,6 +122,7 @@ export class PricingService {
           routeId: rule.routeId,
           direction: rule.direction,
           bookingType: rule.bookingType,
+          vehicleClass: rule.vehicleClass,
           passengerPrice: Number(rule.passengerPrice),
           driverFee: Number(rule.driverFee),
           platformMargin: Number(rule.platformMargin),

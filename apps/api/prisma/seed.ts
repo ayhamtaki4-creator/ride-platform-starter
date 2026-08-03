@@ -4,7 +4,8 @@ import {
   LocationType,
   PrismaClient,
   RegionKind,
-  RouteType
+  RouteType,
+  VehicleClass
 } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
@@ -142,32 +143,50 @@ async function upsertRoute(input: {
     throw new Error(`Missing required region for route ${input.code}`);
   }
 
-  const route = await prisma.serviceRoute.upsert({
-    where: { code: input.code },
-    update: {
-      nameAr: input.nameAr,
-      nameEn: input.nameEn,
-      originId: origin.id,
-      destinationId: destination.id,
-      routeType: input.routeType,
-      requiresFlightDetails: input.requiresFlightDetails ?? false,
-      estimatedMinutes: input.estimatedMinutes,
-      distanceKm: input.distanceKm,
-      isActive: true
-    },
-    create: {
-      code: input.code,
-      nameAr: input.nameAr,
-      nameEn: input.nameEn,
-      originId: origin.id,
-      destinationId: destination.id,
-      routeType: input.routeType,
-      requiresFlightDetails: input.requiresFlightDetails ?? false,
-      estimatedMinutes: input.estimatedMinutes,
-      distanceKm: input.distanceKm,
-      isActive: true
-    }
-  });
+  const [byPair, byCode] = await Promise.all([
+    prisma.serviceRoute.findUnique({
+      where: {
+        originId_destinationId: {
+          originId: origin.id,
+          destinationId: destination.id
+        }
+      }
+    }),
+    prisma.serviceRoute.findUnique({ where: { code: input.code } })
+  ]);
+  const existing = byPair ?? byCode;
+  const canUseRequestedCode = !byCode || byCode.id === existing?.id;
+
+  const route = existing
+    ? await prisma.serviceRoute.update({
+        where: { id: existing.id },
+        data: {
+          ...(canUseRequestedCode ? { code: input.code } : {}),
+          nameAr: input.nameAr,
+          nameEn: input.nameEn,
+          originId: origin.id,
+          destinationId: destination.id,
+          routeType: input.routeType,
+          requiresFlightDetails: input.requiresFlightDetails ?? false,
+          estimatedMinutes: input.estimatedMinutes,
+          distanceKm: input.distanceKm,
+          isActive: true
+        }
+      })
+    : await prisma.serviceRoute.create({
+        data: {
+          code: input.code,
+          nameAr: input.nameAr,
+          nameEn: input.nameEn,
+          originId: origin.id,
+          destinationId: destination.id,
+          routeType: input.routeType,
+          requiresFlightDetails: input.requiresFlightDetails ?? false,
+          estimatedMinutes: input.estimatedMinutes,
+          distanceKm: input.distanceKm,
+          isActive: true
+        }
+      });
 
   await prisma.routeRequiredRegion.deleteMany({ where: { routeId: route.id } });
   await prisma.routeRequiredRegion.createMany({
@@ -561,34 +580,38 @@ async function main() {
     {
       direction: 'BEIRUT_AIRPORT_TO_DAMASCUS' as BookingDirection,
       routeId: legacyRoutes.BEIRUT_AIRPORT_TO_DAMASCUS.id,
-      bookingType: 'SHARED_SEAT' as BookingType,
-      passengerPrice: 40,
-      driverFee: 25,
-      platformMargin: 15
+      bookingType: 'PRIVATE_CAR' as BookingType,
+      vehicleClass: 'STANDARD' as VehicleClass,
+      passengerPrice: 100,
+      driverFee: 80,
+      platformMargin: 20
     },
     {
       direction: 'DAMASCUS_TO_BEIRUT_AIRPORT' as BookingDirection,
       routeId: legacyRoutes.DAMASCUS_TO_BEIRUT_AIRPORT.id,
-      bookingType: 'SHARED_SEAT' as BookingType,
-      passengerPrice: 40,
-      driverFee: 25,
-      platformMargin: 15
+      bookingType: 'PRIVATE_CAR' as BookingType,
+      vehicleClass: 'STANDARD' as VehicleClass,
+      passengerPrice: 100,
+      driverFee: 80,
+      platformMargin: 20
     },
     {
       direction: 'BEIRUT_AIRPORT_TO_DAMASCUS' as BookingDirection,
       routeId: legacyRoutes.BEIRUT_AIRPORT_TO_DAMASCUS.id,
       bookingType: 'PRIVATE_CAR' as BookingType,
+      vehicleClass: 'FAMILY' as VehicleClass,
       passengerPrice: 150,
-      driverFee: 110,
-      platformMargin: 40
+      driverFee: 130,
+      platformMargin: 20
     },
     {
       direction: 'DAMASCUS_TO_BEIRUT_AIRPORT' as BookingDirection,
       routeId: legacyRoutes.DAMASCUS_TO_BEIRUT_AIRPORT.id,
       bookingType: 'PRIVATE_CAR' as BookingType,
+      vehicleClass: 'FAMILY' as VehicleClass,
       passengerPrice: 150,
-      driverFee: 110,
-      platformMargin: 40
+      driverFee: 130,
+      platformMargin: 20
     }
   ];
 
@@ -596,8 +619,9 @@ async function main() {
     const scopeKey = `ROUTE:${rule.routeId}`;
     const existing = await prisma.pricingRule.findFirst({
       where: {
-        direction: rule.direction,
-        bookingType: rule.bookingType
+        routeId: rule.routeId,
+        bookingType: rule.bookingType,
+        vehicleClass: rule.vehicleClass
       },
       select: { id: true }
     });
@@ -609,6 +633,7 @@ async function main() {
           scopeKey,
           routeId: rule.routeId,
           direction: rule.direction,
+          vehicleClass: rule.vehicleClass,
           passengerPrice: rule.passengerPrice,
           driverFee: rule.driverFee,
           platformMargin: rule.platformMargin,
@@ -627,6 +652,14 @@ async function main() {
       });
     }
   }
+
+  await prisma.pricingRule.updateMany({
+    where: {
+      routeId: { in: Object.values(legacyRoutes).map((route) => route.id) },
+      bookingType: 'SHARED_SEAT'
+    },
+    data: { isActive: false }
+  });
 
   await prisma.trip.updateMany({
     where: {

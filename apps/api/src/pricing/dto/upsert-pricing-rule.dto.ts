@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BookingDirection, BookingType } from '@prisma/client';
+import { BookingDirection, BookingType, VehicleClass } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
@@ -27,6 +27,11 @@ export class UpsertPricingRuleDto {
   @ApiProperty({ enum: BookingType })
   @IsEnum(BookingType)
   bookingType!: BookingType;
+
+  @ApiPropertyOptional({ enum: VehicleClass, default: VehicleClass.STANDARD })
+  @IsOptional()
+  @IsEnum(VehicleClass)
+  vehicleClass: VehicleClass = VehicleClass.STANDARD;
 
   @ApiProperty({ example: 40 })
   @Type(() => Number)

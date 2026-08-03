@@ -8,6 +8,7 @@ import { Prisma, ServiceRunStatus } from '@prisma/client';
 import { ComplianceService } from '../compliance/compliance.service';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
+import { BOOKING_CAPACITY_POLICY, minimumVehicleCapacity } from '../pricing/vehicle-class';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { CreateRegionDto } from './dto/create-region.dto';
 import { CreateRouteDto } from './dto/create-route.dto';
@@ -343,6 +344,10 @@ export class RoutesService {
     }
 
     const requiredRegionIds = route.requiredRegions.map((entry) => entry.regionId);
+    const minimumCapacity = minimumVehicleCapacity(
+      query.passengerCount,
+      query.luggageCount
+    );
     const requirements = await this.compliance.requirementsForRegions(
       this.prisma,
       requiredRegionIds
@@ -358,7 +363,7 @@ export class RoutesService {
         vehicles: {
           some: {
             isActive: true,
-            seatCapacity: { gte: query.passengerCount },
+            seatCapacity: { gte: minimumCapacity },
             ...(query.baseRegionCode
               ? { baseRegion: { code: this.normalizeCode(query.baseRegionCode) } }
               : {})
@@ -376,7 +381,7 @@ export class RoutesService {
         vehicles: {
           where: {
             isActive: true,
-            seatCapacity: { gte: query.passengerCount },
+            seatCapacity: { gte: minimumCapacity },
             ...(query.baseRegionCode
               ? { baseRegion: { code: this.normalizeCode(query.baseRegionCode) } }
               : {})
@@ -542,6 +547,7 @@ export class RoutesService {
       id: string;
       isActive: boolean;
       bookingType: string;
+      vehicleClass: string;
       passengerPrice: unknown;
       currency: string;
     }>;
@@ -551,6 +557,7 @@ export class RoutesService {
       ? activeRules.map((rule) => ({
           id: rule.id,
           bookingType: rule.bookingType,
+          vehicleClass: rule.vehicleClass,
           passengerPrice: rule.passengerPrice,
           currency: rule.currency
         }))
@@ -559,7 +566,8 @@ export class RoutesService {
       ...route,
       pricingRules,
       bookingTypes: Array.from(new Set(activeRules.map((rule) => rule.bookingType))),
-      bookable: activeRules.length > 0
+      bookable: activeRules.length > 0,
+      capacityPolicy: { ...BOOKING_CAPACITY_POLICY }
     };
   }
 

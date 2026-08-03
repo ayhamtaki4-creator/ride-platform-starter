@@ -52,6 +52,11 @@ enum BookingType {
   PRIVATE_CAR
 }
 
+enum VehicleClass {
+  STANDARD
+  FAMILY
+}
+
 enum BookingReviewStatus {
   NEW
   CONFIRMED
@@ -281,6 +286,7 @@ model PricingRule {
   direction      BookingDirection?
   routeId         String?           @db.Uuid
   bookingType    BookingType
+  vehicleClass   VehicleClass      @default(STANDARD)
   passengerPrice Decimal           @db.Decimal(12, 2)
   driverFee      Decimal           @db.Decimal(12, 2)
   platformMargin Decimal           @db.Decimal(12, 2)
@@ -291,9 +297,9 @@ model PricingRule {
   route          ServiceRoute?     @relation(fields: [routeId], references: [id], onDelete: Cascade)
   trips          Trip[]
 
-  @@unique([scopeKey, bookingType])
+  @@unique([scopeKey, bookingType, vehicleClass])
   @@index([isActive, direction, bookingType])
-  @@index([isActive, routeId, bookingType])
+  @@index([isActive, routeId, bookingType, vehicleClass])
 }
 
 model Trip {

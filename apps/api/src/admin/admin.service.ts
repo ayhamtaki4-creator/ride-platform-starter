@@ -14,6 +14,7 @@ import { randomInt } from 'crypto';
 import { ComplianceService } from '../compliance/compliance.service';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
+import { minimumVehicleCapacity } from '../pricing/vehicle-class';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { TripStateMachine } from '../trips/trip-state-machine';
 
@@ -554,8 +555,12 @@ export class AdminService {
     tx: Prisma.TransactionClient,
     driverId: string,
     requestedVehicleId: string | undefined,
-    trip: Pick<Trip, 'routeId' | 'travelDate' | 'passengerCount'>
+    trip: Pick<Trip, 'routeId' | 'travelDate' | 'passengerCount' | 'luggageCount'>
   ): Promise<ActiveVehicle> {
+    const minimumCapacity = minimumVehicleCapacity(
+      trip.passengerCount,
+      trip.luggageCount
+    );
     const driver = await tx.driverProfile.findUnique({
       where: { userId: driverId },
       include: {
@@ -567,7 +572,7 @@ export class AdminService {
         vehicles: {
           where: {
             isActive: true,
-            seatCapacity: { gte: trip.passengerCount },
+            seatCapacity: { gte: minimumCapacity },
             ...(requestedVehicleId ? { id: requestedVehicleId } : {})
           },
           orderBy: [{ year: 'desc' }, { seatCapacity: 'asc' }],
@@ -610,8 +615,8 @@ export class AdminService {
     if (!vehicle) {
       throw new ConflictException(
         requestedVehicleId
-          ? 'المركبة المحددة غير مؤهلة للمسار أو لا تتسع للمسافرين.'
-          : 'لا توجد مركبة فعالة ومؤهلة لهذا المسار وعدد المسافرين.'
+          ? 'المركبة المحددة غير مؤهلة للمسار أو لا تلائم عدد المسافرين والحقائب.'
+          : 'لا توجد مركبة فعالة ومؤهلة لهذا المسار وعدد المسافرين والحقائب.'
       );
     }
 

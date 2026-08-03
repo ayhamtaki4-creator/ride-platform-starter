@@ -28,6 +28,7 @@ export type BookingDirection =
   | "DAMASCUS_TO_BEIRUT_AIRPORT";
 
 export type BookingType = "SHARED_SEAT" | "PRIVATE_CAR";
+export type VehicleClass = "STANDARD" | "FAMILY";
 export type BookingReviewStatus = "NEW" | "CONFIRMED" | "REJECTED" | "CANCELLED";
 export type DriverAssignmentStatus =
   | "UNASSIGNED"
@@ -216,6 +217,7 @@ export type PricingRule = {
     destination: { id: string; code: string; nameAr: string };
   } | null;
   bookingType: BookingType;
+  vehicleClass: VehicleClass;
   passengerPrice: string | number;
   driverFee: string | number;
   platformMargin: string | number;
@@ -236,7 +238,9 @@ export type BookingQuote = {
   } | null;
   direction?: BookingDirection | null;
   bookingType: BookingType;
+  vehicleClass: VehicleClass;
   passengerCount: number;
+  luggageCount: number;
   unitPassengerPrice: number;
   passengerPrice: number;
   driverFee: number;
@@ -283,6 +287,11 @@ export const DIRECTION_LABELS: Record<BookingDirection, string> = {
 export const BOOKING_TYPE_LABELS: Record<BookingType, string> = {
   SHARED_SEAT: "مقعد في سيارة مشتركة",
   PRIVATE_CAR: "سيارة خاصة",
+};
+
+export const VEHICLE_CLASS_LABELS: Record<VehicleClass, string> = {
+  STANDARD: "سيارة عادية",
+  FAMILY: "سيارة عائلية",
 };
 
 export function homeForRoles(roles: string[]) {

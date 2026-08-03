@@ -39,6 +39,7 @@ export type DynamicPricingRule = {
   routeId?: string | null;
   direction?: string | null;
   bookingType: "SHARED_SEAT" | "PRIVATE_CAR";
+  vehicleClass: "STANDARD" | "FAMILY";
   passengerPrice: string | number;
   driverFee: string | number;
   platformMargin: string | number;
@@ -64,6 +65,14 @@ export type ServiceRoute = {
   pricingRules: DynamicPricingRule[];
   bookingTypes: Array<"SHARED_SEAT" | "PRIVATE_CAR">;
   bookable: boolean;
+  capacityPolicy?: {
+    minPassengers: number;
+    maxPassengers: number;
+    minLuggage: number;
+    maxLuggage: number;
+    standardMaxPassengers: number;
+    standardMaxLuggage: number;
+  };
 };
 
 export type MediaAsset = {
