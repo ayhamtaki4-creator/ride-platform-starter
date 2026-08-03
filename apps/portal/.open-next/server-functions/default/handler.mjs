@@ -1,0 +1,1 @@
+export { handler } from "./apps/portal/handler.mjs";
