@@ -36,26 +36,22 @@ export class FlightTicketExtractorService {
     file: UploadedMediaFile,
     routeContext?: string
   ): Promise<FlightTicketExtraction> {
-    // Prefer GEMINI_API_KEY for Gemini; fall back to OPENAI_API_KEY for compatibility
     const apiKey =
       this.config.get<string>('GEMINI_API_KEY') || this.config.get<string>('OPENAI_API_KEY');
+
     if (!apiKey) {
       return this.manualRequired(
         'تم حفظ التذكرة، لكن الاستخراج التلقائي يحتاج ضبط GEMINI_API_KEY على الخادم.'
       );
     }
 
-    const model = 'gemini-2.0-flash';
-    const geminiUrl =
-      this.config.get<string>('GEMINI_API_URL') ||
-      `https://generative.googleapis.com/v1/models/${model}:generate`;
+    // جلب اسم النموذج مع تنظيفه من أي علامات تنصيص زائدة
+    const rawModel =
+      this.config.get<string>('GEMINI_TICKET_MODEL') || 'gemini-flash-latest';
+    const model = rawModel.replace(/^"|"$/g, '').trim();
 
-    const dataUrl = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
-    // We will inline the data URL into the prompt so the Gemini endpoint can access the file content.
-    const filePayload =
-      file.mimetype === 'application/pdf'
-        ? `FILE: ${file.originalname || 'flight-ticket.pdf'}\nMIMETYPE: ${file.mimetype}\nDATA: ${dataUrl}`
-        : `IMAGE_DATA: ${dataUrl}`;
+    // رابط Google Gemini API الصحيح
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const routeHint = routeContext?.trim()
       ? `The selected ground-transfer route is: ${routeContext.trim()}.`
@@ -68,78 +64,69 @@ export class FlightTicketExtractorService {
       'Normalize flightNumber without unnecessary spaces, for example ME265.',
       'Use empty strings for values that are not clearly visible and do not guess.',
       routeHint,
-      '',
-      // Instruct the model to output a single JSON object with the exact keys used by the service.
-      'Output: a single JSON object exactly matching the schema below. Do not add any surrounding text or explanation. Use empty strings for unknown values. Example schema keys:',
-      JSON.stringify(
-        {
-          isFlightTicket: true,
-          arrivalDate: 'YYYY-MM-DD',
-          arrivalTime: 'HH:mm',
-          flightNumber: 'string',
-          arrivalAirportCode: 'string',
-          passengerName: 'string',
-          airlineName: 'string',
-          confidence: 0.0,
-          warning: 'string'
-        },
-        null,
-        2
-      )
+      'Output: a single JSON object matching the requested schema exactly.',
+      JSON.stringify({
+        isFlightTicket: true,
+        arrivalDate: 'YYYY-MM-DD',
+        arrivalTime: 'HH:mm',
+        flightNumber: 'string',
+        arrivalAirportCode: 'string',
+        passengerName: 'string',
+        airlineName: 'string',
+        confidence: 0.0,
+        warning: 'string'
+      })
     ]
       .filter(Boolean)
       .join('\n');
 
-    const prompt = `${filePayload}\n\n${instructions}`;
+    // تجهيز جسم الطلب وفق الهيكلية الرسمية لـ Gemini API
+    const payload = {
+      contents: [
+        {
+          parts: [
+            {
+              inlineData: {
+                mimeType: file.mimetype || 'image/jpeg',
+                data: file.buffer.toString('base64')
+              }
+            },
+            { text: instructions }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0.1
+      }
+    };
 
     try {
       const response = await fetch(geminiUrl, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
-        // We send a generic body that most Gemini/Generative endpoints accept: {prompt: { text: ... }}.
-        // If your target Gemini endpoint expects a different shape (e.g., instances / input), set GEMINI_API_URL accordingly
-        // via configuration. The implementation below also attempts to locate JSON in the response robustly.
-        body: JSON.stringify({ prompt: { text: prompt } }),
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(30000)
       });
 
       const body = await response.json().catch(() => null);
+
       if (!response.ok) {
         const message =
           (body && (body.error?.message || body.error)) || `Gemini HTTP ${response.status}`;
         throw new Error(String(message));
       }
 
-      // Try to extract a JSON substring from the response body. Gemini responses vary by endpoint;
-      // be permissive: search for the first JSON object-looking string and parse it.
-      const findJsonInValue = (val: any): string | null => {
-        if (typeof val === 'string') {
-          const match = val.match(/\{[\s\S]*\}/);
-          if (match) return match[0];
-          return null;
-        }
-        if (Array.isArray(val)) {
-          for (const item of val) {
-            const r = findJsonInValue(item);
-            if (r) return r;
-          }
-        }
-        if (val && typeof val === 'object') {
-          for (const k of Object.keys(val)) {
-            const r = findJsonInValue(val[k]);
-            if (r) return r;
-          }
-        }
-        return null;
-      };
+      // قراءة النص المستخرج من بنية رد Gemini
+      const rawText = body?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-      const jsonString = findJsonInValue(body);
-      if (!jsonString) throw new Error('لم يرجع نموذج الاستخراج بيانات قابلة للقراءة.');
+      if (!rawText) {
+        throw new Error('لم يرجع نموذج الاستخراج أي بيانات.');
+      }
 
-      const parsed = JSON.parse(jsonString) as RawExtraction;
+      const parsed = JSON.parse(rawText) as RawExtraction;
 
       if (!parsed?.isFlightTicket) {
         return this.manualRequired('الملف المرفوع لا يبدو كتذكرة طيران واضحة.');
