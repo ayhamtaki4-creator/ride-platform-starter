@@ -8,7 +8,10 @@ import { randomInt } from 'crypto';
 import { AuthUser } from '../iam/auth-user.type';
 import { MediaService } from '../media/media.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { defaultVehicleClassCapacity } from '../pricing/vehicle-class';
+import {
+  defaultVehicleClassCapacity,
+  defaultVehicleClassLuggageCapacity
+} from '../pricing/vehicle-class';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { BookingQuoteDto } from './dto/booking-quote.dto';
@@ -184,6 +187,8 @@ export class BookingsService {
 
     const passengerCapacity =
       classConfig?.passengerCapacity ?? defaultVehicleClassCapacity(vehicleClass);
+    const luggageCapacity =
+      classConfig?.luggageCapacity ?? defaultVehicleClassLuggageCapacity(vehicleClass);
     if (dto.bookingType === 'PRIVATE_CAR' && dto.passengerCount > passengerCapacity) {
       throw new BadRequestException(
         `سعة الفئة المختارة هي ${passengerCapacity} أشخاص. اختر فئة أكبر.`
@@ -203,6 +208,7 @@ export class BookingsService {
       bookingType: dto.bookingType,
       vehicleClass,
       passengerCapacity,
+      luggageCapacity,
       passengerCount: dto.passengerCount,
       luggageCount: dto.luggageCount,
       unitPassengerPrice: Number(rule.passengerPrice),

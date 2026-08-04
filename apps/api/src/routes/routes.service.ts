@@ -225,6 +225,7 @@ export class RoutesService {
           destinationId: dto.destinationId,
           routeType: dto.routeType,
           requiresFlightDetails: dto.requiresFlightDetails ?? false,
+          flightTicketUploadEnabled: dto.flightTicketUploadEnabled ?? true,
           estimatedMinutes: dto.estimatedMinutes,
           distanceKm: dto.distanceKm,
           isActive: dto.isActive ?? true,
@@ -290,6 +291,9 @@ export class RoutesService {
           ...(dto.routeType ? { routeType: dto.routeType } : {}),
           ...(dto.requiresFlightDetails !== undefined
             ? { requiresFlightDetails: dto.requiresFlightDetails }
+            : {}),
+          ...(dto.flightTicketUploadEnabled !== undefined
+            ? { flightTicketUploadEnabled: dto.flightTicketUploadEnabled }
             : {}),
           ...(dto.estimatedMinutes !== undefined
             ? { estimatedMinutes: dto.estimatedMinutes }
@@ -597,7 +601,9 @@ export class RoutesService {
     return DEFAULT_VEHICLE_CLASS_CONFIGS.map((fallback) => ({
       vehicleClass: fallback.vehicleClass,
       passengerCapacity:
-        byClass.get(fallback.vehicleClass)?.passengerCapacity ?? fallback.passengerCapacity
+        byClass.get(fallback.vehicleClass)?.passengerCapacity ?? fallback.passengerCapacity,
+      luggageCapacity:
+        byClass.get(fallback.vehicleClass)?.luggageCapacity ?? fallback.luggageCapacity
     }));
   }
 

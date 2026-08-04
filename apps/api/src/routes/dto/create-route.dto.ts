@@ -49,6 +49,11 @@ export class CreateRouteDto {
   @IsBoolean()
   requiresFlightDetails?: boolean;
 
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  flightTicketUploadEnabled?: boolean;
+
   @ApiPropertyOptional({ example: 180 })
   @IsOptional()
   @Type(() => Number)

@@ -25,6 +25,7 @@ export default function PricingPage() {
   const [routes, setRoutes] = useState<ServiceRoute[]>([]);
   const [vehicleClasses, setVehicleClasses] = useState<VehicleClassConfig[]>([]);
   const [capacityDrafts, setCapacityDrafts] = useState<Record<string, number>>({});
+  const [luggageDrafts, setLuggageDrafts] = useState<Record<string, number>>({});
   const [form, setForm] = useState(emptyForm);
   const [drafts, setDrafts] = useState<Record<string, DynamicPricingRule>>({});
   const [search, setSearch] = useState("");
@@ -43,6 +44,7 @@ export default function PricingPage() {
       setRoutes(routeData);
       setVehicleClasses(vehicleClassData);
       setCapacityDrafts(Object.fromEntries(vehicleClassData.map((config) => [config.vehicleClass, config.passengerCapacity])));
+      setLuggageDrafts(Object.fromEntries(vehicleClassData.map((config) => [config.vehicleClass, config.luggageCapacity])));
       setDrafts(Object.fromEntries(ruleData.map((rule) => [rule.id, { ...rule }])));
       setForm((current) => ({ ...current, routeId: current.routeId || routeData.find((route) => route.isActive)?.id || "" }));
       setError("");
@@ -102,13 +104,14 @@ export default function PricingPage() {
 
   async function saveCapacity(config: VehicleClassConfig) {
     const passengerCapacity = capacityDrafts[config.vehicleClass];
+    const luggageCapacity = luggageDrafts[config.vehicleClass];
     setWorking(`capacity-${config.vehicleClass}`); setMessage(""); setError("");
     try {
       await apiFetch(`/pricing/admin/vehicle-classes/${config.vehicleClass}`, {
         method: "PUT",
-        body: JSON.stringify({ passengerCapacity }),
+        body: JSON.stringify({ passengerCapacity, luggageCapacity }),
       });
-      setMessage(`تم تحديث سعة ${VEHICLE_CLASS_LABELS[config.vehicleClass]}.`);
+      setMessage(`تم تحديث سعة الركاب والحقائب لفئة ${VEHICLE_CLASS_LABELS[config.vehicleClass]}.`);
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "تعذر تحديث سعة فئة السيارة.");
@@ -118,18 +121,19 @@ export default function PricingPage() {
   return (
     <ProtectedRoute roles={["SUPER_ADMIN", "ADMIN", "OPERATIONS_MANAGER"]}>
       <Shell>
-        <DashboardHeader eyebrow="الإدارة" title="الأسعار وسعات السيارات" subtitle="تحكم بسعة كل فئة وبالسعر المستقل لكل مسار. تظهر السعات للمسافر داخل بطاقات اختيار السيارة." />
+        <DashboardHeader eyebrow="الإدارة" title="الأسعار وسعات السيارات" subtitle="تحكم بسعة الركاب والحقائب لكل فئة وبالسعر المستقل لكل مسار. تظهر السعات للمسافر داخل بطاقات اختيار السيارة." />
         {message ? <div className="notice success">{message}</div> : null}
         {error ? <div className="notice error">{error}</div> : null}
 
         <section className="panel">
-          <div className="section-heading"><div><h2>سعات فئات السيارات</h2><p className="subtitle">هذه القيم تظهر للمسافر وتُستخدم عند البحث عن مركبة مؤهلة.</p></div></div>
+          <div className="section-heading"><div><h2>سعات فئات السيارات</h2><p className="subtitle">تظهر سعة الركاب والحقائب للمسافر، وتُستخدم سعة الركاب عند البحث عن مركبة مؤهلة.</p></div></div>
           <div className="pricing-grid vehicle-capacity-admin-grid">
             {vehicleClasses.map((config) => (
               <article className="pricing-card capacity-admin-card" data-vehicle-class={config.vehicleClass} key={config.vehicleClass}>
                 <div><div className="eyebrow">{config.vehicleClass}</div><h3>{VEHICLE_CLASS_LABELS[config.vehicleClass]}</h3></div>
                 <label><span className="label">السعة القصوى بالأشخاص</span><input className="input" type="number" min="1" max="30" step="1" value={capacityDrafts[config.vehicleClass] ?? config.passengerCapacity} onChange={(e) => setCapacityDrafts((current) => ({ ...current, [config.vehicleClass]: Number(e.target.value) }))} /></label>
-                <button className="button primary" disabled={working === `capacity-${config.vehicleClass}`} onClick={() => void saveCapacity(config)} type="button">حفظ السعة</button>
+                <label><span className="label">السعة القصوى بالحقائب</span><input className="input" type="number" min="0" max="30" step="1" value={luggageDrafts[config.vehicleClass] ?? config.luggageCapacity} onChange={(e) => setLuggageDrafts((current) => ({ ...current, [config.vehicleClass]: Number(e.target.value) }))} /></label>
+                <button className="button primary" disabled={working === `capacity-${config.vehicleClass}`} onClick={() => void saveCapacity(config)} type="button">حفظ السعات</button>
               </article>
             ))}
           </div>

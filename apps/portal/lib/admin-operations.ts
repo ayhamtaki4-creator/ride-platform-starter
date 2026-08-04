@@ -50,6 +50,7 @@ export type DynamicPricingRule = {
 export type VehicleClassConfig = {
   vehicleClass: "SMALL" | "MEDIUM" | "LARGE";
   passengerCapacity: number;
+  luggageCapacity: number;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -63,6 +64,7 @@ export type ServiceRoute = {
   destinationId: string;
   routeType: RouteType;
   requiresFlightDetails: boolean;
+  flightTicketUploadEnabled?: boolean;
   estimatedMinutes?: number | null;
   distanceKm?: string | number | null;
   isActive: boolean;

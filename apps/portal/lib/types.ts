@@ -73,6 +73,7 @@ export type Trip = {
     code: string;
     nameAr: string;
     requiresFlightDetails?: boolean;
+    flightTicketUploadEnabled?: boolean;
     origin: { id: string; code: string; nameAr: string };
     destination: { id: string; code: string; nameAr: string };
     requiredRegions?: Array<{ region: { id: string; code: string; nameAr: string } }>;
@@ -270,6 +271,7 @@ export type BookingQuote = {
     code: string;
     nameAr: string;
     requiresFlightDetails?: boolean;
+    flightTicketUploadEnabled?: boolean;
     origin: { id: string; code: string; nameAr: string };
     destination: { id: string; code: string; nameAr: string };
   } | null;
@@ -277,6 +279,7 @@ export type BookingQuote = {
   bookingType: BookingType;
   vehicleClass: VehicleClass;
   passengerCapacity: number;
+  luggageCapacity: number;
   passengerCount: number;
   luggageCount: number;
   unitPassengerPrice: number;

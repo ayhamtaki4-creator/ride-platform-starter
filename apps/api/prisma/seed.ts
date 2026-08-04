@@ -126,6 +126,7 @@ async function upsertRoute(input: {
   destinationCode: string;
   routeType: RouteType;
   requiresFlightDetails?: boolean;
+  flightTicketUploadEnabled?: boolean;
   estimatedMinutes?: number;
   distanceKm?: number;
   requiredRegionCodes: string[];
@@ -168,6 +169,9 @@ async function upsertRoute(input: {
           destinationId: destination.id,
           routeType: input.routeType,
           requiresFlightDetails: input.requiresFlightDetails ?? false,
+          ...(input.flightTicketUploadEnabled !== undefined
+            ? { flightTicketUploadEnabled: input.flightTicketUploadEnabled }
+            : {}),
           estimatedMinutes: input.estimatedMinutes,
           distanceKm: input.distanceKm,
           isActive: true
@@ -182,6 +186,7 @@ async function upsertRoute(input: {
           destinationId: destination.id,
           routeType: input.routeType,
           requiresFlightDetails: input.requiresFlightDetails ?? false,
+          flightTicketUploadEnabled: input.flightTicketUploadEnabled ?? true,
           estimatedMinutes: input.estimatedMinutes,
           distanceKm: input.distanceKm,
           isActive: true

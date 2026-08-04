@@ -56,6 +56,11 @@ export class UpdateRouteDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsBoolean()
+  flightTicketUploadEnabled?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

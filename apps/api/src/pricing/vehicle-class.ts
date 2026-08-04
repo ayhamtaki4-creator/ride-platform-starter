@@ -8,18 +8,26 @@ export const BOOKING_MAX_LUGGAGE = 12;
 export type VehicleClassCapacity = {
   vehicleClass: VehicleClass;
   passengerCapacity: number;
+  luggageCapacity: number;
 };
 
 export const DEFAULT_VEHICLE_CLASS_CONFIGS: readonly VehicleClassCapacity[] = [
-  { vehicleClass: 'SMALL', passengerCapacity: 3 },
-  { vehicleClass: 'MEDIUM', passengerCapacity: 4 },
-  { vehicleClass: 'LARGE', passengerCapacity: 8 }
+  { vehicleClass: 'SMALL', passengerCapacity: 3, luggageCapacity: 4 },
+  { vehicleClass: 'MEDIUM', passengerCapacity: 4, luggageCapacity: 5 },
+  { vehicleClass: 'LARGE', passengerCapacity: 8, luggageCapacity: 8 }
 ];
 
 export function defaultVehicleClassCapacity(vehicleClass: VehicleClass) {
   return (
     DEFAULT_VEHICLE_CLASS_CONFIGS.find((item) => item.vehicleClass === vehicleClass)
       ?.passengerCapacity ?? 1
+  );
+}
+
+export function defaultVehicleClassLuggageCapacity(vehicleClass: VehicleClass) {
+  return (
+    DEFAULT_VEHICLE_CLASS_CONFIGS.find((item) => item.vehicleClass === vehicleClass)
+      ?.luggageCapacity ?? 0
   );
 }
 

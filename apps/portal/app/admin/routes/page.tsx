@@ -48,6 +48,7 @@ const emptyRoute = {
   destinationId: "",
   routeType: "INTERCITY" as RouteType,
   requiresFlightDetails: false,
+  flightTicketUploadEnabled: true,
   estimatedMinutes: "",
   distanceKm: "",
   requiredRegionCodes: [] as string[],
@@ -244,6 +245,7 @@ export default function AdminRoutesPage() {
       destinationId: route.destinationId,
       routeType: route.routeType,
       requiresFlightDetails: route.requiresFlightDetails,
+      flightTicketUploadEnabled: route.flightTicketUploadEnabled ?? true,
       estimatedMinutes: route.estimatedMinutes == null ? "" : String(route.estimatedMinutes),
       distanceKm: route.distanceKm == null ? "" : String(route.distanceKm),
       requiredRegionCodes: route.requiredRegions.map((item) => item.region.code),
@@ -285,6 +287,7 @@ export default function AdminRoutesPage() {
                 <label><span className="label">المسافة التقديرية كم</span><input className="input" type="number" min="0" step="0.1" value={routeForm.distanceKm} onChange={(e) => setRouteForm({ ...routeForm, distanceKm: e.target.value })} /></label>
                 <fieldset className="checkbox-fieldset full-width"><legend>الدول المطلوبة</legend>{countryRegions.map((region) => <label className="checkbox-row" key={region.id}><input type="checkbox" checked={routeForm.requiredRegionCodes.includes(region.code)} onChange={(e) => setRouteForm((current) => ({ ...current, requiredRegionCodes: e.target.checked ? [...current.requiredRegionCodes, region.code] : current.requiredRegionCodes.filter((code) => code !== region.code) }))} />{region.nameAr}</label>)}</fieldset>
                 <label className="checkbox-row"><input type="checkbox" checked={routeForm.requiresFlightDetails} onChange={(e) => setRouteForm({ ...routeForm, requiresFlightDetails: e.target.checked })} />يتطلب بيانات الطائرة</label>
+                <label className="checkbox-row"><input type="checkbox" checked={routeForm.flightTicketUploadEnabled} disabled={!routeForm.requiresFlightDetails} onChange={(e) => setRouteForm({ ...routeForm, flightTicketUploadEnabled: e.target.checked })} />إظهار خيار «أرفق تذكرة الطيران»</label>
                 <label className="checkbox-row"><input type="checkbox" checked={routeForm.isActive} onChange={(e) => setRouteForm({ ...routeForm, isActive: e.target.checked })} />مسار فعال</label>
                 <div className="actions full-width"><button className="button primary" disabled={working === "route"} type="submit">{editingRouteId ? "حفظ التعديلات" : "إنشاء المسار"}</button>{editingRouteId ? <button className="button" type="button" onClick={() => { setEditingRouteId(""); setRouteForm(emptyRoute); }}>إلغاء التعديل</button> : null}</div>
               </form>
@@ -295,7 +298,7 @@ export default function AdminRoutesPage() {
               {filteredRoutes.map((route) => (
                 <article className="panel route-admin-card" key={route.id}>
                   <div className="section-heading"><div><div className="eyebrow">{route.code}</div><h2>{route.nameAr}</h2><p className="subtitle">{route.origin.nameAr} ← {route.destination.nameAr}</p></div><StatusPill status={route.isActive ? "ACTIVE" : "SUSPENDED"} label={route.isActive ? "فعال" : "متوقف"} /></div>
-                  <div className="booking-meta"><span>{ROUTE_TYPE_LABELS[route.routeType]}</span><span>{route.estimatedMinutes ? `${route.estimatedMinutes} دقيقة` : "مدة غير محددة"}</span><span>{route.distanceKm ? `${route.distanceKm} كم` : "مسافة غير محددة"}</span><span>{route.requiresFlightDetails ? "يتطلب بيانات طائرة" : "لا يتطلب بيانات طائرة"}</span></div>
+                  <div className="booking-meta"><span>{ROUTE_TYPE_LABELS[route.routeType]}</span><span>{route.estimatedMinutes ? `${route.estimatedMinutes} دقيقة` : "مدة غير محددة"}</span><span>{route.distanceKm ? `${route.distanceKm} كم` : "مسافة غير محددة"}</span><span>{route.requiresFlightDetails ? "يتطلب بيانات طائرة" : "لا يتطلب بيانات طائرة"}</span>{route.requiresFlightDetails ? <span>{route.flightTicketUploadEnabled !== false ? "إرفاق التذكرة ظاهر" : "إرفاق التذكرة مخفي"}</span> : null}</div>
                   <div className="tag-list">{route.requiredRegions.map((item) => <span key={item.region.id}>{item.region.nameAr}</span>)}</div>
                   <div className="route-price-summary"><strong>{route.bookable ? "قابل للحجز" : "لا توجد أسعار فعالة"}</strong><span>{route.pricingRules.length} قاعدة سعر</span></div>
                   <div className="actions"><button className="button" type="button" onClick={() => editRoute(route)}>تعديل</button><button className={route.isActive ? "button danger" : "button primary"} disabled={working === route.id} type="button" onClick={() => void toggleRoute(route)}>{route.isActive ? "إيقاف" : "تفعيل"}</button></div>
