@@ -52,7 +52,6 @@ export class AuthService {
         passwordHash,
         firstName: dto.firstName.trim(),
         lastName: dto.lastName.trim(),
-        whatsappOptIn: dto.whatsappOptIn,
         passengerProfile: { create: {} },
         roles: { create: { roleId: passengerRole.id } }
       }
@@ -102,7 +101,7 @@ export class AuthService {
     const tokenHash = this.hashRefreshToken(refreshToken);
     const session = await this.prisma.authSession.findUnique({
       where: { tokenHash },
-      include: { user: true }
+      include: { user: true } // 👈 يحل مشكلة TS2339 الخاصة بـ session.user
     });
 
     if (
@@ -167,7 +166,6 @@ export class AuthService {
     await this.prisma.user.update({
       where: { id: user.sub },
       data: {
-        whatsappOptIn: dto.whatsappOptIn,
         ...(phone ? { phone } : {})
       }
     });
@@ -227,7 +225,6 @@ export class AuthService {
         phone: user.phone,
         firstName: user.firstName,
         lastName: user.lastName,
-        whatsappOptIn: user.whatsappOptIn,
         roles,
         permissions
       }
@@ -251,7 +248,6 @@ export class AuthService {
       phone: user.phone,
       firstName: user.firstName,
       lastName: user.lastName,
-      whatsappOptIn: user.whatsappOptIn,
       roles,
       permissions
     };

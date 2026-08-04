@@ -747,7 +747,7 @@ model WhatsAppDelivery {
 model AuthSession {
   id         String    @id @default(uuid()) @db.Uuid
   userId     String    @db.Uuid
-  tokenHash  String
+  tokenHash  String    @unique
   expiresAt  DateTime
   revokedAt  DateTime?
   lastUsedAt DateTime?

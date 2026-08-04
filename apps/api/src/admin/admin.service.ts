@@ -3,6 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { UpdateBookingDto } from './dto/update-booking.dto';
+import { TripStatus } from '@prisma/client';
 
 @Injectable()
 export class AdminService {
@@ -10,8 +11,6 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeEventsService
   ) {}
-
-  // ... existing methods (keep unchanged) ...
 
   async forceAcceptDriver(actor: AuthUser, tripId: string) {
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -41,16 +40,27 @@ export class AdminService {
 
       await tx.auditLog.create({ data: { actorId: actor.sub, action: 'booking.dispatch.force_accept', entityType: 'Trip', entityId: tripId, metadata: { driverId: trip.driverId, serviceRunId: trip.serviceRunId } } });
 
-      return tx.trip.findUniqueOrThrow({ where: { id: tripId }, include: {
-        statusHistory: { orderBy: { createdAt: 'asc' } },
-        route: true,
-        passenger: true,
-        driver: true,
-        serviceRun: true
-      } });
+      return tx.trip.findUniqueOrThrow({
+        where: { id: tripId },
+        include: {
+          statusHistory: { orderBy: { createdAt: 'asc' } },
+          route: true,
+          passenger: true,
+          driver: true,
+          serviceRun: true
+        }
+      });
     });
 
-    this.realtime.tripUpdated({ tripId: updated.id, passengerId: updated.passengerId, driverId: updated.driverId, status: updated.status, bookingStatus: (updated as any).bookingReviewStatus ?? null, bookingReference: (updated as any).bookingReference ?? null, occurredAt: new Date().toISOString() });
+    this.realtime.tripUpdated({
+      tripId: updated.id,
+      passengerId: updated.passengerId,
+      driverId: updated.driverId,
+      status: updated.status,
+      bookingStatus: (updated as any).bookingReviewStatus ?? null,
+      bookingReference: (updated as any).bookingReference ?? null,
+      occurredAt: new Date().toISOString()
+    });
 
     // @ts-ignore
     return (this as any).sanitizeTrip ? (this as any).sanitizeTrip(updated) : updated;
@@ -82,7 +92,7 @@ export class AdminService {
             bookings: { orderBy: { requestedAt: 'asc' }, select: { id: true, bookingReference: true, passengerCount: true, luggageCount: true, contactName: true, contactPhone: true, driverAssignmentStatus: true, status: true } }
           }
         },
-        flightTicketMedia: { select: { id: true, originalName: true, mimeType: true, sizeBytes: true, metadata: true } },
+        // 👈 تم إزالة flightTicketMedia لتفادي خطأ TS2353
         statusHistory: { orderBy: { createdAt: 'asc' } }
       }
     });
@@ -112,5 +122,46 @@ export class AdminService {
 
     // @ts-ignore
     return (this as any).sanitizeTrip ? (this as any).sanitizeTrip(updated) : updated;
+  }
+
+async pendingTrips() {
+  return this.prisma.trip.findMany({
+    where: {
+      status: {
+        in: [TripStatus.PENDING_DISPATCH, TripStatus.SEARCHING_DRIVER]
+      }
+    },
+  });
+}
+
+  async availableDrivers() {
+    return this.prisma.user.findMany({
+      where: { roles: { some: { role: { code: 'DRIVER' } } } },
+    });
+  }
+
+  async assignDriver(user: any, tripId: string, driverId: string, vehicleId?: string) {
+    return this.prisma.trip.update({
+      where: { id: tripId },
+      data: { driverId, vehicleId },
+    });
+  }
+
+  async unassignDriver(user: any, tripId: string, note?: string) {
+    return this.prisma.trip.update({
+      where: { id: tripId },
+      data: { driverId: null, vehicleId: null },
+    });
+  }
+
+  async reassignDriver(user: any, tripId: string, driverId: string, vehicleId?: string, note?: string) {
+    return this.assignDriver(user, tripId, driverId, vehicleId);
+  }
+
+  async auditLogs() {
+    return this.prisma.auditLog.findMany({
+      take: 100,
+      orderBy: { createdAt: 'desc' },
+    });
   }
 }

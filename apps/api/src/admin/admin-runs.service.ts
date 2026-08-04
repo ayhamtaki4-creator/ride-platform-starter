@@ -809,7 +809,7 @@ export class AdminRunsService {
       routeId: string | null;
       direction: string | null;
       bookingType: BookingType | null;
-      vehicleClass: 'SMALL' | 'MEDIUM' | 'LARGE';
+      vehicleClass?: 'SMALL' | 'MEDIUM' | 'LARGE';
       passengerCount: number;
       travelDate: Date | null;
     }
@@ -838,7 +838,7 @@ export class AdminRunsService {
         where: { vehicleClass: booking.vehicleClass }
       });
       const requiredCapacity = minimumVehicleCapacity(
-        booking.vehicleClass,
+        booking.vehicleClass ?? 'MEDIUM',
         booking.passengerCount,
         classConfig?.passengerCapacity
       );

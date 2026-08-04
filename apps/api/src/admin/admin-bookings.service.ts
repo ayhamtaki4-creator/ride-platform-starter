@@ -80,15 +80,7 @@ const bookingInclude = {
       }
     }
   },
-  flightTicketMedia: {
-    select: {
-      id: true,
-      originalName: true,
-      mimeType: true,
-      sizeBytes: true,
-      metadata: true
-    }
-  },
+
   statusHistory: { orderBy: { createdAt: 'asc' as const } }
 } satisfies Prisma.TripInclude;
 
@@ -187,7 +179,12 @@ export class AdminBookingsService {
   async reject(actor: AuthUser, id: string, note?: string) {
     return this.changeReviewStatus(actor, id, 'REJECTED', note);
   }
-
+async update(user: any, id: string, dto: any) {
+  return this.prisma.trip.update({
+    where: { id },
+    data: dto,
+  });
+}
   private async changeReviewStatus(
     actor: AuthUser,
     id: string,

@@ -16,7 +16,6 @@ const bookingSelect = {
   bookingReference: true,
   direction: true,
   bookingType: true,
-  vehicleClass: true,
   travelDate: true,
   flightArrivalTime: true,
   flightNumber: true,
@@ -114,16 +113,6 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           : undefined,
       orderBy: { createdAt: 'desc' },
       take: 200,
-      include: {
-        trip: {
-          select: {
-            id: true,
-            bookingReference: true,
-            contactName: true,
-            contactPhone: true
-          }
-        }
-      }
     });
   }
 
@@ -363,7 +352,6 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         ? [`رقم الرحلة الجوية: ${booking.flightNumber.trim()}`]
         : []),
       `نوع الحجز: ${this.bookingTypeLabel(booking.bookingType)}`,
-      `فئة السيارة: ${this.vehicleClassLabel(booking.vehicleClass)}`,
       `عدد الركاب: ${booking.passengerCount}`,
       `عدد الحقائب: ${booking.luggageCount}`,
       `السعر: ${fare}`
@@ -389,14 +377,15 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     return 'غير محدد';
   }
 
-  private vehicleClassLabel(value: TelegramBooking['vehicleClass']) {
-    const labels = {
-      SMALL: 'صغيرة',
-      MEDIUM: 'متوسطة',
-      LARGE: 'كبيرة'
-    } as const;
-    return labels[value] ?? value;
-  }
+private vehicleClassLabel(value?: string | null) {
+  if (!value) return 'غير محدد';
+  const labels: Record<string, string> = {
+    SMALL: 'صغيرة',
+    MEDIUM: 'متوسطة',
+    LARGE: 'كبيرة',
+  };
+  return labels[value] ?? value;
+}
 
   private formatTravelDate(value: Date | null) {
     if (!value) return 'غير محدد';

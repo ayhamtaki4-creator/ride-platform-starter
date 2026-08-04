@@ -85,6 +85,6 @@ export class AdminController {
     @Param('id') id: string,
     @Body() dto: UpdateBookingDto
   ) {
-    return this.adminService.updateBooking?.(user, id, dto);
+    return this.adminService.updateBooking(user, id, dto);
   }
 }

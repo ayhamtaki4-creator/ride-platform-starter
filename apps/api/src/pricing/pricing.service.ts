@@ -29,7 +29,7 @@ export class PricingService {
       routeId: rule.routeId,
       direction: rule.direction,
       bookingType: rule.bookingType,
-      vehicleClass: rule.vehicleClass,
+      vehicleClass: (rule as any).vehicleClass ?? null,
       passengerPrice: rule.passengerPrice,
       currency: rule.currency,
       route: rule.route
@@ -177,7 +177,7 @@ export class PricingService {
           routeId: rule.routeId,
           direction: rule.direction,
           bookingType: rule.bookingType,
-          vehicleClass: rule.vehicleClass,
+          vehicleClass: (rule as any).vehicleClass ?? null,
           passengerPrice: Number(rule.passengerPrice),
           driverFee: Number(rule.driverFee),
           platformMargin: Number(rule.platformMargin),

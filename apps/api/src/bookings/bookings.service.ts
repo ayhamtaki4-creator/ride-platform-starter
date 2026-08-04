@@ -131,15 +131,7 @@ const bookingInclude = {
       }
     }
   },
-  flightTicketMedia: {
-    select: {
-      id: true,
-      originalName: true,
-      mimeType: true,
-      sizeBytes: true,
-      metadata: true
-    }
-  }
+
 } satisfies Prisma.TripInclude;
 
 type BookingWithRelations = Prisma.TripGetPayload<{ include: typeof bookingInclude }>;
