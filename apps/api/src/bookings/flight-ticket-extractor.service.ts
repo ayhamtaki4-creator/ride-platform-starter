@@ -45,22 +45,23 @@ export class FlightTicketExtractorService {
       );
     }
 
-    // جلب اسم النموذج مع تنظيفه من أي علامات تنصيص زائدة
     const rawModel =
       this.config.get<string>('GEMINI_TICKET_MODEL') || 'gemini-flash-latest';
     const model = rawModel.replace(/^"|"$/g, '').trim();
 
-    // رابط Google Gemini API الصحيح
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const routeHint = routeContext?.trim()
       ? `The selected ground-transfer route is: ${routeContext.trim()}.`
       : '';
 
+    const currentYear = new Date().getFullYear();
+
     const instructions = [
       'Extract only clearly visible flight-ticket data.',
       'Focus on the arrival segment into Beirut (BEY) or Amman (AMM) when present.',
-      'Return arrivalDate as YYYY-MM-DD and arrivalTime as HH:mm in local airport time.',
+      `IMPORTANT FOR DATES: Convert any date format on the ticket (e.g. "15 OCT", "15/10/2026", "OCT 15") into exact ISO format YYYY-MM-DD. If year is missing on ticket, assume ${currentYear}.`,
+      'Return arrivalTime as HH:mm in 24-hour local airport time format.',
       'Normalize flightNumber without unnecessary spaces, for example ME265.',
       'Use empty strings for values that are not clearly visible and do not guess.',
       routeHint,
@@ -80,7 +81,6 @@ export class FlightTicketExtractorService {
       .filter(Boolean)
       .join('\n');
 
-    // تجهيز جسم الطلب وفق الهيكلية الرسمية لـ Gemini API
     const payload = {
       contents: [
         {
@@ -119,7 +119,6 @@ export class FlightTicketExtractorService {
         throw new Error(String(message));
       }
 
-      // قراءة النص المستخرج من بنية رد Gemini
       const rawText = body?.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (!rawText) {
@@ -132,12 +131,13 @@ export class FlightTicketExtractorService {
         return this.manualRequired('الملف المرفوع لا يبدو كتذكرة طيران واضحة.');
       }
 
-      const arrivalDate = /^\d{4}-\d{2}-\d{2}$/.test(parsed.arrivalDate)
-        ? parsed.arrivalDate
+      // المعالجة الذكية للتاريخ
+      const arrivalDate = this.normalizeDate(parsed.arrivalDate);
+      
+      const arrivalTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(parsed.arrivalTime?.trim())
+        ? parsed.arrivalTime.trim()
         : null;
-      const arrivalTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(parsed.arrivalTime)
-        ? parsed.arrivalTime
-        : null;
+        
       const flightNumber = this.clean(parsed.flightNumber);
       const confidence = Math.max(0, Math.min(1, Number(parsed.confidence) || 0));
       const hasCoreFields = Boolean(arrivalDate && arrivalTime && flightNumber);
@@ -165,6 +165,29 @@ export class FlightTicketExtractorService {
         'تم حفظ التذكرة، لكن تعذر استخراج بياناتها تلقائيًا. أدخل البيانات يدويًا.'
       );
     }
+  }
+
+  /**
+   * دالة ذكية لتحويل صيغ التواريخ المختلفة إلى YYYY-MM-DD
+   */
+  private normalizeDate(rawDate?: string): string | null {
+    if (!rawDate || !rawDate.trim()) return null;
+
+    const cleaned = rawDate.trim();
+
+    // 1. إذا كان متوافقاً أصلاً مع YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) {
+      return cleaned;
+    }
+
+    // 2. المحاولة عبر تحويل النص لتاريخ قياسي JS Date
+    const parsedTimestamp = Date.parse(cleaned);
+    if (!isNaN(parsedTimestamp)) {
+      const d = new Date(parsedTimestamp);
+      return d.toISOString().split('T')[0];
+    }
+
+    return null;
   }
 
   private manualRequired(warning: string): FlightTicketExtraction {
