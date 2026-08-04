@@ -138,12 +138,21 @@ enum MediaVisibility {
   PRIVATE
 }
 
+// Added FLIGHT_TICKET here to match migrations and code usage
 enum MediaPurpose {
   DRIVER_AVATAR
   VEHICLE_IMAGE
   DRIVER_DOCUMENT
   VEHICLE_DOCUMENT
+  FLIGHT_TICKET
   OTHER
+}
+
+// VehicleClass enum added for pricing / bookings
+enum VehicleClass {
+  SMALL
+  MEDIUM
+  LARGE
 }
 
 model User {
@@ -532,6 +541,8 @@ model MediaAsset {
   vehicleImage    VehicleImage?   @relation("VehicleImageMedia")
   driverDocument  DriverDocument?
   vehicleDocument VehicleDocument?
+  // metadata was added by migration - keep nullable to match code checks
+  metadata        Json?
 
   @@index([purpose, status, createdAt])
   @@index([uploadedById, createdAt])
@@ -630,4 +641,117 @@ model AuditLog {
 
   @@index([actorId, createdAt])
   @@index([entityType, entityId])
+}
+
+// VehicleClassConfig model (created by migrations)
+model VehicleClassConfig {
+  vehicleClass   VehicleClass @id
+  passengerCapacity Int
+  luggageCapacity Int @default(4)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+// Notification model (created by migrations)
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  type      String
+  title     String
+  message   String
+  entityType String?
+  entityId  String?  @db.Uuid
+  link      String?
+  dedupeKey String?
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, createdAt])
+  @@unique([dedupeKey])
+}
+
+// TelegramDelivery enums/model
+enum TelegramDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model TelegramDelivery {
+  id               String @id @default(uuid()) @db.Uuid
+  tripId           String? @db.Uuid
+  dedupeKey        String
+  chatId           String
+  messageText      String
+  buttonText       String?
+  buttonUrl        String?
+  status           TelegramDeliveryStatus @default(PENDING)
+  attempts         Int @default(0)
+  nextAttemptAt    DateTime @default(now())
+  providerMessageId String?
+  lastError        String?
+  sentAt           DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tripId])
+  @@unique([dedupeKey])
+  @@index([status, nextAttemptAt])
+  @@index([createdAt])
+}
+
+// WhatsAppDelivery enums/model
+enum WhatsAppDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model WhatsAppDelivery {
+  id                String @id @default(uuid()) @db.Uuid
+  notificationId    String @db.Uuid
+  userId            String @db.Uuid
+  recipientPhone    String
+  templateName      String
+  languageCode      String @default("ar")
+  parameters        Json
+  status            WhatsAppDeliveryStatus @default(PENDING)
+  attempts          Int @default(0)
+  nextAttemptAt     DateTime @default(now())
+  providerMessageId String?
+  lastError         String?
+  sentAt            DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId])
+  @@index([status, nextAttemptAt])
+  @@index([userId, createdAt])
+}
+
+// AuthSession model added by migrations
+model AuthSession {
+  id         String @id @default(uuid()) @db.Uuid
+  userId     String @db.Uuid
+  tokenHash  String
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  userAgent  String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
