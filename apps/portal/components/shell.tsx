@@ -19,6 +19,7 @@ const adminItems: NavItem[] = [
   { href: "/admin/compliance", label: "الامتثال والملفات", icon: "shield" },
   { href: "/admin/users", label: "الحسابات", icon: "users" },
   { href: "/admin/pricing", label: "الأسعار", icon: "pricing" },
+  { href: "/admin/whatsapp", label: "رسائل WhatsApp", icon: "bell" },
 ];
 
 function isActivePath(pathname: string, href: string) {
@@ -46,7 +47,14 @@ export function Shell({ children }: { children: ReactNode }) {
         { href: "/rider/profile", label: "حسابي", icon: "user" },
       );
     }
-    if (isDriver) items.push({ href: "/driver", label: "مهام السائق", icon: "briefcase" });
+    if (isDriver) {
+      items.push(
+        { href: "/driver", label: "لوحة السائق", icon: "dashboard" },
+        { href: "/driver/bookings", label: "الحجوزات والمهام", icon: "briefcase" },
+        { href: "/driver/runs", label: "الرحلات التشغيلية", icon: "route" },
+        { href: "/driver/profile", label: "الحساب والمركبة", icon: "user" },
+      );
+    }
     if (isAdmin) items.push(...adminItems);
     return items;
   }, [isAdmin, isDriver, isPassenger]);

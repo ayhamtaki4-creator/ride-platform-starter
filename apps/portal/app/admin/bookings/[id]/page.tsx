@@ -3,7 +3,7 @@
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Shell } from "@/components/shell";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, fetchProtectedBlob } from "@/lib/api";
 import {
   BOOKING_REVIEW_LABELS,
   BOOKING_TYPE_LABELS,
@@ -22,6 +22,7 @@ export default function AdminBookingDetailPage() {
   const params = useParams<{ id: string }>();
   const [booking, setBooking] = useState<Trip | null>(null);
   const [error, setError] = useState("");
+  const [openingTicket, setOpeningTicket] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -37,6 +38,21 @@ export default function AdminBookingDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function openFlightTicket() {
+    if (!booking?.flightTicketMedia) return;
+    setOpeningTicket(true);
+    try {
+      const blob = await fetchProtectedBlob(`/bookings/${booking.id}/flight-ticket`);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "تعذر فتح تذكرة الطيران.");
+    } finally {
+      setOpeningTicket(false);
+    }
+  }
 
   return (
     <ProtectedRoute roles={["SUPER_ADMIN", "ADMIN", "OPERATIONS_MANAGER"]}>
@@ -123,10 +139,15 @@ export default function AdminBookingDetailPage() {
                     </strong>
                   </div>
                   <div>
-                    <span>التاريخ</span>
+                    <span>يوم وتاريخ الوصول</span>
                     <strong>
                       {booking.travelDate
-                        ? new Date(booking.travelDate).toLocaleDateString("ar")
+                        ? new Date(booking.travelDate).toLocaleDateString("ar-SY", {
+                            weekday: "long",
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                          })
                         : "—"}
                     </strong>
                   </div>
@@ -137,6 +158,16 @@ export default function AdminBookingDetailPage() {
                       {booking.flightArrivalTime || "—"}
                     </strong>
                   </div>
+                  {booking.flightTicketMedia ? (
+                    <div>
+                      <span>ملف التذكرة</span>
+                      <strong>
+                        <button className="text-button" type="button" disabled={openingTicket} onClick={() => void openFlightTicket()}>
+                          {openingTicket ? "جارٍ الفتح..." : booking.flightTicketMedia.originalName}
+                        </button>
+                      </strong>
+                    </div>
+                  ) : null}
                   <div>
                     <span>{booking.bookingType === "PRIVATE_CAR" ? "فئة السيارة" : "الحجز المشترك"}</span>
                     <strong>

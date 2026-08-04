@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { UserStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { normalizeInternationalPhone } from '../common/phone';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAdminUserDto } from './dto/create-admin-user.dto';
@@ -100,7 +101,9 @@ export class UsersService {
 
   async create(actor: AuthUser, dto: CreateAdminUserDto) {
     const email = dto.email.trim().toLowerCase();
-    const phone = dto.phone?.trim() || null;
+    const phone = dto.phone?.trim()
+      ? normalizeInternationalPhone(dto.phone)
+      : null;
     await this.assertUniqueIdentity(email, phone);
 
     const roleCodes = this.normalizeRoles(dto.roleCodes);
@@ -122,6 +125,7 @@ export class UsersService {
           passwordHash,
           firstName: dto.firstName.trim(),
           lastName: dto.lastName.trim(),
+          whatsappOptIn: Boolean(phone),
           roles: {
             create: roles.map((role) => ({ roleId: role.id }))
           },
@@ -177,7 +181,12 @@ export class UsersService {
     }
 
     const email = dto.email?.trim().toLowerCase();
-    const phone = dto.phone !== undefined ? dto.phone.trim() || null : undefined;
+    const phone =
+      dto.phone !== undefined
+        ? dto.phone.trim()
+          ? normalizeInternationalPhone(dto.phone)
+          : null
+        : undefined;
     if (email || phone !== undefined) {
       await this.assertUniqueIdentity(email ?? current.email, phone ?? current.phone, id);
     }
@@ -194,7 +203,12 @@ export class UsersService {
           ...(dto.firstName ? { firstName: dto.firstName.trim() } : {}),
           ...(dto.lastName ? { lastName: dto.lastName.trim() } : {}),
           ...(email ? { email } : {}),
-          ...(phone !== undefined ? { phone } : {}),
+          ...(phone !== undefined
+            ? {
+                phone,
+                ...(phone ? { whatsappOptIn: true } : {})
+              }
+            : {}),
           ...(roles
             ? { roles: { create: roles.map((role) => ({ roleId: role.id })) } }
             : {})

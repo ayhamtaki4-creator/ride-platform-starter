@@ -108,6 +108,25 @@ export default function AdminUsersPage() {
     } finally { setWorking(""); }
   }
 
+  async function editContact(user: AdminUserRecord) {
+    const phone = window.prompt(
+      "رقم WhatsApp مع رمز الدولة، مثل +963 أو +961 أو +962:",
+      user.phone ?? "+963",
+    );
+    if (!phone) return;
+    setWorking(user.id); setMessage(""); setError("");
+    try {
+      await apiFetch(`/admin/users/${user.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ phone }),
+      });
+      setMessage("تم تحديث رقم الهاتف وتفعيل رسائل WhatsApp للحساب.");
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "تعذر تحديث رقم الهاتف.");
+    } finally { setWorking(""); }
+  }
+
   return (
     <ProtectedRoute roles={["SUPER_ADMIN", "ADMIN", "OPERATIONS_MANAGER"]}>
       <Shell>
@@ -136,7 +155,7 @@ export default function AdminUsersPage() {
         </section>
 
         <section className="panel">
-          <div className="table-wrap"><table className="data-table"><thead><tr><th>المستخدم</th><th>الأدوار</th><th>الحالة</th><th>الحجوزات</th><th>الإنفاق</th><th>تاريخ الإنشاء</th><th>الإجراءات</th></tr></thead><tbody>{filtered.map((user) => <tr key={user.id}><td><strong>{user.firstName} {user.lastName}</strong><small>{user.phone || user.email}</small></td><td><div className="tag-list compact-tags">{user.roles.map((item) => <span key={item.role.code}>{item.role.name || item.role.code}</span>)}</div></td><td><StatusPill status={user.status} label={user.status === "ACTIVE" ? "فعال" : "معلق"} /></td><td>{user.bookingCount} / {user.completedBookings} مكتملة</td><td>{user.totalSpent.toLocaleString("ar")} {user.currency}</td><td>{new Date(user.createdAt).toLocaleDateString("ar")}</td><td><div className="actions"><button className="button compact-button" disabled={working === user.id} type="button" onClick={() => void editRoles(user)}>الأدوار</button><button className="button compact-button" disabled={working === user.id} type="button" onClick={() => void resetPassword(user)}>كلمة المرور</button>{user.status === "ACTIVE" ? <button className="button danger compact-button" disabled={working === user.id} type="button" onClick={() => void changeStatus(user, "suspend")}>تعليق</button> : <button className="button primary compact-button" disabled={working === user.id} type="button" onClick={() => void changeStatus(user, "activate")}>تفعيل</button>}</div></td></tr>)}</tbody></table></div>
+          <div className="table-wrap"><table className="data-table"><thead><tr><th>المستخدم</th><th>الأدوار</th><th>الحالة</th><th>الحجوزات</th><th>الإنفاق</th><th>تاريخ الإنشاء</th><th>الإجراءات</th></tr></thead><tbody>{filtered.map((user) => <tr key={user.id}><td><strong>{user.firstName} {user.lastName}</strong><small>{user.phone || user.email}</small></td><td><div className="tag-list compact-tags">{user.roles.map((item) => <span key={item.role.code}>{item.role.name || item.role.code}</span>)}</div></td><td><StatusPill status={user.status} label={user.status === "ACTIVE" ? "فعال" : "معلق"} /></td><td>{user.bookingCount} / {user.completedBookings} مكتملة</td><td>{user.totalSpent.toLocaleString("ar")} {user.currency}</td><td>{new Date(user.createdAt).toLocaleDateString("ar")}</td><td><div className="actions"><button className="button compact-button" disabled={working === user.id} type="button" onClick={() => void editContact(user)}>الهاتف</button><button className="button compact-button" disabled={working === user.id} type="button" onClick={() => void editRoles(user)}>الأدوار</button><button className="button compact-button" disabled={working === user.id} type="button" onClick={() => void resetPassword(user)}>كلمة المرور</button>{user.status === "ACTIVE" ? <button className="button danger compact-button" disabled={working === user.id} type="button" onClick={() => void changeStatus(user, "suspend")}>تعليق</button> : <button className="button primary compact-button" disabled={working === user.id} type="button" onClick={() => void changeStatus(user, "activate")}>تفعيل</button>}</div></td></tr>)}</tbody></table></div>
         </section>
       </Shell>
     </ProtectedRoute>

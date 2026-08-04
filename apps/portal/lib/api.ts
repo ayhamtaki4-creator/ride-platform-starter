@@ -19,9 +19,57 @@ export class ApiError extends Error {
   }
 }
 
+type RefreshResponse = {
+  accessToken: string;
+  refreshToken: string;
+};
+
+let refreshPromise: Promise<string | null> | null = null;
+
+export function clearStoredAuth() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("ride_access_token");
+  localStorage.removeItem("ride_refresh_token");
+  localStorage.removeItem("ride_user");
+}
+
+export async function refreshAccessToken() {
+  if (typeof window === "undefined") return null;
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const refreshToken = localStorage.getItem("ride_refresh_token");
+    if (!refreshToken) return null;
+
+    try {
+      const response = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+        cache: "no-store",
+      });
+      if (!response.ok) return null;
+      const body = (await response.json()) as RefreshResponse;
+      if (!body.accessToken || !body.refreshToken) return null;
+
+      localStorage.setItem("ride_access_token", body.accessToken);
+      localStorage.setItem("ride_refresh_token", body.refreshToken);
+      window.dispatchEvent(new Event("ride-auth-refreshed"));
+      return body.accessToken;
+    } catch {
+      return null;
+    }
+  })().finally(() => {
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
+}
+
 type ApiOptions = RequestInit & {
   token?: string | null;
   skipAuth?: boolean;
+  retryAuth?: boolean;
 };
 
 export async function apiFetch<T>(
@@ -44,7 +92,12 @@ export async function apiFetch<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const { token: _token, skipAuth: _skipAuth, ...requestOptions } = options;
+  const {
+    token: _token,
+    skipAuth: _skipAuth,
+    retryAuth: _retryAuth,
+    ...requestOptions
+  } = options;
   const response = await fetch(`${API_URL}${path}`, {
     ...requestOptions,
     headers,
@@ -66,12 +119,20 @@ export async function apiFetch<T>(
       }
     }
 
-    if (
-      response.status === 401 &&
-      !options.skipAuth &&
-      typeof window !== "undefined"
-    ) {
-      window.dispatchEvent(new Event("ride-auth-expired"));
+    if (response.status === 401 && !options.skipAuth && options.retryAuth !== false) {
+      const refreshedToken = await refreshAccessToken();
+      if (refreshedToken) {
+        return apiFetch<T>(path, {
+          ...options,
+          token: refreshedToken,
+          retryAuth: false,
+        });
+      }
+
+      if (typeof window !== "undefined") {
+        clearStoredAuth();
+        window.dispatchEvent(new Event("ride-auth-expired"));
+      }
     }
 
     throw new ApiError(message, response.status);
@@ -88,13 +149,17 @@ export async function apiUpload<T>(
   return apiFetch<T>(path, { ...options, method: "POST", body: formData });
 }
 
-export async function fetchProtectedBlob(pathOrUrl: string) {
+export async function fetchProtectedBlob(pathOrUrl: string, retry = true): Promise<Blob> {
   const token = typeof window !== "undefined" ? localStorage.getItem("ride_access_token") : null;
   const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${API_URL}${pathOrUrl}`;
   const response = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     cache: "no-store",
   });
+  if (response.status === 401 && retry) {
+    const refreshedToken = await refreshAccessToken();
+    if (refreshedToken) return fetchProtectedBlob(pathOrUrl, false);
+  }
   if (!response.ok) throw new ApiError("تعذر فتح الملف.", response.status);
   return response.blob();
 }

@@ -1,16 +1,29 @@
 "use client";
 
-import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "./auth-provider";
 import { Icon } from "./ui/icon";
 import { useToast } from "./ui/toast-provider";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiUpload } from "@/lib/api";
+import {
+  clearPendingBooking,
+  createPendingBookingId,
+  deletePendingTicket,
+  loadPendingBooking,
+  loadPendingTicket,
+  PendingBooking,
+  PendingBookingForm,
+  savePendingBooking,
+  storePendingTicket,
+} from "@/lib/pending-booking";
 import { ServiceRoute, ROUTE_TYPE_LABELS, VehicleClassConfig } from "@/lib/admin-operations";
 import {
   BookingQuote,
   BookingType,
   BOOKING_TYPE_LABELS,
+  FlightTicketExtraction,
+  FlightTicketUploadResponse,
   Trip,
   VehicleClass,
   VEHICLE_CLASS_LABELS,
@@ -24,22 +37,22 @@ const DEFAULT_VEHICLE_CLASSES: VehicleClassConfig[] = [
   { vehicleClass: "LARGE", passengerCapacity: 8 },
 ];
 
-type BookingFormState = {
-  routeId: string;
-  bookingType: BookingType;
-  vehicleClass: VehicleClass;
-  travelDate: string;
-  flightArrivalTime: string;
-  flightNumber: string;
-  pickupAddress: string;
-  dropoffAddress: string;
-  passengerName: string;
-  passengerPhone: string;
-  notes: string;
-};
+type BookingFormState = PendingBookingForm;
 
 function formatMoney(value: number, currency: string) {
   return `${new Intl.NumberFormat("ar", { maximumFractionDigits: 2 }).format(value)} ${currency}`;
+}
+
+function formatArrivalDate(value: string) {
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("ar-SY", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(date);
 }
 
 function preferredBookingType(route: ServiceRoute, current?: BookingType): BookingType {
@@ -63,6 +76,7 @@ function firstPricedVehicleClass(route: ServiceRoute, bookingType: BookingType):
 }
 
 export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void }) {
+  const router = useRouter();
   const { user } = useAuth();
   const { showToast } = useToast();
   const [routes, setRoutes] = useState<ServiceRoute[]>([]);
@@ -74,6 +88,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     travelDate: tomorrow,
     flightArrivalTime: "",
     flightNumber: "",
+    flightTicketMediaId: "",
+    flightTicketFileName: "",
     pickupAddress: "",
     dropoffAddress: "",
     passengerName: "",
@@ -81,9 +97,14 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     notes: "",
   });
   const [quote, setQuote] = useState<BookingQuote | null>(null);
-  const [createdBooking, setCreatedBooking] = useState<Trip | null>(null);
+  const [draftId, setDraftId] = useState(() => createPendingBookingId());
+  const [restoredDraft, setRestoredDraft] = useState<PendingBooking | null>(null);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [ticketExtraction, setTicketExtraction] = useState<FlightTicketExtraction | null>(null);
+  const [ticketWorking, setTicketWorking] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
+  const resumeStarted = useRef(false);
 
   const selectedRoute = useMemo(
     () => routes.find((route) => route.id === form.routeId) ?? null,
@@ -114,20 +135,49 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   }
 
   useEffect(() => {
+    const pending = loadPendingBooking();
+    if (pending) {
+      setDraftId(pending.id);
+      setForm((current) => ({ ...current, ...pending.form }));
+      setStep(Math.min(4, Math.max(1, pending.step || 1)));
+      setRestoredDraft(pending);
+    }
+    setDraftLoaded(true);
+  }, []);
+
+  useEffect(() => {
     void apiFetch<ServiceRoute[]>("/routes", { skipAuth: true })
       .then((data) => {
         setRoutes(data);
         const first = data.find((route) => route.bookable);
         if (first) {
           setForm((current) => {
-            const bookingType = preferredBookingType(first, current.bookingType);
+            const restoredRoute = data.find(
+              (item) => item.id === current.routeId && item.bookable,
+            );
+            const route = restoredRoute ?? first;
+            const bookingType = preferredBookingType(route, current.bookingType);
+            const keepsVehicleClass =
+              bookingType !== "PRIVATE_CAR" ||
+              route.pricingRules.some(
+                (rule) =>
+                  rule.bookingType === bookingType &&
+                  rule.vehicleClass === current.vehicleClass &&
+                  rule.isActive !== false,
+              );
             return {
               ...current,
-              routeId: current.routeId || first.id,
+              routeId: route.id,
               bookingType,
-              vehicleClass: firstPricedVehicleClass(first, bookingType),
-              pickupAddress: current.pickupAddress || first.origin.nameAr,
-              dropoffAddress: current.dropoffAddress || first.destination.nameAr,
+              vehicleClass: keepsVehicleClass
+                ? current.vehicleClass
+                : firstPricedVehicleClass(route, bookingType),
+              pickupAddress: restoredRoute
+                ? current.pickupAddress || route.origin.nameAr
+                : route.origin.nameAr,
+              dropoffAddress: restoredRoute
+                ? current.dropoffAddress || route.destination.nameAr
+                : route.destination.nameAr,
             };
           });
         }
@@ -136,10 +186,14 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   }, []);
 
   useEffect(() => {
-    if (user && !form.passengerName) {
-      setForm((current) => ({ ...current, passengerName: `${user.firstName} ${user.lastName}` }));
+    if (user && (!form.passengerName || !form.passengerPhone)) {
+      setForm((current) => ({
+        ...current,
+        passengerName: current.passengerName || `${user.firstName} ${user.lastName}`,
+        passengerPhone: current.passengerPhone || user.phone || "",
+      }));
     }
-  }, [form.passengerName, user]);
+  }, [form.passengerName, form.passengerPhone, user]);
 
   function chooseRoute(route: ServiceRoute) {
     const bookingType = preferredBookingType(route, form.bookingType);
@@ -189,9 +243,10 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     if (
       step === 2 &&
       selectedRoute?.requiresFlightDetails &&
-      (!form.flightArrivalTime || !form.flightNumber.trim())
+      (!form.flightArrivalTime || !form.flightNumber.trim()) &&
+      !(!isPassenger && form.flightTicketFileName)
     ) {
-      setError("هذا المسار يتطلب وقت ورقم الرحلة الجوية.");
+      setError("أرفق تذكرة الطيران أو أدخل وقت الوصول ورقم الرحلة.");
       return false;
     }
     if (step === 3 && (!form.passengerName.trim() || !form.passengerPhone.trim())) {
@@ -205,15 +260,15 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     return true;
   }
 
-  async function loadQuote() {
-    if (!form.routeId) return null;
+  async function loadQuoteFor(candidate: BookingFormState) {
+    if (!candidate.routeId) return null;
     setWorking(true);
     setError("");
     try {
       const params = new URLSearchParams({
-        routeId: form.routeId,
-        bookingType: form.bookingType,
-        vehicleClass: form.bookingType === "PRIVATE_CAR" ? form.vehicleClass : "SMALL",
+        routeId: candidate.routeId,
+        bookingType: candidate.bookingType,
+        vehicleClass: candidate.bookingType === "PRIVATE_CAR" ? candidate.vehicleClass : "SMALL",
       });
       const data = await apiFetch<BookingQuote>(`/bookings/quote?${params}`, { skipAuth: true });
       setQuote(data);
@@ -226,9 +281,135 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     }
   }
 
+  async function uploadTicketFile(file: File, routeId: string) {
+    setTicketWorking(true);
+    setError("");
+    try {
+      const data = new FormData();
+      data.set("file", file);
+      if (routeId) data.set("routeId", routeId);
+      const result = await apiUpload<FlightTicketUploadResponse>("/bookings/flight-ticket", data);
+      setTicketExtraction(result.extraction);
+      if (result.extraction.warning) {
+        showToast(result.extraction.warning, result.extraction.status === "EXTRACTED" ? "success" : "info");
+      } else {
+        showToast("تم استخراج بيانات تذكرة الطيران تلقائيًا.", "success");
+      }
+      return result;
+    } finally {
+      setTicketWorking(false);
+    }
+  }
+
+  function withExtraction(
+    candidate: BookingFormState,
+    upload: FlightTicketUploadResponse,
+  ): BookingFormState {
+    return {
+      ...candidate,
+      flightTicketMediaId: upload.asset.id,
+      flightTicketFileName: upload.asset.originalName,
+      travelDate: upload.extraction.arrivalDate || candidate.travelDate,
+      flightArrivalTime: upload.extraction.arrivalTime || candidate.flightArrivalTime,
+      flightNumber: upload.extraction.flightNumber || candidate.flightNumber,
+      passengerName: candidate.passengerName || upload.extraction.passengerName || "",
+    };
+  }
+
+  async function handleTicketSelected(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setError("حجم تذكرة الطيران يجب ألا يتجاوز 10 ميغابايت.");
+      return;
+    }
+    if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(file.type)) {
+      setError("صيغة التذكرة غير مدعومة. ارفع JPG أو PNG أو WEBP أو PDF.");
+      return;
+    }
+
+    setTicketExtraction(null);
+    const candidate: BookingFormState = {
+      ...form,
+      flightTicketFileName: file.name,
+      flightTicketMediaId: "",
+    };
+    setForm(candidate);
+
+    try {
+      await storePendingTicket(draftId, file);
+      savePendingBooking({
+        id: draftId,
+        form: candidate,
+        step,
+        submitAfterAuth: false,
+      });
+
+      if (isPassenger) {
+        const upload = await uploadTicketFile(file, candidate.routeId);
+        const extracted = withExtraction(candidate, upload);
+        setForm(extracted);
+        savePendingBooking({
+          id: draftId,
+          form: extracted,
+          step,
+          submitAfterAuth: false,
+        });
+      } else {
+        showToast(
+          "تم حفظ ملف التذكرة مؤقتًا، وسيُحلل تلقائيًا بعد تسجيل الدخول.",
+          "success",
+        );
+      }
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "تعذر حفظ أو تحليل التذكرة.";
+      setError(message);
+      showToast(message, "error");
+    }
+  }
+
+  async function createBooking(candidate: BookingFormState, requestId = draftId) {
+    setWorking(true);
+    setError("");
+    try {
+      const { flightTicketFileName: _fileName, ...payload } = candidate;
+      const booking = await apiFetch<Trip>("/bookings", {
+        method: "POST",
+        body: JSON.stringify({
+          ...payload,
+          clientRequestId: requestId,
+          flightTicketMediaId: candidate.flightTicketMediaId || undefined,
+          vehicleClass: candidate.bookingType === "PRIVATE_CAR" ? candidate.vehicleClass : "SMALL",
+        }),
+      });
+      clearPendingBooking();
+      await deletePendingTicket(requestId).catch(() => undefined);
+      showToast(`تم إرسال الحجز ${booking.bookingReference ?? ""}.`, "success");
+      onCreated?.(booking);
+      router.replace(`/rider/bookings/${booking.id}`);
+      return booking;
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "تعذر إرسال الحجز.";
+      setError(message);
+      showToast(message, "error");
+      return null;
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function continueToLogin() {
+    savePendingBooking({
+      id: draftId,
+      form,
+      step: 4,
+      submitAfterAuth: true,
+    });
+    router.push("/login?continue=booking");
+  }
+
   async function nextStep() {
     if (!validateStep()) return;
-    if (step === 3 && !(quote ?? (await loadQuote()))) return;
+    if (step === 3 && !(quote ?? (await loadQuoteFor(form)))) return;
     setStep((current) => Math.min(4, current + 1));
     document.getElementById("booking-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -240,52 +421,73 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       return;
     }
     if (!isPassenger) {
-      setError("سجل الدخول بحساب مسافر قبل إرسال الحجز.");
+      continueToLogin();
       return;
     }
-    setWorking(true);
-    setError("");
-    try {
-      const booking = await apiFetch<Trip>("/bookings", {
-        method: "POST",
-        body: JSON.stringify({
-          ...form,
-          vehicleClass: form.bookingType === "PRIVATE_CAR" ? form.vehicleClass : "SMALL",
-        }),
-      });
-      setCreatedBooking(booking);
-      showToast(`تم إرسال الحجز ${booking.bookingReference ?? ""}.`, "success");
-      onCreated?.(booking);
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "تعذر إرسال الحجز.";
-      setError(message);
-      showToast(message, "error");
-    } finally {
-      setWorking(false);
-    }
+    await createBooking(form);
   }
 
-  if (createdBooking) {
-    return (
-      <section id="booking-card" className="booking-wizard booking-success-card">
-        <div className="success-symbol"><Icon name="check" size={36} /></div>
-        <div className="eyebrow-v2">تم إرسال الطلب</div>
-        <h3>وصل حجزك إلى مركز العمليات</h3>
-        <p>سيتم مراجعته وتعيين سائق ومركبة مؤهلين للمسار والدول المطلوبة.</p>
-        <div className="booking-reference-box"><small>رقم الحجز</small><strong>{createdBooking.bookingReference ?? createdBooking.id.slice(0, 8)}</strong></div>
-        <div className="success-summary-grid">
-          <div><span>المسار</span><strong>{createdBooking.route?.nameAr ?? selectedRoute?.nameAr}</strong></div>
-          <div><span>{form.bookingType === "PRIVATE_CAR" ? "فئة السيارة" : "نوع الحجز"}</span><strong>{form.bookingType === "PRIVATE_CAR" ? VEHICLE_CLASS_LABELS[createdBooking.vehicleClass ?? form.vehicleClass] : BOOKING_TYPE_LABELS[form.bookingType]}</strong></div>
-          <div><span>التاريخ</span><strong>{new Date(createdBooking.travelDate ?? form.travelDate).toLocaleDateString("ar")}</strong></div>
-          <div><span>السعر</span><strong>{quote ? formatMoney(quote.passengerPrice, quote.currency) : `${createdBooking.estimatedFare} ${createdBooking.currency}`}</strong></div>
-        </div>
-        <div className="wizard-actions centered-actions">
-          <button className="button" type="button" onClick={() => { setCreatedBooking(null); setStep(1); setQuote(null); }}>حجز رحلة أخرى</button>
-          <Link className="button primary" href="/rider">متابعة حجوزاتي</Link>
-        </div>
-      </section>
-    );
-  }
+  useEffect(() => {
+    if (
+      !draftLoaded ||
+      !restoredDraft?.submitAfterAuth ||
+      !isPassenger ||
+      routes.length === 0 ||
+      resumeStarted.current
+    ) {
+      return;
+    }
+
+    resumeStarted.current = true;
+    void (async () => {
+      let candidate: BookingFormState = {
+        ...restoredDraft.form,
+        passengerName:
+          restoredDraft.form.passengerName || `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim(),
+        passengerPhone: restoredDraft.form.passengerPhone || user?.phone || "",
+      };
+
+      try {
+        if (candidate.flightTicketFileName && !candidate.flightTicketMediaId) {
+          const ticketFile = await loadPendingTicket(restoredDraft.id);
+          if (!ticketFile) {
+            setForm(candidate);
+            setStep(2);
+            setError("تعذر استعادة ملف التذكرة. أعد اختياره ثم تابع الحجز.");
+            return;
+          }
+          const upload = await uploadTicketFile(ticketFile, candidate.routeId);
+          candidate = withExtraction(candidate, upload);
+          setForm(candidate);
+        }
+
+        const route = routes.find((item) => item.id === candidate.routeId);
+        if (
+          route?.requiresFlightDetails &&
+          (!candidate.flightArrivalTime || !candidate.flightNumber.trim())
+        ) {
+          setForm(candidate);
+          setStep(2);
+          savePendingBooking({
+            id: restoredDraft.id,
+            form: candidate,
+            step: 2,
+            submitAfterAuth: false,
+          });
+          setError("راجع بيانات التذكرة وأكمل وقت الوصول ورقم الرحلة قبل الإرسال.");
+          return;
+        }
+
+        const restoredQuote = await loadQuoteFor(candidate);
+        if (!restoredQuote) return;
+        await createBooking(candidate, restoredDraft.id);
+      } catch (caught) {
+        const message = caught instanceof Error ? caught.message : "تعذر استكمال الحجز المحفوظ.";
+        setError(message);
+        setStep(4);
+      }
+    })();
+  }, [draftLoaded, isPassenger, restoredDraft, routes, user]);
 
   return (
     <form id="booking-card" className="booking-wizard" onSubmit={submit}>
@@ -332,13 +534,49 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
               <h4>{form.bookingType === "PRIVATE_CAR" ? "اختر موعد الرحلة وحجم السيارة" : "اختر موعد الرحلة"}</h4>
               <p>{selectedRoute?.requiresFlightDetails ? "بيانات الطائرة مطلوبة لهذا المسار." : "بيانات الطائرة اختيارية لهذا المسار."}</p>
             </div>
+
+            {selectedRoute?.requiresFlightDetails ? (
+              <section className={`flight-ticket-upload ${form.flightTicketFileName ? "has-file" : ""}`}>
+                <div className="flight-ticket-upload-copy">
+                  <span className="flight-ticket-icon"><Icon name="plane" size={24} /></span>
+                  <div>
+                    <strong>أرفق تذكرة الطيران</strong>
+                    <small>سنقرأ تاريخ ووقت الوصول ورقم الرحلة تلقائيًا. الصيغ: JPG، PNG، WEBP أو PDF حتى 10 MB.</small>
+                  </div>
+                </div>
+                <label className={`button ${form.flightTicketFileName ? "" : "primary"}`}>
+                  <input
+                    hidden
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    disabled={ticketWorking}
+                    onChange={(event) => void handleTicketSelected(event.target.files?.[0])}
+                  />
+                  {ticketWorking ? "جارٍ تحليل التذكرة..." : form.flightTicketFileName ? "استبدال التذكرة" : "اختيار التذكرة"}
+                </label>
+                {form.flightTicketFileName ? (
+                  <div className="flight-ticket-result">
+                    <Icon name="check" size={18} />
+                    <span><strong>{form.flightTicketFileName}</strong><small>{form.flightTicketMediaId ? "تم رفعها وحفظها بصورة خاصة" : "محفوظة مؤقتًا حتى تسجيل الدخول"}</small></span>
+                  </div>
+                ) : null}
+                {ticketExtraction ? (
+                  <div className={`ticket-extraction-status ${ticketExtraction.status === "EXTRACTED" ? "success" : "warning"}`}>
+                    <strong>{ticketExtraction.status === "EXTRACTED" ? "تمت تعبئة البيانات تلقائيًا" : "تحتاج البيانات إلى مراجعة"}</strong>
+                    <span>دقة القراءة التقريبية: {Math.round(ticketExtraction.confidence * 100)}%</span>
+                    {ticketExtraction.warning ? <small>{ticketExtraction.warning}</small> : null}
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+
             <div className="form-grid wizard-form-grid">
               <label>
-                <span className="label">تاريخ الرحلة</span>
+                <span className="label">تاريخ وصول الطائرة / الرحلة</span>
                 <input className="input" type="date" min={tomorrow} value={form.travelDate} onChange={(e) => update("travelDate", e.target.value)} required />
               </label>
               <label>
-                <span className="label">وقت الطائرة</span>
+                <span className="label">وقت وصول الطائرة</span>
                 <input className="input" type="time" value={form.flightArrivalTime} onChange={(e) => update("flightArrivalTime", e.target.value)} required={selectedRoute?.requiresFlightDetails} />
               </label>
               <label>
@@ -407,19 +645,21 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
               <div><span>المسار</span><strong>{selectedRoute?.nameAr}</strong></div>
               <div><span>نوع الحجز</span><strong>{BOOKING_TYPE_LABELS[form.bookingType]}</strong></div>
               {form.bookingType === "PRIVATE_CAR" ? <div><span>فئة السيارة</span><strong>{VEHICLE_CLASS_LABELS[form.vehicleClass]} · حتى {quote?.passengerCapacity ?? selectedClassConfig.passengerCapacity} أشخاص</strong></div> : null}
-              <div><span>التاريخ</span><strong>{new Date(form.travelDate).toLocaleDateString("ar")}</strong></div>
+              <div><span>يوم وتاريخ الوصول</span><strong>{formatArrivalDate(form.travelDate)}</strong></div>
+              {selectedRoute?.requiresFlightDetails ? <div><span>الرحلة الجوية</span><strong>{form.flightNumber || "بانتظار الاستخراج"} · {form.flightArrivalTime || "—"}</strong></div> : null}
+              {form.flightTicketFileName ? <div><span>تذكرة الطيران</span><strong>{form.flightTicketFileName}</strong></div> : null}
               <div><span>الانطلاق</span><strong>{form.pickupAddress}</strong></div>
               <div><span>الوصول</span><strong>{form.dropoffAddress}</strong></div>
             </div>
             <div className="quote-card"><span>السعر التقديري</span><strong>{quote ? formatMoney(quote.passengerPrice, quote.currency) : "—"}</strong></div>
-            {!isPassenger ? <div className="notice">يجب تسجيل الدخول بحساب مسافر لإرسال الطلب.</div> : null}
+            {!isPassenger ? <div className="notice success">تفاصيل هذا الحجز محفوظة. بعد الدخول أو إنشاء حساب سنرسله تلقائيًا ونفتح صفحة التفاصيل.</div> : null}
           </div>
         ) : null}
       </div>
       {error ? <div className="notice error">{error}</div> : null}
       <div className="wizard-actions">
         {step > 1 ? <button className="button" type="button" onClick={() => setStep((current) => current - 1)}>السابق</button> : <span />}
-        {step < 4 ? <button className="button primary" type="button" disabled={working} onClick={() => void nextStep()}>التالي</button> : isPassenger ? <button className="button primary" type="submit" disabled={working}>{working ? "جارٍ الإرسال..." : "إرسال الحجز"}</button> : <Link className="button primary" href="/login">تسجيل الدخول</Link>}
+        {step < 4 ? <button className="button primary" type="button" disabled={working || ticketWorking} onClick={() => void nextStep()}>التالي</button> : isPassenger ? <button className="button primary" type="submit" disabled={working || ticketWorking}>{working ? "جارٍ الإرسال..." : "إرسال الحجز"}</button> : <button className="button primary" type="button" onClick={continueToLogin}>تسجيل الدخول وإكمال الحجز</button>}
       </div>
     </form>
   );

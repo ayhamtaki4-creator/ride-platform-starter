@@ -5,7 +5,7 @@ export type AccessStatus = "PENDING" | "APPROVED" | "EXPIRED" | "SUSPENDED" | "R
 export type DocumentStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "SUSPENDED";
 export type ComplianceSubject = "DRIVER" | "VEHICLE";
 export type MediaStatus = "PENDING" | "APPROVED" | "REJECTED" | "DELETED";
-export type MediaPurpose = "DRIVER_AVATAR" | "VEHICLE_IMAGE" | "DRIVER_DOCUMENT" | "VEHICLE_DOCUMENT" | "OTHER";
+export type MediaPurpose = "DRIVER_AVATAR" | "VEHICLE_IMAGE" | "DRIVER_DOCUMENT" | "VEHICLE_DOCUMENT" | "FLIGHT_TICKET" | "OTHER";
 export type MediaVisibility = "PUBLIC" | "PRIVATE";
 
 export type ServiceRegion = {
@@ -275,6 +275,7 @@ export const MEDIA_PURPOSE_LABELS: Record<MediaPurpose, string> = {
   VEHICLE_IMAGE: "صورة مركبة",
   DRIVER_DOCUMENT: "وثيقة سائق",
   VEHICLE_DOCUMENT: "وثيقة مركبة",
+  FLIGHT_TICKET: "تذكرة طيران",
   OTHER: "ملف آخر",
 };
 

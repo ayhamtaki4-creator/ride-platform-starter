@@ -30,7 +30,11 @@ const MIME_EXTENSIONS: Record<string, string> = {
 };
 
 const IMAGE_PURPOSES: MediaPurpose[] = ['DRIVER_AVATAR', 'VEHICLE_IMAGE'];
-const DOCUMENT_PURPOSES: MediaPurpose[] = ['DRIVER_DOCUMENT', 'VEHICLE_DOCUMENT'];
+const DOCUMENT_PURPOSES: MediaPurpose[] = [
+  'DRIVER_DOCUMENT',
+  'VEHICLE_DOCUMENT',
+  'FLIGHT_TICKET'
+];
 
 @Injectable()
 export class MediaService implements OnModuleInit {
@@ -275,6 +279,18 @@ export class MediaService implements OnModuleInit {
   async adminFile(id: string) {
     const asset = await this.getExisting(id);
     return this.fileResult(asset);
+  }
+
+  async authorizedFile(id: string) {
+    const asset = await this.getExisting(id);
+    return this.fileResult(asset);
+  }
+
+  async updateMetadata(id: string, metadata: Prisma.InputJsonValue) {
+    return this.prisma.mediaAsset.update({
+      where: { id },
+      data: { metadata }
+    });
   }
 
   async assertAsset(

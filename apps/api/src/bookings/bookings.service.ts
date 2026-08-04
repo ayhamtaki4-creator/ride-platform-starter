@@ -6,6 +6,7 @@ import {
 import { BookingDirection, Prisma } from '@prisma/client';
 import { randomInt } from 'crypto';
 import { AuthUser } from '../iam/auth-user.type';
+import { MediaService } from '../media/media.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { defaultVehicleClassCapacity } from '../pricing/vehicle-class';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
@@ -125,6 +126,15 @@ const bookingInclude = {
         }
       }
     }
+  },
+  flightTicketMedia: {
+    select: {
+      id: true,
+      originalName: true,
+      mimeType: true,
+      sizeBytes: true,
+      metadata: true
+    }
   }
 } satisfies Prisma.TripInclude;
 
@@ -134,7 +144,8 @@ type BookingWithRelations = Prisma.TripGetPayload<{ include: typeof bookingInclu
 export class BookingsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly realtime: RealtimeEventsService
+    private readonly realtime: RealtimeEventsService,
+    private readonly media: MediaService
   ) {}
 
   async quote(dto: BookingQuoteDto) {
@@ -201,6 +212,17 @@ export class BookingsService {
   }
 
   async create(user: AuthUser, dto: CreateBookingDto) {
+    if (dto.clientRequestId) {
+      const existing = await this.prisma.trip.findFirst({
+        where: {
+          clientRequestId: dto.clientRequestId,
+          passengerId: user.sub
+        },
+        include: bookingInclude
+      });
+      if (existing) return this.serialize(existing);
+    }
+
     const travelDate = new Date(dto.travelDate);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -219,6 +241,31 @@ export class BookingsService {
     });
 
     const route = quote.route;
+    if (
+      route?.requiresFlightDetails &&
+      (!dto.flightArrivalTime?.trim() || !dto.flightNumber?.trim())
+    ) {
+      throw new BadRequestException(
+        'هذا المسار يتطلب تاريخ الوصول ووقت الوصول ورقم الرحلة الجوية.'
+      );
+    }
+
+    const flightTicket = dto.flightTicketMediaId
+      ? await this.prisma.mediaAsset.findFirst({
+          where: {
+            id: dto.flightTicketMediaId,
+            uploadedById: user.sub,
+            purpose: 'FLIGHT_TICKET',
+            deletedAt: null
+          },
+          select: { id: true, metadata: true }
+        })
+      : null;
+    if (dto.flightTicketMediaId && !flightTicket) {
+      throw new BadRequestException(
+        'ملف تذكرة الطيران غير موجود أو لا يخص هذا الحساب.'
+      );
+    }
     const legacyDefaults = dto.direction ? LEGACY_ROUTE_DEFAULTS[dto.direction] : null;
     const pickupLatitude = Number(route?.origin.latitude ?? legacyDefaults?.pickupLatitude ?? 0);
     const pickupLongitude = Number(route?.origin.longitude ?? legacyDefaults?.pickupLongitude ?? 0);
@@ -229,47 +276,70 @@ export class BookingsService {
 
     const bookingReference = await this.generateReference();
 
-    const booking = await this.prisma.trip.create({
-      data: {
-        passengerId: user.sub,
-        pricingRuleId: quote.pricingRuleId,
-        routeId: quote.routeId,
-        status: 'PENDING_DISPATCH',
-        bookingReviewStatus: 'NEW',
-        bookingReference,
-        direction: quote.direction,
-        bookingType: dto.bookingType,
-        vehicleClass: quote.vehicleClass,
-        travelDate,
-        flightArrivalTime: dto.flightArrivalTime?.trim() || null,
-        flightNumber: dto.flightNumber?.trim() || null,
-        passengerCount: dto.passengerCount,
-        luggageCount: dto.luggageCount,
-        contactName: dto.passengerName.trim(),
-        contactPhone: dto.passengerPhone.trim(),
-        notes: dto.notes?.trim() || null,
-        pickupAddress: dto.pickupAddress.trim(),
-        pickupLatitude,
-        pickupLongitude,
-        dropoffAddress: dto.dropoffAddress.trim(),
-        dropoffLatitude,
-        dropoffLongitude,
-        estimatedDistanceKm,
-        estimatedDurationMinutes,
-        estimatedFare: quote.passengerPrice,
-        driverFee: quote.driverFee,
-        platformMargin: quote.platformMargin,
-        currency: quote.currency,
-        statusHistory: {
-          create: {
-            to: 'PENDING_DISPATCH',
-            actorId: user.sub,
-            note: 'Booking submitted and awaiting administration confirmation'
+    let booking: BookingWithRelations;
+    try {
+      booking = await this.prisma.trip.create({
+        data: {
+          clientRequestId: dto.clientRequestId,
+          passengerId: user.sub,
+          pricingRuleId: quote.pricingRuleId,
+          routeId: quote.routeId,
+          status: 'PENDING_DISPATCH',
+          bookingReviewStatus: 'NEW',
+          bookingReference,
+          direction: quote.direction,
+          bookingType: dto.bookingType,
+          vehicleClass: quote.vehicleClass,
+          travelDate,
+          flightArrivalTime: dto.flightArrivalTime?.trim() || null,
+          flightNumber: dto.flightNumber?.trim() || null,
+          flightTicketMediaId: flightTicket?.id,
+          flightTicketData:
+            flightTicket?.metadata === null ? undefined : flightTicket?.metadata,
+          passengerCount: dto.passengerCount,
+          luggageCount: dto.luggageCount,
+          contactName: dto.passengerName.trim(),
+          contactPhone: dto.passengerPhone.trim(),
+          notes: dto.notes?.trim() || null,
+          pickupAddress: dto.pickupAddress.trim(),
+          pickupLatitude,
+          pickupLongitude,
+          dropoffAddress: dto.dropoffAddress.trim(),
+          dropoffLatitude,
+          dropoffLongitude,
+          estimatedDistanceKm,
+          estimatedDurationMinutes,
+          estimatedFare: quote.passengerPrice,
+          driverFee: quote.driverFee,
+          platformMargin: quote.platformMargin,
+          currency: quote.currency,
+          statusHistory: {
+            create: {
+              to: 'PENDING_DISPATCH',
+              actorId: user.sub,
+              note: 'Booking submitted and awaiting administration confirmation'
+            }
           }
-        }
-      },
-      include: bookingInclude
-    });
+        },
+        include: bookingInclude
+      });
+    } catch (error) {
+      if (
+        dto.clientRequestId &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const existing = await this.prisma.trip.findFirst({
+          where: {
+            clientRequestId: dto.clientRequestId,
+            passengerId: user.sub
+          },
+          include: bookingInclude
+        });
+        if (existing) return this.serialize(existing);
+      }
+      throw error;
+    }
 
     await this.prisma.auditLog.create({
       data: {
@@ -315,6 +385,25 @@ export class BookingsService {
     });
 
     return bookings.map((booking) => this.serialize(booking));
+  }
+
+  async flightTicketFile(user: AuthUser, tripId: string) {
+    const booking = await this.prisma.trip.findUnique({
+      where: { id: tripId },
+      select: { passengerId: true, flightTicketMediaId: true }
+    });
+    if (!booking?.flightTicketMediaId) {
+      throw new NotFoundException('لا توجد تذكرة طيران مرتبطة بهذا الحجز.');
+    }
+
+    const isDispatch = user.roles.some((role) =>
+      ['SUPER_ADMIN', 'ADMIN', 'OPERATIONS_MANAGER'].includes(role)
+    );
+    if (booking.passengerId !== user.sub && !isDispatch) {
+      throw new NotFoundException('تذكرة الطيران غير موجودة.');
+    }
+
+    return this.media.authorizedFile(booking.flightTicketMediaId);
   }
 
   private serialize(booking: BookingWithRelations) {

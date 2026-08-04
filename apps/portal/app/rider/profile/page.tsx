@@ -8,46 +8,36 @@ import { Shell } from "@/components/shell";
 import { Icon } from "@/components/ui/icon";
 import { useToast } from "@/components/ui/toast-provider";
 import { useAuth } from "@/components/auth-provider";
-
-const preferenceKey = "ride_rider_preferences";
-
-type RiderPreferences = {
-  bookingUpdates: boolean;
-  driverUpdates: boolean;
-  serviceMessages: boolean;
-};
-
-const defaultPreferences: RiderPreferences = {
-  bookingUpdates: true,
-  driverUpdates: true,
-  serviceMessages: false,
-};
+import { apiFetch } from "@/lib/api";
+import { AuthUser } from "@/lib/types";
 
 export default function RiderProfilePage() {
-  const { user, logout, isRealtimeConnected } = useAuth();
+  const { user, logout, isRealtimeConnected, refreshUser } = useAuth();
   const { showToast } = useToast();
   const router = useRouter();
-  const [preferences, setPreferences] = useState<RiderPreferences>(defaultPreferences);
-  const [loaded, setLoaded] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [whatsappOptIn, setWhatsappOptIn] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    setPhone(user?.phone ?? "");
+    setWhatsappOptIn(Boolean(user?.whatsappOptIn));
+  }, [user?.phone, user?.whatsappOptIn]);
+
+  async function savePreferences() {
+    setSaving(true);
     try {
-      const stored = localStorage.getItem(preferenceKey);
-      if (stored) setPreferences({ ...defaultPreferences, ...JSON.parse(stored) as Partial<RiderPreferences> });
-    } catch {
-      // Keep defaults when local preferences are invalid.
+      await apiFetch<AuthUser>("/auth/me/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({ phone, whatsappOptIn }),
+      });
+      await refreshUser();
+      showToast("تم حفظ رقم الهاتف وإعدادات WhatsApp.", "success");
+    } catch (caught) {
+      showToast(caught instanceof Error ? caught.message : "تعذر حفظ الإعدادات.", "error");
     } finally {
-      setLoaded(true);
+      setSaving(false);
     }
-  }, []);
-
-  function updatePreference(key: keyof RiderPreferences) {
-    setPreferences((current) => ({ ...current, [key]: !current[key] }));
-  }
-
-  function savePreferences() {
-    localStorage.setItem(preferenceKey, JSON.stringify(preferences));
-    showToast("تم حفظ تفضيلات الإشعارات على هذا الجهاز.", "success");
   }
 
   function handleLogout() {
@@ -92,13 +82,13 @@ export default function RiderProfilePage() {
                   <div><small>البريد الإلكتروني</small><strong className="ltr-text">{user?.email}</strong></div>
                 </div>
                 <div>
-                  <span><Icon name="shield" size={20} /></span>
-                  <div><small>حالة الحساب</small><strong>نشط ومصرّح</strong></div>
+                  <span><Icon name="phone" size={20} /></span>
+                  <div><small>رقم WhatsApp</small><strong className="ltr-text">{user?.phone || "غير مضاف"}</strong></div>
                 </div>
               </div>
 
               <div className="notice rider-profile-note">
-                تعديل الاسم ورقم الهاتف وكلمة المرور سيضاف ضمن مرحلة إدارة الحسابات والأمان. بيانات الحجز الجديدة تُؤخذ من نموذج الحجز ويمكن تغييرها في كل مرة.
+                بيانات الاتصال هنا تخص الحساب والإشعارات. ويمكن استخدام رقم تواصل مختلف داخل حجز معين عند الحاجة.
               </div>
             </section>
 
@@ -106,41 +96,27 @@ export default function RiderProfilePage() {
               <div className="section-heading rider-section-heading">
                 <div>
                   <span className="eyebrow">التنبيهات</span>
-                  <h2>تفضيلات المتابعة</h2>
-                  <p className="subtitle">تُحفظ هذه التفضيلات على المتصفح الحالي حتى ربط خدمة الإشعارات الخارجية.</p>
+                  <h2>تحديثات WhatsApp</h2>
+                  <p className="subtitle">تصل حالات التأكيد وتعيين السائق وبدء الرحلة وإنهائها إلى الرقم المسجل.</p>
                 </div>
               </div>
 
               <div className="rider-preference-list">
-                <PreferenceRow
-                  icon="bookings"
-                  title="تحديثات الحجز"
-                  description="التأكيد والرفض وتغيير حالة الحجز."
-                  checked={preferences.bookingUpdates}
-                  disabled={!loaded}
-                  onChange={() => updatePreference("bookingUpdates")}
-                />
-                <PreferenceRow
-                  icon="drivers"
-                  title="تحديثات السائق"
-                  description="تعيين السائق وقبوله وبيانات المركبة."
-                  checked={preferences.driverUpdates}
-                  disabled={!loaded}
-                  onChange={() => updatePreference("driverUpdates")}
-                />
-                <PreferenceRow
-                  icon="bell"
-                  title="رسائل الخدمة"
-                  description="إعلانات الخدمة والتحديثات العامة غير المرتبطة بحجز محدد."
-                  checked={preferences.serviceMessages}
-                  disabled={!loaded}
-                  onChange={() => updatePreference("serviceMessages")}
-                />
+                <label>
+                  <span className="label">رقم الهاتف مع رمز الدولة</span>
+                  <input className="input ltr-input" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+963944000000" />
+                </label>
+                <label className="rider-preference-row">
+                  <span className="rider-preference-icon"><Icon name="bell" size={21} /></span>
+                  <span className="rider-preference-copy"><strong>إرسال آخر تطورات الحجوزات عبر WhatsApp</strong><small>يمكنك إيقافها في أي وقت مع استمرار الإشعارات داخل المنصة.</small></span>
+                  <input type="checkbox" checked={whatsappOptIn} onChange={(event) => setWhatsappOptIn(event.target.checked)} />
+                  <span className="rider-toggle" aria-hidden="true" />
+                </label>
               </div>
 
               <div className="rider-preferences-actions">
-                <button className="button primary" type="button" onClick={savePreferences} disabled={!loaded}>
-                  <Icon name="check" size={18} /> حفظ التفضيلات
+                <button className="button primary" type="button" onClick={() => void savePreferences()} disabled={saving}>
+                  <Icon name="check" size={18} /> {saving ? "جارٍ الحفظ..." : "حفظ الإعدادات"}
                 </button>
               </div>
             </section>
@@ -174,30 +150,5 @@ export default function RiderProfilePage() {
         </div>
       </Shell>
     </ProtectedRoute>
-  );
-}
-
-function PreferenceRow({
-  icon,
-  title,
-  description,
-  checked,
-  disabled,
-  onChange,
-}: {
-  icon: "bookings" | "drivers" | "bell";
-  title: string;
-  description: string;
-  checked: boolean;
-  disabled: boolean;
-  onChange: () => void;
-}) {
-  return (
-    <label className="rider-preference-row">
-      <span className="rider-preference-icon"><Icon name={icon} size={21} /></span>
-      <span className="rider-preference-copy"><strong>{title}</strong><small>{description}</small></span>
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={onChange} />
-      <span className="rider-toggle" aria-hidden="true" />
-    </label>
   );
 }

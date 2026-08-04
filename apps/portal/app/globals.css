@@ -3239,6 +3239,166 @@ textarea {
   font-size: 11px;
 }
 
+.auth-register-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.auth-register-cta a {
+  color: var(--primary);
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.register-card-v2 { max-width: 560px; }
+
+.auth-name-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.whatsapp-consent-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #f7faf8;
+  cursor: pointer;
+}
+
+.whatsapp-consent-row input { margin-top: 4px; }
+.whatsapp-consent-row span { display: grid; gap: 3px; }
+.whatsapp-consent-row small { color: var(--muted); line-height: 1.6; }
+
+.flight-ticket-upload {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+  padding: 17px;
+  border: 1px dashed #a9c9bb;
+  border-radius: 18px;
+  background: #f7fbf9;
+}
+
+.flight-ticket-upload.has-file {
+  border-style: solid;
+  border-color: #8fc5ad;
+  background: #f2faf6;
+}
+
+.flight-ticket-upload-copy,
+.flight-ticket-result,
+.flight-ticket-detail-row > div {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.flight-ticket-upload-copy > div,
+.flight-ticket-result > span,
+.flight-ticket-detail-row > div > span {
+  display: grid;
+  gap: 3px;
+}
+
+.flight-ticket-upload-copy small,
+.flight-ticket-result small,
+.flight-ticket-detail-row small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.flight-ticket-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 15px;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.flight-ticket-result,
+.ticket-extraction-status {
+  grid-column: 1 / -1;
+  padding-top: 12px;
+  border-top: 1px solid rgba(8, 122, 85, 0.12);
+}
+
+.flight-ticket-result > svg { color: var(--success); }
+
+.ticket-extraction-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 12px;
+  font-size: 11px;
+}
+
+.ticket-extraction-status.success { color: var(--success); }
+.ticket-extraction-status.warning { color: #9a6700; }
+.ticket-extraction-status small { flex-basis: 100%; color: var(--muted); }
+
+.flight-ticket-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: #f8faf9;
+}
+
+.driver-online-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.driver-stat-text { font-size: 15px !important; }
+.driver-dashboard-columns { align-items: start; }
+.driver-assignment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.driver-assignment-card { display: grid; gap: 15px; }
+.driver-passenger-contact { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 14px; background: #f7faf8; }
+.driver-passenger-contact > span { width: 39px; height: 39px; display: grid; place-items: center; border-radius: 13px; color: var(--primary); background: var(--primary-soft); }
+.driver-passenger-contact > div { display: grid; gap: 2px; }
+.driver-passenger-contact small { color: var(--muted); }
+.driver-passenger-contact a { color: var(--primary); direction: ltr; text-decoration: none; }
+.compact-detail-list { gap: 7px; }
+.driver-run-link { display: block; text-decoration: none; }
+.driver-assignment-actions { display: grid; gap: 10px; }
+.driver-profile-layout { align-items: start; }
+.driver-profile-main,
+.driver-profile-aside { display: grid; gap: 18px; }
+.danger-text { color: #b42318 !important; }
+
+@media (max-width: 640px) {
+  .auth-name-grid,
+  .flight-ticket-upload {
+    grid-template-columns: 1fr;
+  }
+
+  .flight-ticket-upload .button { width: 100%; }
+  .flight-ticket-detail-row { align-items: stretch; flex-direction: column; }
+  .driver-online-callout { align-items: stretch; flex-direction: column; }
+  .driver-assignment-grid { grid-template-columns: 1fr; }
+}
+
 /* Application shell */
 .shell.app-shell {
   min-height: 100vh;

@@ -13,7 +13,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Icon } from "@/components/ui/icon";
 import { useToast } from "@/components/ui/toast-provider";
 import { useRiderBookings } from "@/hooks/use-rider-bookings";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, fetchProtectedBlob } from "@/lib/api";
 import {
   canPassengerCancel,
   formatBookingDate,
@@ -133,6 +133,22 @@ function BookingDetails({
 }) {
   const status = getBookingStatus(booking);
   const vehicle = booking.driver?.driverProfile?.vehicles[0];
+  const { showToast } = useToast();
+  const [openingTicket, setOpeningTicket] = useState(false);
+
+  async function openFlightTicket() {
+    setOpeningTicket(true);
+    try {
+      const blob = await fetchProtectedBlob(`/bookings/${booking.id}/flight-ticket`);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (caught) {
+      showToast(caught instanceof Error ? caught.message : "تعذر فتح تذكرة الطيران.", "error");
+    } finally {
+      setOpeningTicket(false);
+    }
+  }
 
   return (
     <>
@@ -177,6 +193,13 @@ function BookingDetails({
               <DetailItem icon="user" label="اسم المسافر" value={booking.contactName || "غير مسجل"} />
               <DetailItem icon="phone" label="رقم التواصل" value={booking.contactPhone || "غير مسجل"} ltr />
             </div>
+
+            {booking.flightTicketMedia ? (
+              <div className="flight-ticket-detail-row">
+                <div><Icon name="plane" size={20} /><span><small>تذكرة الطيران المرفقة</small><strong>{booking.flightTicketMedia.originalName}</strong></span></div>
+                <button className="button compact-button" type="button" disabled={openingTicket} onClick={() => void openFlightTicket()}>{openingTicket ? "جارٍ الفتح..." : "عرض التذكرة"}</button>
+              </div>
+            ) : null}
 
             {booking.notes ? (
               <div className="rider-notes-box">

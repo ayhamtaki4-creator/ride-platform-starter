@@ -80,6 +80,15 @@ const bookingInclude = {
       }
     }
   },
+  flightTicketMedia: {
+    select: {
+      id: true,
+      originalName: true,
+      mimeType: true,
+      sizeBytes: true,
+      metadata: true
+    }
+  },
   statusHistory: { orderBy: { createdAt: 'asc' as const } }
 } satisfies Prisma.TripInclude;
 

@@ -1,13 +1,19 @@
 export type AuthUser = {
   id: string;
   email: string;
+  phone?: string | null;
   firstName: string;
   lastName: string;
+  whatsappOptIn?: boolean;
   roles: string[];
   permissions: string[];
 };
 
-export type LoginResponse = { accessToken: string; user: AuthUser };
+export type LoginResponse = {
+  accessToken: string;
+  refreshToken: string;
+  user: AuthUser;
+};
 
 export type TripStatus =
   | "PENDING_DISPATCH"
@@ -76,6 +82,14 @@ export type Trip = {
   travelDate?: string | null;
   flightArrivalTime?: string | null;
   flightNumber?: string | null;
+  flightTicketMedia?: {
+    id: string;
+    originalName: string;
+    mimeType: string;
+    sizeBytes: number;
+    metadata?: FlightTicketExtraction | null;
+  } | null;
+  flightTicketData?: FlightTicketExtraction | null;
   passengerCount?: number;
   luggageCount?: number;
   contactName?: string | null;
@@ -204,6 +218,28 @@ export type Trip = {
     note?: string | null;
     createdAt: string;
   }>;
+};
+
+export type FlightTicketExtraction = {
+  status: "EXTRACTED" | "MANUAL_REQUIRED";
+  arrivalDate: string | null;
+  arrivalTime: string | null;
+  flightNumber: string | null;
+  arrivalAirportCode: string | null;
+  passengerName: string | null;
+  airlineName: string | null;
+  confidence: number;
+  warning: string | null;
+};
+
+export type FlightTicketUploadResponse = {
+  asset: {
+    id: string;
+    originalName: string;
+    mimeType: string;
+    sizeBytes: number;
+  };
+  extraction: FlightTicketExtraction;
 };
 
 export type PricingRule = {

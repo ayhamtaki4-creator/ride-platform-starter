@@ -8,25 +8,29 @@ import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/ui/icon";
 import { useToast } from "@/components/ui/toast-provider";
 import { homeForRoles } from "@/lib/types";
-
-const demoAccounts = [
-  { label: "الإدارة", email: "admin@example.com", icon: "dashboard" as const },
-  { label: "المسافر", email: "rider@example.com", icon: "user" as const },
-  { label: "السائق", email: "driver@example.com", icon: "drivers" as const },
-];
+import { hasPendingBooking } from "@/lib/pending-booking";
 
 export default function LoginPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const { user, isLoading: authLoading, login } = useAuth();
-  const [email, setEmail] = useState("admin@example.com");
-  const [password, setPassword] = useState("ChangeMe123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingBooking, setPendingBooking] = useState(false);
+
+  function destinationFor(roles: string[]) {
+    return roles.includes("PASSENGER") && hasPendingBooking()
+      ? "/?resumeBooking=1#booking"
+      : homeForRoles(roles);
+  }
+
+  useEffect(() => setPendingBooking(hasPendingBooking()), []);
 
   useEffect(() => {
-    if (!authLoading && user) router.replace(homeForRoles(user.roles));
+    if (!authLoading && user) router.replace(destinationFor(user.roles));
   }, [authLoading, router, user]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -36,7 +40,7 @@ export default function LoginPage() {
     try {
       const loggedInUser = await login(email, password);
       showToast(`مرحبًا ${loggedInUser.firstName}، تم تسجيل الدخول بنجاح.`, "success");
-      router.replace(homeForRoles(loggedInUser.roles));
+      router.replace(destinationFor(loggedInUser.roles));
       router.refresh();
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : "حدث خطأ غير متوقع.";
@@ -74,6 +78,12 @@ export default function LoginPage() {
               <p>أدخل بريدك الإلكتروني وكلمة المرور للوصول إلى لوحة حسابك.</p>
             </div>
 
+            {pendingBooking ? (
+              <div className="notice success">
+                تفاصيل حجزك محفوظة. بعد الدخول سنكمل إرساله ونفتح صفحة تفاصيله تلقائيًا.
+              </div>
+            ) : null}
+
             <form className="auth-form-v2" onSubmit={handleSubmit}>
               <label>
                 <span className="label">البريد الإلكتروني</span>
@@ -91,11 +101,9 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <div className="demo-login-v2">
-              <div><span>حسابات التجربة</span><small>كلمة المرور لجميع الحسابات: ChangeMe123!</small></div>
-              <div className="demo-account-buttons">
-                {demoAccounts.map((account) => <button className={email === account.email ? "is-selected" : ""} type="button" key={account.email} onClick={() => { setEmail(account.email); setPassword("ChangeMe123!"); setError(""); }}><Icon name={account.icon} size={18} /><span>{account.label}</span></button>)}
-              </div>
+            <div className="auth-register-cta">
+              <span>ليس لديك حساب مسافر؟</span>
+              <Link href="/register">إنشاء حساب جديد</Link>
             </div>
 
             <p className="auth-help">تواجه مشكلة في الدخول؟ تواصل مع مركز العمليات.</p>

@@ -22,6 +22,11 @@ import {
 } from '../../pricing/vehicle-class';
 
 export class CreateBookingDto {
+  @ApiPropertyOptional({ format: 'uuid', description: 'مفتاح منع إنشاء الحجز مرتين' })
+  @IsOptional()
+  @IsUUID()
+  clientRequestId?: string;
+
   @ApiPropertyOptional({ format: 'uuid', description: 'المسار الديناميكي المفضل' })
   @ValidateIf((dto: CreateBookingDto) => !dto.direction)
   @IsUUID()
@@ -55,6 +60,11 @@ export class CreateBookingDto {
   @IsString()
   @MaxLength(40)
   flightNumber?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  flightTicketMediaId?: string;
 
   @ApiPropertyOptional({
     example: 1,

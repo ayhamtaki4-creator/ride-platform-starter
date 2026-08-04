@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Namespace, Server } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 
 export type TripRealtimeEvent = {
   tripId: string;
@@ -52,7 +53,10 @@ export type NotificationRealtimeEvent = {
 export class RealtimeEventsService {
   private readonly logger = new Logger(RealtimeEventsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly whatsapp: WhatsAppService
+  ) {}
 
   private server?: Server | Namespace;
 
@@ -274,17 +278,39 @@ export class RealtimeEventsService {
 
     if (!content) return;
 
-    await this.createNotification({
-      userId: event.passengerId,
-      type: `BOOKING_${status}`,
-      title: content.title,
-      message: content.message,
-      entityType: 'Trip',
-      entityId: event.tripId,
-      link: `/rider/bookings/${event.tripId}`,
-      dedupeKey: `booking-status:${event.tripId}:${status}:${event.passengerId}`,
-      metadata: event
-    });
+    const jobs: Promise<void>[] = [
+      this.createNotification({
+        userId: event.passengerId,
+        type: `BOOKING_${status}`,
+        title: content.title,
+        message: content.message,
+        entityType: 'Trip',
+        entityId: event.tripId,
+        link: `/rider/bookings/${event.tripId}`,
+        dedupeKey: `booking-status:${event.tripId}:${status}:${event.passengerId}`,
+        metadata: event
+      })
+    ];
+
+    if (status === 'CANCELLED' && event.driverId) {
+      jobs.push(
+        this.createNotification({
+          userId: event.driverId,
+          type: 'DRIVER_BOOKING_CANCELLED',
+          title: 'أُلغي الحجز المعيّن لك',
+          message: event.bookingReference
+            ? `أُلغي الحجز ${event.bookingReference} ولم يعد مطلوبًا تنفيذه.`
+            : 'أُلغي أحد الحجوزات المعيّنة لك ولم يعد مطلوبًا تنفيذه.',
+          entityType: 'Trip',
+          entityId: event.tripId,
+          link: '/driver/bookings',
+          dedupeKey: `driver-booking-cancelled:${event.tripId}:${event.driverId}`,
+          metadata: event
+        })
+      );
+    }
+
+    await Promise.all(jobs);
   }
 
   private async notifyTripAssigned(
@@ -320,8 +346,26 @@ export class RealtimeEventsService {
           message: 'تم تعيين رحلة جديدة لك. راجع التفاصيل واتخذ الإجراء المطلوب.',
           entityType: 'Trip',
           entityId: event.tripId,
-          link: '/driver',
+          link: '/driver/bookings',
           dedupeKey: `driver-trip-assigned:${event.tripId}:${event.driverId}`,
+          metadata: event
+        })
+      );
+    }
+
+    if (reassigned && event.previousDriverId) {
+      jobs.push(
+        this.createNotification({
+          userId: event.previousDriverId,
+          type: 'TRIP_UNASSIGNED_FROM_DRIVER',
+          title: 'تم سحب المهمة',
+          message: event.bookingReference
+            ? `لم يعد الحجز ${event.bookingReference} معيّنًا لك.`
+            : 'لم تعد هذه الرحلة معيّنة لك.',
+          entityType: 'Trip',
+          entityId: event.tripId,
+          link: '/driver/bookings',
+          dedupeKey: `driver-trip-unassigned:${event.tripId}:${event.previousDriverId}`,
           metadata: event
         })
       );
@@ -377,49 +421,99 @@ export class RealtimeEventsService {
 
     if (!content) return;
 
-    await this.createNotification({
-      userId: event.passengerId,
-      type: content.type,
-      title: content.title,
-      message: content.message,
-      entityType: 'Trip',
-      entityId: event.tripId,
-      link: `/rider/bookings/${event.tripId}`,
-      dedupeKey: `trip-status:${event.tripId}:${event.status}:${event.passengerId}`,
-      metadata: event
-    });
+    await Promise.all([
+      this.createNotification({
+        userId: event.passengerId,
+        type: content.type,
+        title: content.title,
+        message: content.message,
+        entityType: 'Trip',
+        entityId: event.tripId,
+        link: `/rider/bookings/${event.tripId}`,
+        dedupeKey: `trip-status:${event.tripId}:${event.status}:${event.passengerId}`,
+        metadata: event
+      }),
+      this.notifyDispatch({
+        type: `ADMIN_${content.type}`,
+        title: content.title,
+        message: event.bookingReference
+          ? `${content.message} الحجز ${event.bookingReference}.`
+          : content.message,
+        entityType: 'Trip',
+        entityId: event.tripId,
+        link: `/admin/bookings/${event.tripId}`,
+        dedupePrefix: `admin-trip-status:${event.tripId}:${event.status}`,
+        metadata: event
+      })
+    ]);
   }
 
   private async notifyTripUnassigned(event: TripRealtimeEvent) {
-    await this.notifyDispatch({
-      type: 'ADMIN_DRIVER_REPLACEMENT',
-      title: 'رحلة تحتاج إلى سائق بديل',
-      message: event.reason || 'تم إلغاء تعيين السائق من الرحلة.',
-      entityType: 'Trip',
-      entityId: event.tripId,
-      link: `/admin/bookings/${event.tripId}`,
-      dedupePrefix: `admin-driver-replacement:${event.tripId}:${event.occurredAt}`,
-      metadata: event
-    });
+    await Promise.all([
+      this.notifyDispatch({
+        type: 'ADMIN_DRIVER_REPLACEMENT',
+        title: 'رحلة تحتاج إلى سائق بديل',
+        message: event.reason || 'تم إلغاء تعيين السائق من الرحلة.',
+        entityType: 'Trip',
+        entityId: event.tripId,
+        link: `/admin/bookings/${event.tripId}`,
+        dedupePrefix: `admin-driver-replacement:${event.tripId}:${event.occurredAt}`,
+        metadata: event
+      }),
+      ...(event.previousDriverId
+        ? [
+            this.createNotification({
+              userId: event.previousDriverId,
+              type: 'TRIP_UNASSIGNED_FROM_DRIVER',
+              title: 'تم سحب المهمة',
+              message: event.bookingReference
+                ? `لم يعد الحجز ${event.bookingReference} معيّنًا لك.`
+                : 'لم تعد هذه الرحلة معيّنة لك.',
+              entityType: 'Trip',
+              entityId: event.tripId,
+              link: '/driver/bookings',
+              dedupeKey: `driver-trip-unassigned:${event.tripId}:${event.previousDriverId}`,
+              metadata: event
+            })
+          ]
+        : [])
+    ]);
   }
 
   private async notifyRunAssigned(event: ServiceRunRealtimeEvent) {
-    await this.createNotification({
-      userId: event.driverId,
-      type: 'RUN_ASSIGNED',
-      title: 'تم تعيين رحلة تشغيلية',
-      message: `تم تعيين الرحلة ${event.runReference} لك. راجع قائمة الركاب والمركبة.`,
-      entityType: 'ServiceRun',
-      entityId: event.runId,
-      link: `/driver/runs/${event.runId}`,
-      dedupeKey: `run-assigned:${event.runId}:${event.driverId}`,
-      metadata: event
-    });
+    await Promise.all([
+      this.createNotification({
+        userId: event.driverId,
+        type: 'RUN_ASSIGNED',
+        title: 'تم تعيين رحلة تشغيلية',
+        message: `تم تعيين الرحلة ${event.runReference} لك. راجع قائمة الركاب والمركبة.`,
+        entityType: 'ServiceRun',
+        entityId: event.runId,
+        link: `/driver/runs/${event.runId}`,
+        dedupeKey: `run-assigned:${event.runId}:${event.driverId}`,
+        metadata: event
+      }),
+      ...(event.previousDriverId
+        ? [
+            this.createNotification({
+              userId: event.previousDriverId,
+              type: 'RUN_UNASSIGNED_FROM_DRIVER',
+              title: 'تم سحب الرحلة التشغيلية',
+              message: `لم تعد الرحلة ${event.runReference} معيّنة لك.`,
+              entityType: 'ServiceRun',
+              entityId: event.runId,
+              link: '/driver/runs',
+              dedupeKey: `run-unassigned:${event.runId}:${event.previousDriverId}`,
+              metadata: event
+            })
+          ]
+        : [])
+    ]);
   }
 
   private async notifyRunAccepted(event: ServiceRunRealtimeEvent) {
-    await Promise.all(
-      event.passengerIds.map((passengerId) =>
+    await Promise.all([
+      ...event.passengerIds.map((passengerId) =>
         this.createNotification({
           userId: passengerId,
           type: 'RUN_DRIVER_ACCEPTED',
@@ -433,13 +527,23 @@ export class RealtimeEventsService {
           dedupeKey: `run-accepted:${event.runId}:${passengerId}`,
           metadata: event
         })
-      )
-    );
+      ),
+      this.notifyDispatch({
+        type: 'ADMIN_RUN_DRIVER_ACCEPTED',
+        title: 'قبل السائق الرحلة التشغيلية',
+        message: `قبل السائق تنفيذ الرحلة ${event.runReference}.`,
+        entityType: 'ServiceRun',
+        entityId: event.runId,
+        link: `/admin/runs/${event.runId}`,
+        dedupePrefix: `admin-run-accepted:${event.runId}`,
+        metadata: event
+      })
+    ]);
   }
 
   private async notifyRunStarted(event: ServiceRunRealtimeEvent) {
-    await Promise.all(
-      event.passengerIds.map((passengerId) =>
+    await Promise.all([
+      ...event.passengerIds.map((passengerId) =>
         this.createNotification({
           userId: passengerId,
           type: 'RUN_STARTED',
@@ -451,13 +555,23 @@ export class RealtimeEventsService {
           dedupeKey: `run-started:${event.runId}:${passengerId}`,
           metadata: event
         })
-      )
-    );
+      ),
+      this.notifyDispatch({
+        type: 'ADMIN_RUN_STARTED',
+        title: 'بدأت رحلة تشغيلية',
+        message: `بدأت الرحلة ${event.runReference}.`,
+        entityType: 'ServiceRun',
+        entityId: event.runId,
+        link: `/admin/runs/${event.runId}`,
+        dedupePrefix: `admin-run-started:${event.runId}`,
+        metadata: event
+      })
+    ]);
   }
 
   private async notifyRunCompleted(event: ServiceRunRealtimeEvent) {
-    await Promise.all(
-      event.passengerIds.map((passengerId) =>
+    await Promise.all([
+      ...event.passengerIds.map((passengerId) =>
         this.createNotification({
           userId: passengerId,
           type: 'RUN_COMPLETED',
@@ -469,8 +583,18 @@ export class RealtimeEventsService {
           dedupeKey: `run-completed:${event.runId}:${passengerId}`,
           metadata: event
         })
-      )
-    );
+      ),
+      this.notifyDispatch({
+        type: 'ADMIN_RUN_COMPLETED',
+        title: 'اكتملت رحلة تشغيلية',
+        message: `تم إنهاء الرحلة ${event.runReference}.`,
+        entityType: 'ServiceRun',
+        entityId: event.runId,
+        link: `/admin/runs/${event.runId}`,
+        dedupePrefix: `admin-run-completed:${event.runId}`,
+        metadata: event
+      })
+    ]);
   }
 
   private async notifyDispatch(input: {
@@ -564,6 +688,7 @@ export class RealtimeEventsService {
         createdAt: notification.createdAt.toISOString(),
         metadata: notification.metadata
       });
+      await this.whatsapp.enqueueNotification(notification.id);
     } catch (error) {
       const code =
         typeof error === 'object' &&

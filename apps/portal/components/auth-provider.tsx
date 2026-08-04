@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { io, Socket } from "socket.io-client";
-import { apiFetch, getRealtimeUrl } from "@/lib/api";
+import { ApiError, apiFetch, clearStoredAuth, getRealtimeUrl } from "@/lib/api";
 import { AuthUser, LoginResponse } from "@/lib/types";
 
 type AuthContextValue = {
@@ -19,6 +19,14 @@ type AuthContextValue = {
   socket: Socket | null;
   isRealtimeConnected: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
+  register: (input: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    password: string;
+    whatsappOptIn: boolean;
+  }) => Promise<AuthUser>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 };
@@ -30,17 +38,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+  const [authVersion, setAuthVersion] = useState(0);
 
   const clearSession = useCallback(() => {
-    localStorage.removeItem("ride_access_token");
-    localStorage.removeItem("ride_user");
+    clearStoredAuth();
     setUser(null);
   }, []);
 
   const refreshUser = useCallback(async () => {
     const token = localStorage.getItem("ride_access_token");
 
-    if (!token) {
+    const refreshToken = localStorage.getItem("ride_refresh_token");
+
+    if (!token && !refreshToken) {
       setUser(null);
       setIsLoading(false);
       return;
@@ -50,8 +60,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const currentUser = await apiFetch<AuthUser>("/auth/me", { token });
       localStorage.setItem("ride_user", JSON.stringify(currentUser));
       setUser(currentUser);
-    } catch {
-      clearSession();
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 401) {
+        clearSession();
+      } else {
+        try {
+          const cached = localStorage.getItem("ride_user");
+          if (cached) setUser(JSON.parse(cached) as AuthUser);
+        } catch {
+          // Keep the current in-memory user during a temporary network failure.
+        }
+      }
     } finally {
       setIsLoading(false);
     }
@@ -64,9 +83,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearSession();
       setIsLoading(false);
     };
+    const handleRefreshed = () => setAuthVersion((current) => current + 1);
 
     window.addEventListener("ride-auth-expired", handleExpired);
-    return () => window.removeEventListener("ride-auth-expired", handleExpired);
+    window.addEventListener("ride-auth-refreshed", handleRefreshed);
+    return () => {
+      window.removeEventListener("ride-auth-expired", handleExpired);
+      window.removeEventListener("ride-auth-refreshed", handleRefreshed);
+    };
   }, [clearSession, refreshUser]);
 
   useEffect(() => {
@@ -93,9 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const handleConnect = () => setIsRealtimeConnected(true);
     const handleDisconnect = () => setIsRealtimeConnected(false);
-    const handleAuthError = () => {
-      window.dispatchEvent(new Event("ride-auth-expired"));
-    };
+    const handleAuthError = () => void refreshUser();
 
     realtimeSocket.on("connect", handleConnect);
     realtimeSocket.on("disconnect", handleDisconnect);
@@ -113,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         current === realtimeSocket ? null : current
       );
     };
-  }, [user?.id]);
+  }, [authVersion, refreshUser, user?.id]);
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await apiFetch<LoginResponse>("/auth/login", {
@@ -123,13 +145,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     localStorage.setItem("ride_access_token", response.accessToken);
+    localStorage.setItem("ride_refresh_token", response.refreshToken);
     localStorage.setItem("ride_user", JSON.stringify(response.user));
     setUser(response.user);
+    setAuthVersion((current) => current + 1);
 
     return response.user;
   }, []);
 
+  const register = useCallback(async (input: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    password: string;
+    whatsappOptIn: boolean;
+  }) => {
+    const response = await apiFetch<LoginResponse>("/auth/register", {
+      method: "POST",
+      skipAuth: true,
+      body: JSON.stringify(input),
+    });
+
+    localStorage.setItem("ride_access_token", response.accessToken);
+    localStorage.setItem("ride_refresh_token", response.refreshToken);
+    localStorage.setItem("ride_user", JSON.stringify(response.user));
+    setUser(response.user);
+    setAuthVersion((current) => current + 1);
+    return response.user;
+  }, []);
+
   const logout = useCallback(() => {
+    const refreshToken = localStorage.getItem("ride_refresh_token");
+    if (refreshToken) {
+      void apiFetch("/auth/logout", {
+        method: "POST",
+        skipAuth: true,
+        body: JSON.stringify({ refreshToken }),
+      }).catch(() => undefined);
+    }
     clearSession();
   }, [clearSession]);
 
@@ -140,6 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       socket,
       isRealtimeConnected,
       login,
+      register,
       logout,
       refreshUser,
     }),
@@ -149,6 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       socket,
       isRealtimeConnected,
       login,
+      register,
       logout,
       refreshUser,
     ]

@@ -150,31 +150,60 @@ enum MediaPurpose {
   VEHICLE_IMAGE
   DRIVER_DOCUMENT
   VEHICLE_DOCUMENT
+  FLIGHT_TICKET
   OTHER
 }
 
+enum WhatsAppDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
 model User {
-  id               String            @id @default(uuid()) @db.Uuid
-  email            String            @unique
-  phone            String?           @unique
-  passwordHash     String
-  firstName        String
-  lastName         String
-  status           UserStatus        @default(ACTIVE)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  roles            UserRole[]
-  passengerTrips   Trip[]            @relation("PassengerTrips")
-  driverTrips      Trip[]            @relation("DriverTrips")
-  passengerProfile PassengerProfile?
-  driverProfile    DriverProfile?
-  driverServiceRuns ServiceRun[]     @relation("DriverServiceRuns")
-  auditLogs        AuditLog[]        @relation("AuditActor")
-  uploadedMedia    MediaAsset[]      @relation("MediaUploadedBy")
-  approvedMedia    MediaAsset[]      @relation("MediaApprovedBy")
-  reviewedDriverDocuments DriverDocument[] @relation("DriverDocumentReviewer")
-  reviewedVehicleDocuments VehicleDocument[] @relation("VehicleDocumentReviewer")
-  notifications    Notification[]
+  id                       String             @id @default(uuid()) @db.Uuid
+  email                    String             @unique
+  phone                    String?            @unique
+  passwordHash             String
+  firstName                String
+  lastName                 String
+  status                   UserStatus         @default(ACTIVE)
+  whatsappOptIn            Boolean            @default(false)
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  roles                    UserRole[]
+  passengerTrips           Trip[]             @relation("PassengerTrips")
+  driverTrips              Trip[]             @relation("DriverTrips")
+  passengerProfile         PassengerProfile?
+  driverProfile            DriverProfile?
+  driverServiceRuns        ServiceRun[]       @relation("DriverServiceRuns")
+  auditLogs                AuditLog[]         @relation("AuditActor")
+  uploadedMedia            MediaAsset[]       @relation("MediaUploadedBy")
+  approvedMedia            MediaAsset[]       @relation("MediaApprovedBy")
+  reviewedDriverDocuments  DriverDocument[]   @relation("DriverDocumentReviewer")
+  reviewedVehicleDocuments VehicleDocument[]  @relation("VehicleDocumentReviewer")
+  notifications            Notification[]
+  authSessions             AuthSession[]
+  whatsappDeliveries       WhatsAppDelivery[]
+}
+
+model AuthSession {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  userAgent  String?
+  ipAddress  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt, revokedAt])
 }
 
 model Role {
@@ -219,20 +248,20 @@ model PassengerProfile {
 }
 
 model DriverProfile {
-  id             String             @id @default(uuid()) @db.Uuid
-  userId         String             @unique @db.Uuid
-  status         DriverStatus       @default(PENDING_REVIEW)
-  availability   DriverAvailability @default(OFFLINE)
-  rating         Float              @default(5)
-  licenseNumber  String?            @unique
+  id             String               @id @default(uuid()) @db.Uuid
+  userId         String               @unique @db.Uuid
+  status         DriverStatus         @default(PENDING_REVIEW)
+  availability   DriverAvailability   @default(OFFLINE)
+  rating         Float                @default(5)
+  licenseNumber  String?              @unique
   avatarUrl      String?
-  avatarMediaId  String?            @unique @db.Uuid
-  baseRegionId   String?            @db.Uuid
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  baseRegion     ServiceRegion?     @relation("DriverBaseRegion", fields: [baseRegionId], references: [id], onDelete: SetNull)
-  avatarMedia    MediaAsset?        @relation("DriverAvatarMedia", fields: [avatarMediaId], references: [id], onDelete: SetNull)
+  avatarMediaId  String?              @unique @db.Uuid
+  baseRegionId   String?              @db.Uuid
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  baseRegion     ServiceRegion?       @relation("DriverBaseRegion", fields: [baseRegionId], references: [id], onDelete: SetNull)
+  avatarMedia    MediaAsset?          @relation("DriverAvatarMedia", fields: [avatarMediaId], references: [id], onDelete: SetNull)
   vehicles       Vehicle[]
   regionAccesses DriverRegionAccess[]
   documents      DriverDocument[]
@@ -242,41 +271,41 @@ model DriverProfile {
 }
 
 model Vehicle {
-  id               String                @id @default(uuid()) @db.Uuid
-  driverProfileId  String                @db.Uuid
-  make             String
-  model            String
-  year             Int
-  color            String
-  plateNumber      String                @unique
-  seatCapacity     Int                   @default(4)
-  primaryImageUrl  String?
-  primaryImageMediaId String?             @unique @db.Uuid
-  baseRegionId     String?               @db.Uuid
-  isActive         Boolean               @default(true)
-  driverProfile    DriverProfile         @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
-  baseRegion       ServiceRegion?        @relation("VehicleBaseRegion", fields: [baseRegionId], references: [id], onDelete: SetNull)
-  primaryImageMedia MediaAsset?           @relation("VehiclePrimaryMedia", fields: [primaryImageMediaId], references: [id], onDelete: SetNull)
-  serviceRuns      ServiceRun[]
-  regionAccesses   VehicleRegionAccess[]
-  images           VehicleImage[]
-  documents        VehicleDocument[]
+  id                  String                @id @default(uuid()) @db.Uuid
+  driverProfileId     String                @db.Uuid
+  make                String
+  model               String
+  year                Int
+  color               String
+  plateNumber         String                @unique
+  seatCapacity        Int                   @default(4)
+  primaryImageUrl     String?
+  primaryImageMediaId String?               @unique @db.Uuid
+  baseRegionId        String?               @db.Uuid
+  isActive            Boolean               @default(true)
+  driverProfile       DriverProfile         @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  baseRegion          ServiceRegion?        @relation("VehicleBaseRegion", fields: [baseRegionId], references: [id], onDelete: SetNull)
+  primaryImageMedia   MediaAsset?           @relation("VehiclePrimaryMedia", fields: [primaryImageMediaId], references: [id], onDelete: SetNull)
+  serviceRuns         ServiceRun[]
+  regionAccesses      VehicleRegionAccess[]
+  images              VehicleImage[]
+  documents           VehicleDocument[]
 
   @@index([driverProfileId, isActive])
   @@index([baseRegionId])
 }
 
 model VehicleImage {
-  id         String   @id @default(uuid()) @db.Uuid
-  vehicleId  String   @db.Uuid
-  url        String
-  mediaAssetId String? @unique @db.Uuid
-  isPrimary  Boolean  @default(false)
-  isApproved Boolean  @default(false)
-  sortOrder  Int      @default(0)
-  createdAt  DateTime @default(now())
-  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  mediaAsset MediaAsset? @relation("VehicleImageMedia", fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  id           String      @id @default(uuid()) @db.Uuid
+  vehicleId    String      @db.Uuid
+  url          String
+  mediaAssetId String?     @unique @db.Uuid
+  isPrimary    Boolean     @default(false)
+  isApproved   Boolean     @default(false)
+  sortOrder    Int         @default(0)
+  createdAt    DateTime    @default(now())
+  vehicle      Vehicle     @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  mediaAsset   MediaAsset? @relation("VehicleImageMedia", fields: [mediaAssetId], references: [id], onDelete: SetNull)
 
   @@index([vehicleId, isApproved, sortOrder])
 }
@@ -285,7 +314,7 @@ model PricingRule {
   id             String            @id @default(uuid()) @db.Uuid
   scopeKey       String
   direction      BookingDirection?
-  routeId         String?           @db.Uuid
+  routeId        String?           @db.Uuid
   bookingType    BookingType
   vehicleClass   VehicleClass      @default(SMALL)
   passengerPrice Decimal           @db.Decimal(12, 2)
@@ -311,62 +340,66 @@ model VehicleClassConfig {
 }
 
 model Trip {
-  id                       String               @id @default(uuid()) @db.Uuid
-  passengerId              String               @db.Uuid
-  driverId                 String?              @db.Uuid
-  pricingRuleId            String?                 @db.Uuid
-  routeId                  String?                 @db.Uuid
-  serviceRunId             String?                 @db.Uuid
+  id                        String                    @id @default(uuid()) @db.Uuid
+  clientRequestId           String?                   @unique @db.Uuid
+  passengerId               String                    @db.Uuid
+  driverId                  String?                   @db.Uuid
+  pricingRuleId             String?                   @db.Uuid
+  routeId                   String?                   @db.Uuid
+  serviceRunId              String?                   @db.Uuid
   serviceRunPassengerStatus ServiceRunPassengerStatus @default(WAITING)
-  pickupOrder              Int?
-  pickedUpAt               DateTime?
-  noShowAt                 DateTime?
-  droppedOffAt             DateTime?
-  status                   TripStatus              @default(PENDING_DISPATCH)
-  bookingReviewStatus      BookingReviewStatus     @default(CONFIRMED)
-  driverAssignmentStatus   DriverAssignmentStatus  @default(UNASSIGNED)
-  bookingReference         String?              @unique
-  direction                BookingDirection?
-  bookingType              BookingType?
-  vehicleClass             VehicleClass          @default(SMALL)
-  travelDate               DateTime?
-  flightArrivalTime        String?
-  flightNumber             String?
-  passengerCount           Int                  @default(1)
-  luggageCount             Int                  @default(0)
-  contactName              String?
-  contactPhone             String?
-  notes                    String?
-  pickupAddress            String
-  pickupLatitude           Float
-  pickupLongitude          Float
-  dropoffAddress           String
-  dropoffLatitude          Float
-  dropoffLongitude         Float
-  estimatedDistanceKm      Float                @default(0)
-  estimatedDurationMinutes Int                  @default(0)
-  estimatedFare            Decimal              @db.Decimal(12, 3)
-  driverFee                Decimal              @default(0) @db.Decimal(12, 3)
-  platformMargin           Decimal              @default(0) @db.Decimal(12, 3)
-  finalFare                Decimal?             @db.Decimal(12, 3)
-  currency                 String               @default("USD")
-  startPinHash             String?               @map("startPin")
-  requestedAt              DateTime             @default(now())
-  confirmedAt              DateTime?
-  rejectedAt               DateTime?
-  assignedAt               DateTime?
-  driverRespondedAt        DateTime?
-  driverRejectionReason    String?
-  acceptedAt               DateTime?
-  startedAt                DateTime?
-  completedAt              DateTime?
-  cancelledAt              DateTime?
-  passenger                User                 @relation("PassengerTrips", fields: [passengerId], references: [id])
-  driver                   User?                @relation("DriverTrips", fields: [driverId], references: [id])
-  pricingRule              PricingRule?         @relation(fields: [pricingRuleId], references: [id])
-  route                    ServiceRoute?        @relation(fields: [routeId], references: [id], onDelete: SetNull)
-  serviceRun               ServiceRun?          @relation(fields: [serviceRunId], references: [id], onDelete: SetNull)
-  statusHistory            TripStatusHistory[]
+  pickupOrder               Int?
+  pickedUpAt                DateTime?
+  noShowAt                  DateTime?
+  droppedOffAt              DateTime?
+  status                    TripStatus                @default(PENDING_DISPATCH)
+  bookingReviewStatus       BookingReviewStatus       @default(CONFIRMED)
+  driverAssignmentStatus    DriverAssignmentStatus    @default(UNASSIGNED)
+  bookingReference          String?                   @unique
+  direction                 BookingDirection?
+  bookingType               BookingType?
+  vehicleClass              VehicleClass              @default(SMALL)
+  travelDate                DateTime?
+  flightArrivalTime         String?
+  flightNumber              String?
+  flightTicketMediaId       String?                   @unique @db.Uuid
+  flightTicketData          Json?
+  passengerCount            Int                       @default(1)
+  luggageCount              Int                       @default(0)
+  contactName               String?
+  contactPhone              String?
+  notes                     String?
+  pickupAddress             String
+  pickupLatitude            Float
+  pickupLongitude           Float
+  dropoffAddress            String
+  dropoffLatitude           Float
+  dropoffLongitude          Float
+  estimatedDistanceKm       Float                     @default(0)
+  estimatedDurationMinutes  Int                       @default(0)
+  estimatedFare             Decimal                   @db.Decimal(12, 3)
+  driverFee                 Decimal                   @default(0) @db.Decimal(12, 3)
+  platformMargin            Decimal                   @default(0) @db.Decimal(12, 3)
+  finalFare                 Decimal?                  @db.Decimal(12, 3)
+  currency                  String                    @default("USD")
+  startPinHash              String?                   @map("startPin")
+  requestedAt               DateTime                  @default(now())
+  confirmedAt               DateTime?
+  rejectedAt                DateTime?
+  assignedAt                DateTime?
+  driverRespondedAt         DateTime?
+  driverRejectionReason     String?
+  acceptedAt                DateTime?
+  startedAt                 DateTime?
+  completedAt               DateTime?
+  cancelledAt               DateTime?
+  passenger                 User                      @relation("PassengerTrips", fields: [passengerId], references: [id])
+  driver                    User?                     @relation("DriverTrips", fields: [driverId], references: [id])
+  pricingRule               PricingRule?              @relation(fields: [pricingRuleId], references: [id])
+  route                     ServiceRoute?             @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  serviceRun                ServiceRun?               @relation(fields: [serviceRunId], references: [id], onDelete: SetNull)
+  flightTicketMedia         MediaAsset?               @relation("TripFlightTicket", fields: [flightTicketMediaId], references: [id], onDelete: SetNull)
+  statusHistory             TripStatusHistory[]
 
   @@index([passengerId, requestedAt])
   @@index([driverId, requestedAt])
@@ -379,30 +412,30 @@ model Trip {
 }
 
 model ServiceRun {
-  id                      String            @id @default(uuid()) @db.Uuid
-  runReference            String            @unique
-  direction               BookingDirection?
-  routeId                  String?           @db.Uuid
-  bookingType             BookingType
-  travelDate              DateTime
-  driverId                String            @db.Uuid
-  vehicleId               String            @db.Uuid
-  status                   ServiceRunStatus  @default(PLANNED)
-  seatCapacity             Int
-  reservedSeats            Int               @default(0)
-  notes                    String?
-  driverAcceptedAt         DateTime?
-  boardingStartedAt        DateTime?
-  startedAt                DateTime?
-  completedAt              DateTime?
-  cancelledAt              DateTime?
-  driverRejectionReason    String?
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
-  driver                   User               @relation("DriverServiceRuns", fields: [driverId], references: [id])
-  vehicle                  Vehicle            @relation(fields: [vehicleId], references: [id])
-  route                    ServiceRoute?      @relation(fields: [routeId], references: [id], onDelete: SetNull)
-  bookings                 Trip[]
+  id                    String            @id @default(uuid()) @db.Uuid
+  runReference          String            @unique
+  direction             BookingDirection?
+  routeId               String?           @db.Uuid
+  bookingType           BookingType
+  travelDate            DateTime
+  driverId              String            @db.Uuid
+  vehicleId             String            @db.Uuid
+  status                ServiceRunStatus  @default(PLANNED)
+  seatCapacity          Int
+  reservedSeats         Int               @default(0)
+  notes                 String?
+  driverAcceptedAt      DateTime?
+  boardingStartedAt     DateTime?
+  startedAt             DateTime?
+  completedAt           DateTime?
+  cancelledAt           DateTime?
+  driverRejectionReason String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  driver                User              @relation("DriverServiceRuns", fields: [driverId], references: [id])
+  vehicle               Vehicle           @relation(fields: [vehicleId], references: [id])
+  route                 ServiceRoute?     @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  bookings              Trip[]
 
   @@index([driverId, travelDate])
   @@index([direction, bookingType, travelDate])
@@ -411,43 +444,43 @@ model ServiceRun {
 }
 
 model ServiceRegion {
-  id                 String                @id @default(uuid()) @db.Uuid
-  code               String                @unique
-  nameAr             String
-  nameEn             String?
-  countryCode        String
-  kind               RegionKind
-  isActive           Boolean               @default(true)
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-  baseDrivers        DriverProfile[]       @relation("DriverBaseRegion")
-  baseVehicles       Vehicle[]             @relation("VehicleBaseRegion")
-  driverAccesses     DriverRegionAccess[]
-  vehicleAccesses    VehicleRegionAccess[]
-  requiredByRoutes   RouteRequiredRegion[]
+  id                   String                      @id @default(uuid()) @db.Uuid
+  code                 String                      @unique
+  nameAr               String
+  nameEn               String?
+  countryCode          String
+  kind                 RegionKind
+  isActive             Boolean                     @default(true)
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  baseDrivers          DriverProfile[]             @relation("DriverBaseRegion")
+  baseVehicles         Vehicle[]                   @relation("VehicleBaseRegion")
+  driverAccesses       DriverRegionAccess[]
+  vehicleAccesses      VehicleRegionAccess[]
+  requiredByRoutes     RouteRequiredRegion[]
   documentRequirements RegionDocumentRequirement[]
-  driverDocuments    DriverDocument[]
-  vehicleDocuments   VehicleDocument[]
+  driverDocuments      DriverDocument[]
+  vehicleDocuments     VehicleDocument[]
 
   @@index([kind, countryCode, isActive])
 }
 
 model ServiceLocation {
-  id                 String         @id @default(uuid()) @db.Uuid
-  code               String         @unique
-  nameAr             String
-  nameEn             String?
-  type               LocationType
-  countryCode        String
-  city               String?
-  governorate        String?
-  latitude           Decimal?       @db.Decimal(10, 7)
-  longitude          Decimal?       @db.Decimal(10, 7)
-  isActive           Boolean        @default(true)
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
-  outgoingRoutes     ServiceRoute[] @relation("RouteOrigin")
-  incomingRoutes     ServiceRoute[] @relation("RouteDestination")
+  id             String         @id @default(uuid()) @db.Uuid
+  code           String         @unique
+  nameAr         String
+  nameEn         String?
+  type           LocationType
+  countryCode    String
+  city           String?
+  governorate    String?
+  latitude       Decimal?       @db.Decimal(10, 7)
+  longitude      Decimal?       @db.Decimal(10, 7)
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  outgoingRoutes ServiceRoute[] @relation("RouteOrigin")
+  incomingRoutes ServiceRoute[] @relation("RouteDestination")
 
   @@index([countryCode, type, isActive])
 }
@@ -478,77 +511,79 @@ model ServiceRoute {
 }
 
 model RouteRequiredRegion {
-  routeId   String        @db.Uuid
-  regionId  String        @db.Uuid
-  route     ServiceRoute  @relation(fields: [routeId], references: [id], onDelete: Cascade)
-  region    ServiceRegion @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  routeId  String        @db.Uuid
+  regionId String        @db.Uuid
+  route    ServiceRoute  @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  region   ServiceRegion @relation(fields: [regionId], references: [id], onDelete: Cascade)
 
   @@id([routeId, regionId])
   @@index([regionId])
 }
 
 model DriverRegionAccess {
-  id                String         @id @default(uuid()) @db.Uuid
-  driverProfileId   String         @db.Uuid
-  regionId          String         @db.Uuid
-  status            AccessStatus   @default(PENDING)
-  validFrom         DateTime?
-  validUntil        DateTime?
-  notes             String?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  driverProfile     DriverProfile  @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
-  region            ServiceRegion  @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  id              String        @id @default(uuid()) @db.Uuid
+  driverProfileId String        @db.Uuid
+  regionId        String        @db.Uuid
+  status          AccessStatus  @default(PENDING)
+  validFrom       DateTime?
+  validUntil      DateTime?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  region          ServiceRegion @relation(fields: [regionId], references: [id], onDelete: Cascade)
 
   @@unique([driverProfileId, regionId])
   @@index([regionId, status])
 }
 
 model VehicleRegionAccess {
-  id             String         @id @default(uuid()) @db.Uuid
-  vehicleId      String         @db.Uuid
-  regionId       String         @db.Uuid
-  status         AccessStatus   @default(PENDING)
-  permitNumber   String?
-  validFrom      DateTime?
-  validUntil     DateTime?
-  documentUrl    String?
-  notes          String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  vehicle        Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  region         ServiceRegion  @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  id           String        @id @default(uuid()) @db.Uuid
+  vehicleId    String        @db.Uuid
+  regionId     String        @db.Uuid
+  status       AccessStatus  @default(PENDING)
+  permitNumber String?
+  validFrom    DateTime?
+  validUntil   DateTime?
+  documentUrl  String?
+  notes        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  vehicle      Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  region       ServiceRegion @relation(fields: [regionId], references: [id], onDelete: Cascade)
 
   @@unique([vehicleId, regionId])
   @@index([regionId, status])
 }
 
 model MediaAsset {
-  id              String          @id @default(uuid()) @db.Uuid
+  id              String           @id @default(uuid()) @db.Uuid
   originalName    String
-  storedName      String          @unique
+  storedName      String           @unique
   mimeType        String
   sizeBytes       Int
   sha256          String
-  storagePath     String          @unique
+  storagePath     String           @unique
   purpose         MediaPurpose
-  visibility      MediaVisibility @default(PRIVATE)
-  status          MediaStatus     @default(PENDING)
-  uploadedById    String          @db.Uuid
-  approvedById    String?         @db.Uuid
+  visibility      MediaVisibility  @default(PRIVATE)
+  status          MediaStatus      @default(PENDING)
+  metadata        Json?
+  uploadedById    String           @db.Uuid
+  approvedById    String?          @db.Uuid
   approvedAt      DateTime?
   rejectedAt      DateTime?
   rejectionReason String?
   deletedAt       DateTime?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  uploadedBy      User            @relation("MediaUploadedBy", fields: [uploadedById], references: [id])
-  approvedBy      User?           @relation("MediaApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  avatarFor       DriverProfile?  @relation("DriverAvatarMedia")
-  primaryFor      Vehicle?        @relation("VehiclePrimaryMedia")
-  vehicleImage    VehicleImage?   @relation("VehicleImageMedia")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  uploadedBy      User             @relation("MediaUploadedBy", fields: [uploadedById], references: [id])
+  approvedBy      User?            @relation("MediaApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  avatarFor       DriverProfile?   @relation("DriverAvatarMedia")
+  primaryFor      Vehicle?         @relation("VehiclePrimaryMedia")
+  vehicleImage    VehicleImage?    @relation("VehicleImageMedia")
   driverDocument  DriverDocument?
   vehicleDocument VehicleDocument?
+  flightTicketFor Trip?            @relation("TripFlightTicket")
 
   @@index([purpose, status, createdAt])
   @@index([uploadedById, createdAt])
@@ -623,14 +658,14 @@ model RegionDocumentRequirement {
 }
 
 model TripStatusHistory {
-  id        String     @id @default(uuid()) @db.Uuid
-  tripId    String     @db.Uuid
+  id        String      @id @default(uuid()) @db.Uuid
+  tripId    String      @db.Uuid
   from      TripStatus?
   to        TripStatus
-  actorId   String     @db.Uuid
+  actorId   String      @db.Uuid
   note      String?
-  createdAt DateTime   @default(now())
-  trip      Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+  trip      Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
   @@index([tripId, createdAt])
 }
@@ -650,20 +685,44 @@ model AuditLog {
 }
 
 model Notification {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @db.Uuid
-  type       String
-  title      String
-  message    String
-  entityType String?
-  entityId   String?  @db.Uuid
-  link       String?
-  dedupeKey  String?  @unique
-  metadata   Json?
-  readAt     DateTime?
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String            @id @default(uuid()) @db.Uuid
+  userId           String            @db.Uuid
+  type             String
+  title            String
+  message          String
+  entityType       String?
+  entityId         String?           @db.Uuid
+  link             String?
+  dedupeKey        String?           @unique
+  metadata         Json?
+  readAt           DateTime?
+  createdAt        DateTime          @default(now())
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  whatsappDelivery WhatsAppDelivery?
 
   @@index([userId, readAt, createdAt])
+  @@index([userId, createdAt])
+}
+
+model WhatsAppDelivery {
+  id                String                 @id @default(uuid()) @db.Uuid
+  notificationId    String                 @unique @db.Uuid
+  userId            String                 @db.Uuid
+  recipientPhone    String
+  templateName      String
+  languageCode      String                 @default("ar")
+  parameters        Json
+  status            WhatsAppDeliveryStatus @default(PENDING)
+  attempts          Int                    @default(0)
+  nextAttemptAt     DateTime               @default(now())
+  providerMessageId String?
+  lastError         String?
+  sentAt            DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  notification      Notification           @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
   @@index([userId, createdAt])
 }

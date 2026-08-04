@@ -67,7 +67,14 @@ export class MediaController {
         file: { type: 'string', format: 'binary' },
         purpose: {
           type: 'string',
-          enum: ['DRIVER_AVATAR', 'VEHICLE_IMAGE', 'DRIVER_DOCUMENT', 'VEHICLE_DOCUMENT', 'OTHER']
+          enum: [
+            'DRIVER_AVATAR',
+            'VEHICLE_IMAGE',
+            'DRIVER_DOCUMENT',
+            'VEHICLE_DOCUMENT',
+            'FLIGHT_TICKET',
+            'OTHER'
+          ]
         },
         visibility: { type: 'string', enum: ['PUBLIC', 'PRIVATE'] }
       }

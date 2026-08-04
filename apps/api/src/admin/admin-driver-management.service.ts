@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { AccessStatus, DriverStatus, Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { normalizeInternationalPhone } from '../common/phone';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { AddVehicleImageDto } from './dto/add-vehicle-image.dto';
@@ -122,7 +123,9 @@ export class AdminDriverManagementService {
 
   async create(actor: AuthUser, dto: CreateDriverDto) {
     const email = dto.email.trim().toLowerCase();
-    const phone = dto.phone?.trim() || null;
+    const phone = dto.phone?.trim()
+      ? normalizeInternationalPhone(dto.phone)
+      : null;
     const plateNumber = dto.plateNumber.trim().toUpperCase();
     const licenseNumber = dto.licenseNumber?.trim().toUpperCase() || null;
 
@@ -172,6 +175,7 @@ export class AdminDriverManagementService {
           passwordHash,
           firstName: dto.firstName.trim(),
           lastName: dto.lastName.trim(),
+          whatsappOptIn: Boolean(phone),
           roles: { create: { roleId: role.id } },
           driverProfile: {
             create: {
