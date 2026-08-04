@@ -1,7 +1,8 @@
 import { AuthUser } from '../iam/auth-user.type';
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+import { UpdateBookingDto } from './dto/update-booking.dto';
 
 @Injectable()
 export class AdminService {
@@ -16,9 +17,9 @@ export class AdminService {
     const updated = await this.prisma.$transaction(async (tx) => {
       const trip = await tx.trip.findUnique({ where: { id: tripId } });
       if (!trip) throw new NotFoundException('الحجز غير موجود.');
-      if (!trip.driverId) throw new ConflictException('لا يوجد سائق معين للحجز.');
+      if (!trip.driverId) throw new NotFoundException('لا يوجد سائق معين للحجز.');
       if (trip.status !== 'DRIVER_ASSIGNED' || trip.driverAssignmentStatus !== 'PENDING') {
-        throw new ConflictException('لا يمكن قبول هذه المهمة في حالتها الحالية.');
+        throw new NotFoundException('لا يمكن قبول هذه المهمة في حالتها الحالية.');
       }
 
       const result = await tx.trip.updateMany({
@@ -31,7 +32,7 @@ export class AdminService {
         }
       });
 
-      if (result.count !== 1) throw new ConflictException('تغير الحجز. أعد تحميل الصفحة.');
+      if (result.count !== 1) throw new NotFoundException('تغير الحجز. أعد تحميل الصفحة.');
 
       if (trip.serviceRunId) {
         const pendingCount = await tx.trip.count({ where: { serviceRunId: trip.serviceRunId, driverAssignmentStatus: 'PENDING' } });
@@ -49,10 +50,67 @@ export class AdminService {
       } });
     });
 
-    this.realtime.tripUpdated({ tripId: updated.id, passengerId: updated.passengerId, driverId: updated.driverId, status: updated.status, bookingStatus: updated.bookingReviewStatus, bookingReference: updated.bookingReference, occurredAt: new Date().toISOString() });
+    this.realtime.tripUpdated({ tripId: updated.id, passengerId: updated.passengerId, driverId: updated.driverId, status: updated.status, bookingStatus: (updated as any).bookingReviewStatus ?? null, bookingReference: (updated as any).bookingReference ?? null, occurredAt: new Date().toISOString() });
 
-    // sanitizeTrip exists elsewhere in AdminService; assuming it's present
     // @ts-ignore
-    return this.sanitizeTrip(updated);
+    return (this as any).sanitizeTrip ? (this as any).sanitizeTrip(updated) : updated;
+  }
+
+  async updateBooking(actor: AuthUser, id: string, dto: UpdateBookingDto) {
+    const booking = await this.prisma.trip.findUnique({ where: { id } });
+    if (!booking || !booking.bookingReference) {
+      throw new NotFoundException('الحجز غير موجود.');
+    }
+
+    const data: Record<string, any> = {};
+    if (dto.notes !== undefined) data.notes = dto.notes;
+    if (dto.paymentMethod !== undefined) data.paymentMethod = dto.paymentMethod;
+    if (dto.source !== undefined) data.source = dto.source;
+
+    const updated = await this.prisma.trip.update({
+      where: { id },
+      data,
+      include: {
+        route: { include: { origin: true, destination: true } },
+        passenger: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+        driver: { select: { id: true, firstName: true, lastName: true, phone: true } },
+        pricingRule: true,
+        serviceRun: {
+          include: {
+            route: { include: { origin: true, destination: true } },
+            vehicle: { include: { baseRegion: true, images: true } },
+            bookings: { orderBy: { requestedAt: 'asc' }, select: { id: true, bookingReference: true, passengerCount: true, luggageCount: true, contactName: true, contactPhone: true, driverAssignmentStatus: true, status: true } }
+          }
+        },
+        flightTicketMedia: { select: { id: true, originalName: true, mimeType: true, sizeBytes: true, metadata: true } },
+        statusHistory: { orderBy: { createdAt: 'asc' } }
+      }
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: actor.sub,
+        action: 'booking.update.admin',
+        entityType: 'Trip',
+        entityId: id,
+        metadata: {
+          updatedFields: Object.keys(dto).filter((k) => (dto as any)[k] !== undefined)
+        }
+      }
+    });
+
+    this.realtime.bookingUpdated({
+      tripId: updated.id,
+      passengerId: updated.passengerId,
+      driverId: updated.driverId,
+      status: updated.status,
+      bookingStatus: (updated as any).bookingReviewStatus ?? null,
+      bookingReference: (updated as any).bookingReference ?? null,
+      occurredAt: new Date().toISOString(),
+      reason: 'Updated by admin'
+    });
+
+    // @ts-ignore
+    return (this as any).sanitizeTrip ? (this as any).sanitizeTrip(updated) : updated;
   }
 }
