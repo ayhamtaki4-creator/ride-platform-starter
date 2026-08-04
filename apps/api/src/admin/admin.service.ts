@@ -555,11 +555,15 @@ export class AdminService {
     tx: Prisma.TransactionClient,
     driverId: string,
     requestedVehicleId: string | undefined,
-    trip: Pick<Trip, 'routeId' | 'travelDate' | 'passengerCount' | 'luggageCount'>
+    trip: Pick<Trip, 'routeId' | 'travelDate' | 'passengerCount' | 'vehicleClass'>
   ): Promise<ActiveVehicle> {
+    const classConfig = await tx.vehicleClassConfig.findUnique({
+      where: { vehicleClass: trip.vehicleClass }
+    });
     const minimumCapacity = minimumVehicleCapacity(
+      trip.vehicleClass,
       trip.passengerCount,
-      trip.luggageCount
+      classConfig?.passengerCapacity
     );
     const driver = await tx.driverProfile.findUnique({
       where: { userId: driverId },
@@ -615,8 +619,8 @@ export class AdminService {
     if (!vehicle) {
       throw new ConflictException(
         requestedVehicleId
-          ? 'المركبة المحددة غير مؤهلة للمسار أو لا تلائم عدد المسافرين والحقائب.'
-          : 'لا توجد مركبة فعالة ومؤهلة لهذا المسار وعدد المسافرين والحقائب.'
+          ? 'المركبة المحددة غير مؤهلة للمسار أو لا تلائم فئة السيارة المطلوبة.'
+          : 'لا توجد مركبة فعالة ومؤهلة لهذا المسار وفئة السيارة المطلوبة.'
       );
     }
 

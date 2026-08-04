@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BookingDirection, BookingType } from '@prisma/client';
+import { BookingDirection, BookingType, VehicleClass } from '@prisma/client';
 import {
   IsDateString,
   IsEnum,
@@ -36,6 +36,11 @@ export class CreateBookingDto {
   @IsEnum(BookingType)
   bookingType!: BookingType;
 
+  @ApiPropertyOptional({ enum: VehicleClass, default: VehicleClass.SMALL })
+  @IsOptional()
+  @IsEnum(VehicleClass, { message: 'فئة السيارة غير صالحة.' })
+  vehicleClass: VehicleClass = VehicleClass.SMALL;
+
   @ApiProperty({ example: '2026-08-10' })
   @IsDateString()
   travelDate!: string;
@@ -51,29 +56,35 @@ export class CreateBookingDto {
   @MaxLength(40)
   flightNumber?: string;
 
-  @ApiProperty({
-    example: 2,
+  @ApiPropertyOptional({
+    example: 1,
     minimum: BOOKING_MIN_PASSENGERS,
-    maximum: BOOKING_MAX_PASSENGERS
+    maximum: BOOKING_MAX_PASSENGERS,
+    default: 1,
+    description: 'للتوافق مع حجوزات المقاعد المشتركة والعملاء القدامى'
   })
+  @IsOptional()
   @IsInt({ message: 'عدد الركاب يجب أن يكون رقمًا صحيحًا.' })
   @Min(BOOKING_MIN_PASSENGERS, { message: 'يجب أن يكون عدد الركاب راكبًا واحدًا على الأقل.' })
   @Max(BOOKING_MAX_PASSENGERS, {
     message: `الحد الأعلى للحجز الإلكتروني هو ${BOOKING_MAX_PASSENGERS} راكبًا.`
   })
-  passengerCount!: number;
+  passengerCount = 1;
 
-  @ApiProperty({
-    example: 3,
+  @ApiPropertyOptional({
+    example: 0,
     minimum: BOOKING_MIN_LUGGAGE,
-    maximum: BOOKING_MAX_LUGGAGE
+    maximum: BOOKING_MAX_LUGGAGE,
+    default: 0,
+    description: 'للتوافق مع الحجوزات القديمة فقط'
   })
+  @IsOptional()
   @IsInt({ message: 'عدد الحقائب يجب أن يكون رقمًا صحيحًا.' })
   @Min(BOOKING_MIN_LUGGAGE, { message: 'لا يمكن أن يكون عدد الحقائب سالبًا.' })
   @Max(BOOKING_MAX_LUGGAGE, {
     message: `الحد الأعلى للحجز الإلكتروني هو ${BOOKING_MAX_LUGGAGE} حقيبة.`
   })
-  luggageCount!: number;
+  luggageCount = 0;
 
   @ApiProperty({ example: 'مطار بيروت الدولي' })
   @IsString()

@@ -1,7 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { VehicleClass } from '@prisma/client';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpsertPricingRuleDto } from './dto/upsert-pricing-rule.dto';
+import { UpdateVehicleClassConfigDto } from './dto/update-vehicle-class-config.dto';
+import { DEFAULT_VEHICLE_CLASS_CONFIGS } from './vehicle-class';
 
 @Injectable()
 export class PricingService {
@@ -45,6 +48,46 @@ export class PricingService {
         route: { include: { origin: true, destination: true } }
       }
     });
+  }
+
+  async listVehicleClassConfigs() {
+    const configs = await this.prisma.vehicleClassConfig.findMany();
+    const byClass = new Map(configs.map((config) => [config.vehicleClass, config]));
+
+    return DEFAULT_VEHICLE_CLASS_CONFIGS.map((fallback) =>
+      byClass.get(fallback.vehicleClass) ?? {
+        ...fallback,
+        createdAt: null,
+        updatedAt: null
+      }
+    );
+  }
+
+  async updateVehicleClassConfig(
+    actor: AuthUser,
+    vehicleClass: VehicleClass,
+    dto: UpdateVehicleClassConfigDto
+  ) {
+    const config = await this.prisma.vehicleClassConfig.upsert({
+      where: { vehicleClass },
+      create: { vehicleClass, passengerCapacity: dto.passengerCapacity },
+      update: { passengerCapacity: dto.passengerCapacity }
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: actor.sub,
+        action: 'vehicle_class.capacity.update',
+        entityType: 'VehicleClassConfig',
+        entityId: vehicleClass,
+        metadata: {
+          vehicleClass,
+          passengerCapacity: config.passengerCapacity
+        }
+      }
+    });
+
+    return config;
   }
 
   async upsert(actor: AuthUser, dto: UpsertPricingRuleDto) {

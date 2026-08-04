@@ -1,0 +1,12 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { IsInt, Max, Min } from 'class-validator';
+
+export class UpdateVehicleClassConfigDto {
+  @ApiProperty({ example: 8, minimum: 1, maximum: 30 })
+  @Type(() => Number)
+  @IsInt({ message: 'سعة السيارة يجب أن تكون رقمًا صحيحًا.' })
+  @Min(1, { message: 'سعة السيارة يجب أن تكون شخصًا واحدًا على الأقل.' })
+  @Max(30, { message: 'سعة السيارة لا يمكن أن تتجاوز 30 شخصًا.' })
+  passengerCapacity!: number;
+}

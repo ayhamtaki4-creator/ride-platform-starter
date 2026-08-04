@@ -72,6 +72,7 @@ export type Trip = {
     requiredRegions?: Array<{ region: { id: string; code: string; nameAr: string } }>;
   } | null;
   bookingType?: BookingType | null;
+  vehicleClass?: VehicleClass;
   travelDate?: string | null;
   flightArrivalTime?: string | null;
   flightNumber?: string | null;
@@ -239,6 +240,7 @@ export type BookingQuote = {
   direction?: BookingDirection | null;
   bookingType: BookingType;
   vehicleClass: VehicleClass;
+  passengerCapacity: number;
   passengerCount: number;
   luggageCount: number;
   unitPassengerPrice: number;

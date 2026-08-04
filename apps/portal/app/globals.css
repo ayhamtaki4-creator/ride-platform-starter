@@ -1067,6 +1067,27 @@ textarea.input {
   margin-top: 0;
 }
 
+.vehicle-capacity-admin-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.capacity-admin-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.capacity-admin-card[data-vehicle-class="MEDIUM"] {
+  border-color: #e7c878;
+}
+
+.capacity-admin-card[data-vehicle-class="LARGE"] {
+  border-color: #d8c5ef;
+}
+
 .checkbox-row {
   display: flex;
   align-items: center;
@@ -2335,6 +2356,25 @@ textarea {
   transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
+.vehicle-choice-card {
+  appearance: none;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
+.vehicle-choice-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--primary);
+}
+
+.vehicle-choice-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .capacity-tier-card.is-selected {
   transform: translateY(-1px);
   border-color: var(--primary);
@@ -2365,7 +2405,7 @@ textarea {
   font-size: 14px;
 }
 
-.capacity-tier-heading span {
+.capacity-tier-heading .vehicle-selected-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2376,6 +2416,17 @@ textarea {
   font-size: 9px;
   font-weight: 900;
   white-space: nowrap;
+}
+
+.capacity-tier-heading .vehicle-class-title {
+  display: grid;
+  gap: 5px;
+}
+
+.vehicle-capacity-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .capacity-tier-limits {

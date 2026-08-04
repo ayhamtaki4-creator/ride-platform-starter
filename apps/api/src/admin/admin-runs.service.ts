@@ -13,6 +13,7 @@ import { randomInt } from 'crypto';
 import { ComplianceService } from '../compliance/compliance.service';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
+import { minimumVehicleCapacity } from '../pricing/vehicle-class';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { CreateServiceRunDto } from './dto/create-service-run.dto';
 import { ReplaceRunDriverDto } from './dto/replace-run-driver.dto';
@@ -258,7 +259,7 @@ export class AdminRunsService {
       }
 
       this.assertRunEditable(run.status);
-      this.assertBookingCompatible(run, booking);
+      await this.assertBookingCompatible(tx, run, booking);
 
       if (booking.serviceRunId === run.id) {
         throw new ConflictException('الحجز موجود بالفعل ضمن هذه الرحلة.');
@@ -467,7 +468,7 @@ export class AdminRunsService {
 
       this.assertRunEditable(source.status);
       this.assertRunEditable(target.status);
-      this.assertBookingCompatible(target, booking);
+      await this.assertBookingCompatible(tx, target, booking);
 
       if (target.reservedSeats + booking.passengerCount > target.seatCapacity) {
         throw new ConflictException('سعة الرحلة الهدف غير كافية.');
@@ -793,19 +794,23 @@ export class AdminRunsService {
     }
   }
 
-  private assertBookingCompatible(
+  private async assertBookingCompatible(
+    tx: Prisma.TransactionClient,
     run: {
       routeId: string | null;
       direction: string | null;
       bookingType: BookingType;
       travelDate: Date;
       reservedSeats: number;
+      seatCapacity: number;
     },
     booking: {
       bookingReviewStatus: string;
       routeId: string | null;
       direction: string | null;
       bookingType: BookingType | null;
+      vehicleClass: 'SMALL' | 'MEDIUM' | 'LARGE';
+      passengerCount: number;
       travelDate: Date | null;
     }
   ) {
@@ -827,6 +832,21 @@ export class AdminRunsService {
     }
     if (run.bookingType === 'PRIVATE_CAR' && run.reservedSeats > 0) {
       throw new ConflictException('رحلة السيارة الخاصة تقبل حجزًا واحدًا فقط.');
+    }
+    if (run.bookingType === 'PRIVATE_CAR') {
+      const classConfig = await tx.vehicleClassConfig.findUnique({
+        where: { vehicleClass: booking.vehicleClass }
+      });
+      const requiredCapacity = minimumVehicleCapacity(
+        booking.vehicleClass,
+        booking.passengerCount,
+        classConfig?.passengerCapacity
+      );
+      if (run.seatCapacity < requiredCapacity) {
+        throw new ConflictException(
+          `المركبة لا تلائم فئة السيارة المطلوبة. السعة المطلوبة ${requiredCapacity} أشخاص.`
+        );
+      }
     }
   }
 

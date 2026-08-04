@@ -47,6 +47,13 @@ export type DynamicPricingRule = {
   isActive: boolean;
 };
 
+export type VehicleClassConfig = {
+  vehicleClass: "SMALL" | "MEDIUM" | "LARGE";
+  passengerCapacity: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
 export type ServiceRoute = {
   id: string;
   code: string;
@@ -65,17 +72,7 @@ export type ServiceRoute = {
   pricingRules: DynamicPricingRule[];
   bookingTypes: Array<"SHARED_SEAT" | "PRIVATE_CAR">;
   bookable: boolean;
-  capacityPolicy?: {
-    minPassengers: number;
-    maxPassengers: number;
-    minLuggage: number;
-    maxLuggage: number;
-    classes: Array<{
-      vehicleClass: "SMALL" | "MEDIUM" | "LARGE";
-      maxPassengers: number;
-      maxLuggage: number;
-    }>;
-  };
+  vehicleClasses?: VehicleClassConfig[];
 };
 
 export type MediaAsset = {

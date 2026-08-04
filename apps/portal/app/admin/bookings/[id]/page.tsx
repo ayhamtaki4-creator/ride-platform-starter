@@ -12,6 +12,7 @@ import {
   SERVICE_RUN_STATUS_LABELS,
   Trip,
   TRIP_STATUS_LABELS,
+  VEHICLE_CLASS_LABELS,
 } from "@/lib/types";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -137,10 +138,11 @@ export default function AdminBookingDetailPage() {
                     </strong>
                   </div>
                   <div>
-                    <span>المسافرون والحقائب</span>
+                    <span>{booking.bookingType === "PRIVATE_CAR" ? "فئة السيارة" : "الحجز المشترك"}</span>
                     <strong>
-                      {booking.passengerCount ?? 1} مسافر ·{" "}
-                      {booking.luggageCount ?? 0} حقيبة
+                      {booking.bookingType === "PRIVATE_CAR"
+                        ? VEHICLE_CLASS_LABELS[booking.vehicleClass ?? "SMALL"]
+                        : "مقعد واحد"}
                     </strong>
                   </div>
                   <div>
@@ -202,7 +204,7 @@ export default function AdminBookingDetailPage() {
                       </div>
                     </div>
                     <div className="schedule-list">
-                      <strong>ركاب التشغيل المشترك</strong>
+                      <strong>{booking.bookingType === "PRIVATE_CAR" ? "الحجز الخاص" : "ركاب التشغيل المشترك"}</strong>
                       {booking.serviceRun.bookings.map((item) => (
                         <div className="schedule-row" key={item.id}>
                           <div>
@@ -213,7 +215,9 @@ export default function AdminBookingDetailPage() {
                             </small>
                           </div>
                           <span>
-                            {item.passengerCount} مسافر · {item.luggageCount} حقيبة
+                            {booking.bookingType === "PRIVATE_CAR"
+                              ? VEHICLE_CLASS_LABELS[booking.vehicleClass ?? "SMALL"]
+                              : "مقعد واحد"}
                           </span>
                         </div>
                       ))}

@@ -27,6 +27,7 @@ import {
   SERVICE_RUN_STATUS_LABELS,
   Trip,
   TRIP_STATUS_LABELS,
+  VEHICLE_CLASS_LABELS,
 } from "@/lib/types";
 import { VehicleGallery } from "./VehicleGallery";
 
@@ -148,8 +149,7 @@ function BookingDetails({
           <p>{status.description}</p>
           <div className="rider-detail-hero-facts">
             <span><Icon name="calendar" size={18} />{formatBookingDate(booking.travelDate)}</span>
-            <span><Icon name="users" size={18} />{booking.passengerCount ?? 1} مسافر</span>
-            <span><Icon name="luggage" size={18} />{booking.luggageCount ?? 0} حقيبة</span>
+            {booking.bookingType === "PRIVATE_CAR" ? <span><Icon name="car" size={18} />{VEHICLE_CLASS_LABELS[booking.vehicleClass ?? "SMALL"]}</span> : <span><Icon name="users" size={18} />مقعد واحد</span>}
           </div>
         </div>
         <div className="rider-detail-price">

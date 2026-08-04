@@ -4,11 +4,15 @@ import {
   Injectable,
   NotFoundException
 } from '@nestjs/common';
-import { Prisma, ServiceRunStatus } from '@prisma/client';
+import { Prisma, ServiceRunStatus, VehicleClass } from '@prisma/client';
 import { ComplianceService } from '../compliance/compliance.service';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
-import { BOOKING_CAPACITY_POLICY, minimumVehicleCapacity } from '../pricing/vehicle-class';
+import {
+  DEFAULT_VEHICLE_CLASS_CONFIGS,
+  minimumVehicleCapacity,
+  VehicleClassCapacity
+} from '../pricing/vehicle-class';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { CreateRegionDto } from './dto/create-region.dto';
 import { CreateRouteDto } from './dto/create-route.dto';
@@ -48,26 +52,32 @@ export class RoutesService {
   ) {}
 
   async publicList() {
-    const routes = await this.prisma.serviceRoute.findMany({
-      where: {
-        isActive: true,
-        origin: { isActive: true },
-        destination: { isActive: true }
-      },
-      orderBy: [{ routeType: 'asc' }, { nameAr: 'asc' }],
-      include: routeInclude
-    });
+    const [routes, vehicleClasses] = await Promise.all([
+      this.prisma.serviceRoute.findMany({
+        where: {
+          isActive: true,
+          origin: { isActive: true },
+          destination: { isActive: true }
+        },
+        orderBy: [{ routeType: 'asc' }, { nameAr: 'asc' }],
+        include: routeInclude
+      }),
+      this.vehicleClassConfigs()
+    ]);
 
-    return routes.map((route) => this.serializeRoute(route, true));
+    return routes.map((route) => this.serializeRoute(route, true, vehicleClasses));
   }
 
   async publicDetail(id: string) {
-    const route = await this.prisma.serviceRoute.findFirst({
-      where: { id, isActive: true },
-      include: routeInclude
-    });
+    const [route, vehicleClasses] = await Promise.all([
+      this.prisma.serviceRoute.findFirst({
+        where: { id, isActive: true },
+        include: routeInclude
+      }),
+      this.vehicleClassConfigs()
+    ]);
     if (!route) throw new NotFoundException('المسار غير موجود أو غير فعال.');
-    return this.serializeRoute(route, true);
+    return this.serializeRoute(route, true, vehicleClasses);
   }
 
   adminRegions() {
@@ -344,9 +354,14 @@ export class RoutesService {
     }
 
     const requiredRegionIds = route.requiredRegions.map((entry) => entry.regionId);
+    const vehicleClass = query.vehicleClass ?? VehicleClass.SMALL;
+    const classConfig = await this.prisma.vehicleClassConfig.findUnique({
+      where: { vehicleClass }
+    });
     const minimumCapacity = minimumVehicleCapacity(
+      vehicleClass,
       query.passengerCount,
-      query.luggageCount
+      classConfig?.passengerCapacity
     );
     const requirements = await this.compliance.requirementsForRegions(
       this.prisma,
@@ -551,7 +566,11 @@ export class RoutesService {
       passengerPrice: unknown;
       currency: string;
     }>;
-  }>(route: TRoute, publicView: boolean) {
+  }>(
+    route: TRoute,
+    publicView: boolean,
+    vehicleClasses: readonly VehicleClassCapacity[] = DEFAULT_VEHICLE_CLASS_CONFIGS
+  ) {
     const activeRules = route.pricingRules.filter((rule) => rule.isActive);
     const pricingRules = publicView
       ? activeRules.map((rule) => ({
@@ -567,8 +586,19 @@ export class RoutesService {
       pricingRules,
       bookingTypes: Array.from(new Set(activeRules.map((rule) => rule.bookingType))),
       bookable: activeRules.length > 0,
-      capacityPolicy: { ...BOOKING_CAPACITY_POLICY }
+      vehicleClasses
     };
+  }
+
+  private async vehicleClassConfigs(): Promise<VehicleClassCapacity[]> {
+    const configs = await this.prisma.vehicleClassConfig.findMany();
+    const byClass = new Map(configs.map((config) => [config.vehicleClass, config]));
+
+    return DEFAULT_VEHICLE_CLASS_CONFIGS.map((fallback) => ({
+      vehicleClass: fallback.vehicleClass,
+      passengerCapacity:
+        byClass.get(fallback.vehicleClass)?.passengerCapacity ?? fallback.passengerCapacity
+    }));
   }
 
   private dayBounds(value: Date) {

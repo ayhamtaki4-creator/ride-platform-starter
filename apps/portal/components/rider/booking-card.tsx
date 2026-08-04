@@ -4,6 +4,7 @@ import {
   BOOKING_TYPE_LABELS,
   DIRECTION_LABELS,
   Trip,
+  VEHICLE_CLASS_LABELS,
 } from "@/lib/types";
 import {
   formatBookingDate,
@@ -51,8 +52,7 @@ export function RiderBookingCard({
 
       <div className="rider-booking-facts">
         <span><Icon name="calendar" size={17} />{formatBookingDate(booking.travelDate, { day: "numeric", month: "long", year: "numeric" })}</span>
-        <span><Icon name="users" size={17} />{booking.passengerCount ?? 1} مسافر</span>
-        <span><Icon name="luggage" size={17} />{booking.luggageCount ?? 0} حقيبة</span>
+        {booking.bookingType === "PRIVATE_CAR" ? <span><Icon name="car" size={17} />{VEHICLE_CLASS_LABELS[booking.vehicleClass ?? "SMALL"]}</span> : <span><Icon name="users" size={17} />مقعد واحد</span>}
         <span><Icon name="car" size={17} />{booking.bookingType ? BOOKING_TYPE_LABELS[booking.bookingType] : "رحلة"}</span>
       </div>
 

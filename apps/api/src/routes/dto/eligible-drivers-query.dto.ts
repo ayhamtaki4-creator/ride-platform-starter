@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { VehicleClass } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsDateString, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import {
   BOOKING_MAX_LUGGAGE,
   BOOKING_MAX_PASSENGERS,
@@ -13,18 +14,25 @@ export class EligibleDriversQueryDto {
   @IsDateString()
   travelDate!: string;
 
-  @ApiProperty({
-    example: 2,
+  @ApiPropertyOptional({ enum: VehicleClass, default: VehicleClass.SMALL })
+  @IsOptional()
+  @IsEnum(VehicleClass, { message: 'فئة السيارة غير صالحة.' })
+  vehicleClass: VehicleClass = VehicleClass.SMALL;
+
+  @ApiPropertyOptional({
+    example: 1,
     minimum: BOOKING_MIN_PASSENGERS,
-    maximum: BOOKING_MAX_PASSENGERS
+    maximum: BOOKING_MAX_PASSENGERS,
+    default: 1
   })
+  @IsOptional()
   @Type(() => Number)
   @IsInt({ message: 'عدد الركاب يجب أن يكون رقمًا صحيحًا.' })
   @Min(BOOKING_MIN_PASSENGERS, { message: 'يجب أن يكون عدد الركاب راكبًا واحدًا على الأقل.' })
   @Max(BOOKING_MAX_PASSENGERS, {
     message: `الحد الأعلى للحجز الإلكتروني هو ${BOOKING_MAX_PASSENGERS} راكبًا.`
   })
-  passengerCount!: number;
+  passengerCount = 1;
 
   @ApiPropertyOptional({
     example: 2,

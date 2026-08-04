@@ -303,6 +303,13 @@ model PricingRule {
   @@index([isActive, routeId, bookingType, vehicleClass])
 }
 
+model VehicleClassConfig {
+  vehicleClass      VehicleClass @id
+  passengerCapacity Int
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
 model Trip {
   id                       String               @id @default(uuid()) @db.Uuid
   passengerId              String               @db.Uuid
@@ -321,6 +328,7 @@ model Trip {
   bookingReference         String?              @unique
   direction                BookingDirection?
   bookingType              BookingType?
+  vehicleClass             VehicleClass          @default(SMALL)
   travelDate               DateTime?
   flightArrivalTime        String?
   flightNumber             String?

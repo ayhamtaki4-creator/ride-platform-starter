@@ -16,6 +16,7 @@ import {
   ServiceRun,
   ServiceRunRealtimeEvent,
   Trip,
+  VEHICLE_CLASS_LABELS,
 } from "@/lib/types";
 
 type AdminDriver = {
@@ -229,7 +230,7 @@ subtitle={`${
                 <option value="">اختر حجزًا</option>
                 {compatibleBookings.map((booking) => (
                   <option key={booking.id} value={booking.id}>
-                    {booking.bookingReference} · {booking.contactName} · {booking.passengerCount} مسافر
+                    {booking.bookingReference} · {booking.contactName} · {booking.bookingType === "PRIVATE_CAR" ? VEHICLE_CLASS_LABELS[booking.vehicleClass ?? "SMALL"] : "مقعد واحد"}
                   </option>
                 ))}
               </select>
@@ -300,7 +301,7 @@ subtitle={`${
                     <th>الترتيب</th>
                     <th>الحجز والمسافر</th>
                     <th>الهاتف</th>
-                    <th>المقاعد/الحقائب</th>
+                    <th>{run.bookingType === "PRIVATE_CAR" ? "فئة السيارة" : "المقاعد"}</th>
                     <th>الالتقاط والوصول</th>
                     <th>الطائرة</th>
                     <th>الحضور</th>
@@ -313,7 +314,7 @@ subtitle={`${
                       <td>{booking.pickupOrder ?? "—"}</td>
                       <td><strong>{booking.bookingReference}</strong><br /><small>{booking.contactName || `${booking.passenger?.firstName} ${booking.passenger?.lastName || ""}`}</small></td>
                       <td>{booking.contactPhone || booking.passenger?.phone || "—"}</td>
-                      <td>{booking.passengerCount} / {booking.luggageCount}</td>
+                      <td>{booking.bookingType === "PRIVATE_CAR" ? VEHICLE_CLASS_LABELS[booking.vehicleClass ?? "SMALL"] : "مقعد واحد"}</td>
                       <td><small>{booking.pickupAddress}<br />← {booking.dropoffAddress}</small></td>
                       <td>{booking.flightNumber || "—"}<br /><small>{booking.flightArrivalTime || "—"}</small></td>
                       <td><span className="status">{SERVICE_RUN_PASSENGER_STATUS_LABELS[booking.serviceRunPassengerStatus]}</span></td>

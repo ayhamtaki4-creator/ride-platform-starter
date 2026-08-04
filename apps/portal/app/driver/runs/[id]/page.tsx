@@ -13,6 +13,7 @@ import {
   ServiceRun,
   ServiceRunPassengerStatus,
   ServiceRunRealtimeEvent,
+  VEHICLE_CLASS_LABELS,
 } from "@/lib/types";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -237,7 +238,7 @@ subtitle={`${
                 <div className="booking-meta">
                   <span>{booking.contactName || `${booking.passenger?.firstName} ${booking.passenger?.lastName || ""}`}</span>
                   <span>{booking.contactPhone || booking.passenger?.phone || "—"}</span>
-                  <span>{booking.passengerCount} مسافر · {booking.luggageCount} حقيبة</span>
+                  <span>{booking.bookingType === "PRIVATE_CAR" ? VEHICLE_CLASS_LABELS[booking.vehicleClass ?? "SMALL"] : "مقعد واحد"}</span>
                   <span>{booking.flightNumber || "دون رقم طائرة"} · {booking.flightArrivalTime || "—"}</span>
                 </div>
 

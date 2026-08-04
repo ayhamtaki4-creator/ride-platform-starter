@@ -19,6 +19,7 @@ import {
   Trip,
   TripRealtimeEvent,
   TRIP_STATUS_LABELS,
+  VEHICLE_CLASS_LABELS,
 } from "@/lib/types";
 
 type DriverProfile = {
@@ -396,8 +397,9 @@ export default function DriverPage() {
                         : "رحلة"}
                     </span>
                     <span>
-                      {trip.passengerCount ?? 1} مسافر ·{" "}
-                      {trip.luggageCount ?? 0} حقيبة
+                      {trip.bookingType === "PRIVATE_CAR"
+                        ? VEHICLE_CLASS_LABELS[trip.vehicleClass ?? "SMALL"]
+                        : "مقعد واحد"}
                     </span>
                     <span>{TRIP_STATUS_LABELS[trip.status]}</span>
                   </div>

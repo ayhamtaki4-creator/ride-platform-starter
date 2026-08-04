@@ -7,7 +7,7 @@ import { BookingDirection, Prisma } from '@prisma/client';
 import { randomInt } from 'crypto';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
-import { resolveVehicleClass } from '../pricing/vehicle-class';
+import { defaultVehicleClassCapacity } from '../pricing/vehicle-class';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { BookingQuoteDto } from './dto/booking-quote.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
@@ -148,26 +148,33 @@ export class BookingsService {
       throw new BadRequestException('يجب تحديد routeId أو direction، وليس كليهما.');
     }
 
-    const vehicleClass = resolveVehicleClass(
-      dto.bookingType,
-      dto.passengerCount,
-      dto.luggageCount
-    );
-    const rule = await this.prisma.pricingRule.findFirst({
-      where: {
-        ...(dto.routeId ? { routeId: dto.routeId } : { direction: dto.direction }),
-        bookingType: dto.bookingType,
-        vehicleClass,
-        isActive: true,
-        ...(dto.routeId ? { route: { isActive: true } } : {})
-      },
-      include: {
-        route: { include: { origin: true, destination: true } }
-      }
-    });
+    const vehicleClass = dto.bookingType === 'PRIVATE_CAR' ? dto.vehicleClass : 'SMALL';
+    const [rule, classConfig] = await Promise.all([
+      this.prisma.pricingRule.findFirst({
+        where: {
+          ...(dto.routeId ? { routeId: dto.routeId } : { direction: dto.direction }),
+          bookingType: dto.bookingType,
+          vehicleClass,
+          isActive: true,
+          ...(dto.routeId ? { route: { isActive: true } } : {})
+        },
+        include: {
+          route: { include: { origin: true, destination: true } }
+        }
+      }),
+      this.prisma.vehicleClassConfig.findUnique({ where: { vehicleClass } })
+    ]);
 
     if (!rule) {
       throw new NotFoundException('لا توجد قاعدة سعر فعالة لهذا المسار ونوع الحجز.');
+    }
+
+    const passengerCapacity =
+      classConfig?.passengerCapacity ?? defaultVehicleClassCapacity(vehicleClass);
+    if (dto.bookingType === 'PRIVATE_CAR' && dto.passengerCount > passengerCapacity) {
+      throw new BadRequestException(
+        `سعة الفئة المختارة هي ${passengerCapacity} أشخاص. اختر فئة أكبر.`
+      );
     }
 
     const multiplier = dto.bookingType === 'SHARED_SEAT' ? dto.passengerCount : 1;
@@ -182,6 +189,7 @@ export class BookingsService {
       direction: rule.direction,
       bookingType: dto.bookingType,
       vehicleClass,
+      passengerCapacity,
       passengerCount: dto.passengerCount,
       luggageCount: dto.luggageCount,
       unitPassengerPrice: Number(rule.passengerPrice),
@@ -205,6 +213,7 @@ export class BookingsService {
       routeId: dto.routeId,
       direction: dto.direction,
       bookingType: dto.bookingType,
+      vehicleClass: dto.vehicleClass,
       passengerCount: dto.passengerCount,
       luggageCount: dto.luggageCount
     });
@@ -230,6 +239,7 @@ export class BookingsService {
         bookingReference,
         direction: quote.direction,
         bookingType: dto.bookingType,
+        vehicleClass: quote.vehicleClass,
         travelDate,
         flightArrivalTime: dto.flightArrivalTime?.trim() || null,
         flightNumber: dto.flightNumber?.trim() || null,
