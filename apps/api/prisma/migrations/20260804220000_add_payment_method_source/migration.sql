@@ -1,0 +1,9 @@
+BEGIN;
+
+ALTER TABLE "Trip"
+  ADD COLUMN IF NOT EXISTS "paymentMethod" TEXT;
+
+ALTER TABLE "Trip"
+  ADD COLUMN IF NOT EXISTS "source" TEXT;
+
+COMMIT;
