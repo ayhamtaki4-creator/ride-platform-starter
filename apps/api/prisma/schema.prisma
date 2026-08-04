@@ -162,6 +162,14 @@ enum WhatsAppDeliveryStatus {
   SKIPPED
 }
 
+enum TelegramDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
 model User {
   id                       String             @id @default(uuid()) @db.Uuid
   email                    String             @unique
@@ -400,6 +408,7 @@ model Trip {
   serviceRun                ServiceRun?               @relation(fields: [serviceRunId], references: [id], onDelete: SetNull)
   flightTicketMedia         MediaAsset?               @relation("TripFlightTicket", fields: [flightTicketMediaId], references: [id], onDelete: SetNull)
   statusHistory             TripStatusHistory[]
+  telegramDelivery          TelegramDelivery?
 
   @@index([passengerId, requestedAt])
   @@index([driverId, requestedAt])
@@ -725,4 +734,26 @@ model WhatsAppDelivery {
 
   @@index([status, nextAttemptAt])
   @@index([userId, createdAt])
+}
+
+model TelegramDelivery {
+  id                String                 @id @default(uuid()) @db.Uuid
+  tripId            String?                @unique @db.Uuid
+  dedupeKey         String                 @unique
+  chatId            String
+  messageText       String
+  buttonText        String?
+  buttonUrl         String?
+  status            TelegramDeliveryStatus @default(PENDING)
+  attempts          Int                    @default(0)
+  nextAttemptAt     DateTime               @default(now())
+  providerMessageId String?
+  lastError         String?
+  sentAt            DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  trip              Trip?                  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([createdAt])
 }

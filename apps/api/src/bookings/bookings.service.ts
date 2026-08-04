@@ -10,6 +10,7 @@ import { MediaService } from '../media/media.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { defaultVehicleClassCapacity } from '../pricing/vehicle-class';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+import { TelegramService } from '../telegram/telegram.service';
 import { BookingQuoteDto } from './dto/booking-quote.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
 
@@ -145,7 +146,8 @@ export class BookingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeEventsService,
-    private readonly media: MediaService
+    private readonly media: MediaService,
+    private readonly telegram: TelegramService
   ) {}
 
   async quote(dto: BookingQuoteDto) {
@@ -220,7 +222,10 @@ export class BookingsService {
         },
         include: bookingInclude
       });
-      if (existing) return this.serialize(existing);
+      if (existing) {
+        await this.telegram.enqueueBookingCreated(existing.id);
+        return this.serialize(existing);
+      }
     }
 
     const travelDate = new Date(dto.travelDate);
@@ -336,7 +341,10 @@ export class BookingsService {
           },
           include: bookingInclude
         });
-        if (existing) return this.serialize(existing);
+        if (existing) {
+          await this.telegram.enqueueBookingCreated(existing.id);
+          return this.serialize(existing);
+        }
       }
       throw error;
     }
@@ -360,6 +368,8 @@ export class BookingsService {
         }
       }
     });
+
+    await this.telegram.enqueueBookingCreated(booking.id);
 
     this.realtime.bookingCreated({
       tripId: booking.id,

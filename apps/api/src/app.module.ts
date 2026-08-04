@@ -16,6 +16,7 @@ import { RoutesModule } from './routes/routes.module';
 import { TripsModule } from './trips/trips.module';
 import { UsersModule } from './users/users.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { TelegramModule } from './telegram/telegram.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 
 @Module({
@@ -25,6 +26,7 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     MediaModule,
     ComplianceModule,
     AuthModule,
+    TelegramModule,
     WhatsAppModule,
     RealtimeModule,
     NotificationsModule,
