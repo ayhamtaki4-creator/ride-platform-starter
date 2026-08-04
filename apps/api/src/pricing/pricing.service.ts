@@ -70,8 +70,19 @@ export class PricingService {
   ) {
     const config = await this.prisma.vehicleClassConfig.upsert({
       where: { vehicleClass },
-      create: { vehicleClass, passengerCapacity: dto.passengerCapacity },
-      update: { passengerCapacity: dto.passengerCapacity }
+      create: {
+        vehicleClass,
+        passengerCapacity: dto.passengerCapacity,
+        ...(dto.luggageCapacity !== undefined
+          ? { luggageCapacity: dto.luggageCapacity }
+          : {})
+      },
+      update: {
+        passengerCapacity: dto.passengerCapacity,
+        ...(dto.luggageCapacity !== undefined
+          ? { luggageCapacity: dto.luggageCapacity }
+          : {})
+      }
     });
 
     await this.prisma.auditLog.create({
@@ -82,7 +93,8 @@ export class PricingService {
         entityId: vehicleClass,
         metadata: {
           vehicleClass,
-          passengerCapacity: config.passengerCapacity
+          passengerCapacity: config.passengerCapacity,
+          luggageCapacity: config.luggageCapacity
         }
       }
     });

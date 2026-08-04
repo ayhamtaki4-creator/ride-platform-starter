@@ -10,11 +10,14 @@
     "test:realtime": "node scripts/test-realtime-dispatch.mjs"
   },
   "dependencies": {
+    "date-fns": "4.1.0",
     "leaflet": "1.9.4",
     "next": "16.2.12",
     "react": "19.2.8",
+    "react-datepicker": "9.1.0",
     "react-dom": "19.2.8",
     "react-leaflet": "5.0.0",
+    "react-phone-input-2": "2.15.1",
     "socket.io-client": "4.8.3"
   },
   "devDependencies": {

@@ -2,8 +2,12 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { format, parse } from "date-fns";
+import { ar } from "date-fns/locale";
+import DatePicker from "react-datepicker";
 import { useAuth } from "./auth-provider";
 import { Icon } from "./ui/icon";
+import { InternationalPhoneInput } from "./ui/international-phone-input";
 import { useToast } from "./ui/toast-provider";
 import { apiFetch, apiUpload } from "@/lib/api";
 import {
@@ -29,12 +33,15 @@ import {
   VEHICLE_CLASS_LABELS,
 } from "@/lib/types";
 
-const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+const tomorrowDate = new Date();
+tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+tomorrowDate.setHours(0, 0, 0, 0);
+const tomorrow = format(tomorrowDate, "yyyy-MM-dd");
 const stepTitles = ["المسار", "الموعد والسيارة", "بيانات المسافر", "المراجعة"];
 const DEFAULT_VEHICLE_CLASSES: VehicleClassConfig[] = [
-  { vehicleClass: "SMALL", passengerCapacity: 3 },
-  { vehicleClass: "MEDIUM", passengerCapacity: 4 },
-  { vehicleClass: "LARGE", passengerCapacity: 8 },
+  { vehicleClass: "SMALL", passengerCapacity: 3, luggageCapacity: 4 },
+  { vehicleClass: "MEDIUM", passengerCapacity: 4, luggageCapacity: 5 },
+  { vehicleClass: "LARGE", passengerCapacity: 8, luggageCapacity: 8 },
 ];
 
 type BookingFormState = PendingBookingForm;
@@ -53,6 +60,18 @@ function formatArrivalDate(value: string) {
     month: "long",
     year: "numeric",
   }).format(date);
+}
+
+function parseDateValue(value: string) {
+  if (!value) return null;
+  const date = parse(value, "yyyy-MM-dd", new Date());
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseTimeValue(value: string) {
+  if (!value) return null;
+  const time = parse(value, "HH:mm", new Date());
+  return Number.isNaN(time.getTime()) ? null : time;
 }
 
 function preferredBookingType(route: ServiceRoute, current?: BookingType): BookingType {
@@ -118,6 +137,9 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   const selectedClassConfig =
     vehicleClasses.find((config) => config.vehicleClass === form.vehicleClass) ??
     DEFAULT_VEHICLE_CLASSES.find((config) => config.vehicleClass === form.vehicleClass)!;
+  const isTicketUploadEnabled = Boolean(
+    selectedRoute?.requiresFlightDetails && selectedRoute.flightTicketUploadEnabled !== false,
+  );
 
   function tierPrice(vehicleClass: VehicleClass) {
     const rule = selectedRoute?.pricingRules.find(
@@ -197,6 +219,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
 
   function chooseRoute(route: ServiceRoute) {
     const bookingType = preferredBookingType(route, form.bookingType);
+    const ticketUploadEnabled =
+      route.requiresFlightDetails && route.flightTicketUploadEnabled !== false;
     setForm((current) => ({
       ...current,
       routeId: route.id,
@@ -206,7 +230,13 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       dropoffAddress: route.destination.nameAr,
       flightArrivalTime: route.requiresFlightDetails ? current.flightArrivalTime : "",
       flightNumber: route.requiresFlightDetails ? current.flightNumber : "",
+      flightTicketMediaId: ticketUploadEnabled ? current.flightTicketMediaId : "",
+      flightTicketFileName: ticketUploadEnabled ? current.flightTicketFileName : "",
     }));
+    if (!ticketUploadEnabled) {
+      setTicketExtraction(null);
+      void deletePendingTicket(draftId).catch(() => undefined);
+    }
     setQuote(null);
     setError("");
   }
@@ -244,7 +274,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       step === 2 &&
       selectedRoute?.requiresFlightDetails &&
       (!form.flightArrivalTime || !form.flightNumber.trim()) &&
-      !(!isPassenger && form.flightTicketFileName)
+      !(!isPassenger && isTicketUploadEnabled && form.flightTicketFileName)
     ) {
       setError("أرفق تذكرة الطيران أو أدخل وقت الوصول ورقم الرحلة.");
       return false;
@@ -318,6 +348,10 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
 
   async function handleTicketSelected(file: File | undefined) {
     if (!file) return;
+    if (!isTicketUploadEnabled) {
+      setError("إرفاق تذكرة الطيران غير متاح لهذا المسار حاليًا.");
+      return;
+    }
     if (file.size > 10 * 1024 * 1024) {
       setError("حجم تذكرة الطيران يجب ألا يتجاوز 10 ميغابايت.");
       return;
@@ -448,7 +482,21 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       };
 
       try {
-        if (candidate.flightTicketFileName && !candidate.flightTicketMediaId) {
+        const route = routes.find((item) => item.id === candidate.routeId);
+        const canUploadTicket = Boolean(
+          route?.requiresFlightDetails && route.flightTicketUploadEnabled !== false,
+        );
+
+        if (!canUploadTicket && candidate.flightTicketFileName) {
+          candidate = {
+            ...candidate,
+            flightTicketMediaId: "",
+            flightTicketFileName: "",
+          };
+          await deletePendingTicket(restoredDraft.id).catch(() => undefined);
+        }
+
+        if (canUploadTicket && candidate.flightTicketFileName && !candidate.flightTicketMediaId) {
           const ticketFile = await loadPendingTicket(restoredDraft.id);
           if (!ticketFile) {
             setForm(candidate);
@@ -461,7 +509,6 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
           setForm(candidate);
         }
 
-        const route = routes.find((item) => item.id === candidate.routeId);
         if (
           route?.requiresFlightDetails &&
           (!candidate.flightArrivalTime || !candidate.flightNumber.trim())
@@ -535,7 +582,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
               <p>{selectedRoute?.requiresFlightDetails ? "بيانات الطائرة مطلوبة لهذا المسار." : "بيانات الطائرة اختيارية لهذا المسار."}</p>
             </div>
 
-            {selectedRoute?.requiresFlightDetails ? (
+            {isTicketUploadEnabled ? (
               <section className={`flight-ticket-upload ${form.flightTicketFileName ? "has-file" : ""}`}>
                 <div className="flight-ticket-upload-copy">
                   <span className="flight-ticket-icon"><Icon name="plane" size={24} /></span>
@@ -572,16 +619,46 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
 
             <div className="form-grid wizard-form-grid">
               <label>
-                <span className="label">تاريخ وصول الطائرة / الرحلة</span>
-                <input className="input" type="date" min={tomorrow} value={form.travelDate} onChange={(e) => update("travelDate", e.target.value)} required />
+                <span className="label">{selectedRoute?.requiresFlightDetails ? "تاريخ وصول الطائرة" : "تاريخ الرحلة"}</span>
+                <DatePicker
+                  selected={parseDateValue(form.travelDate)}
+                  onChange={(date: Date | null) => update("travelDate", date ? format(date, "yyyy-MM-dd") : "")}
+                  minDate={tomorrowDate}
+                  locale={ar}
+                  dateFormat="dd/MM/yyyy"
+                  placeholderText="اختر التاريخ"
+                  className="input date-time-picker-input"
+                  calendarClassName="arrival-calendar"
+                  popperClassName="arrival-date-time-popper"
+                  showPopperArrow={false}
+                  autoComplete="off"
+                  required
+                />
               </label>
               <label>
                 <span className="label">وقت وصول الطائرة</span>
-                <input className="input" type="time" value={form.flightArrivalTime} onChange={(e) => update("flightArrivalTime", e.target.value)} required={selectedRoute?.requiresFlightDetails} />
+                <DatePicker
+                  selected={parseTimeValue(form.flightArrivalTime)}
+                  onChange={(time: Date | null) => update("flightArrivalTime", time ? format(time, "HH:mm") : "")}
+                  locale={ar}
+                  showTimeSelect
+                  showTimeSelectOnly
+                  timeIntervals={15}
+                  timeCaption="الوقت"
+                  timeFormat="HH:mm"
+                  dateFormat="HH:mm"
+                  placeholderText="اختر وقت الوصول"
+                  className="input date-time-picker-input"
+                  calendarClassName="arrival-calendar arrival-time-calendar"
+                  popperClassName="arrival-date-time-popper"
+                  showPopperArrow={false}
+                  autoComplete="off"
+                  required={selectedRoute?.requiresFlightDetails}
+                />
               </label>
               <label>
                 <span className="label">رقم الرحلة الجوية</span>
-                <input className="input" value={form.flightNumber} onChange={(e) => update("flightNumber", e.target.value)} required={selectedRoute?.requiresFlightDetails} />
+                <input className="input" value={form.flightNumber} onChange={(e) => update("flightNumber", e.target.value)} placeholder="مثال: ME 265" required={selectedRoute?.requiresFlightDetails} />
               </label>
             </div>
 
@@ -607,7 +684,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                         <span className="capacity-tier-heading">
                           <span className="vehicle-class-title">
                             <strong>{VEHICLE_CLASS_LABELS[config.vehicleClass]}</strong>
-                            <small className="vehicle-capacity-label">تتسع حتى {config.passengerCapacity} أشخاص</small>
+                            <small className="vehicle-capacity-label">تتسع حتى {config.passengerCapacity} أشخاص و{config.luggageCapacity} حقائب</small>
                           </span>
                           {isSelected ? <span className="vehicle-selected-badge"><Icon name="check" size={13} />محددة</span> : null}
                         </span>
@@ -630,7 +707,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
             <div className="pane-heading"><h4>بيانات المسافر والعناوين</h4></div>
             <div className="form-grid wizard-form-grid">
               <label><span className="label">الاسم الكامل</span><input className="input" value={form.passengerName} onChange={(e) => update("passengerName", e.target.value)} required /></label>
-              <label><span className="label">رقم الهاتف</span><input className="input" value={form.passengerPhone} onChange={(e) => update("passengerPhone", e.target.value)} placeholder="+963..." required /></label>
+              <label><span className="label">رقم الهاتف</span><InternationalPhoneInput value={form.passengerPhone} onChange={(value) => update("passengerPhone", value)} name="passengerPhone" required /></label>
               <label><span className="label">عنوان الالتقاط</span><input className="input" value={form.pickupAddress} onChange={(e) => update("pickupAddress", e.target.value)} required /></label>
               <label><span className="label">عنوان الوصول</span><input className="input" value={form.dropoffAddress} onChange={(e) => update("dropoffAddress", e.target.value)} required /></label>
               <label className="full-width"><span className="label">ملاحظات</span><textarea className="input" rows={4} value={form.notes} onChange={(e) => update("notes", e.target.value)} /></label>
@@ -644,10 +721,10 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
             <div className="review-grid">
               <div><span>المسار</span><strong>{selectedRoute?.nameAr}</strong></div>
               <div><span>نوع الحجز</span><strong>{BOOKING_TYPE_LABELS[form.bookingType]}</strong></div>
-              {form.bookingType === "PRIVATE_CAR" ? <div><span>فئة السيارة</span><strong>{VEHICLE_CLASS_LABELS[form.vehicleClass]} · حتى {quote?.passengerCapacity ?? selectedClassConfig.passengerCapacity} أشخاص</strong></div> : null}
+              {form.bookingType === "PRIVATE_CAR" ? <div><span>فئة السيارة</span><strong>{VEHICLE_CLASS_LABELS[form.vehicleClass]} · حتى {quote?.passengerCapacity ?? selectedClassConfig.passengerCapacity} أشخاص و{quote?.luggageCapacity ?? selectedClassConfig.luggageCapacity} حقائب</strong></div> : null}
               <div><span>يوم وتاريخ الوصول</span><strong>{formatArrivalDate(form.travelDate)}</strong></div>
               {selectedRoute?.requiresFlightDetails ? <div><span>الرحلة الجوية</span><strong>{form.flightNumber || "بانتظار الاستخراج"} · {form.flightArrivalTime || "—"}</strong></div> : null}
-              {form.flightTicketFileName ? <div><span>تذكرة الطيران</span><strong>{form.flightTicketFileName}</strong></div> : null}
+              {isTicketUploadEnabled && form.flightTicketFileName ? <div><span>تذكرة الطيران</span><strong>{form.flightTicketFileName}</strong></div> : null}
               <div><span>الانطلاق</span><strong>{form.pickupAddress}</strong></div>
               <div><span>الوصول</span><strong>{form.dropoffAddress}</strong></div>
             </div>

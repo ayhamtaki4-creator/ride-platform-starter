@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { AuthProvider } from "@/components/auth-provider";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import "leaflet/dist/leaflet.css";
+import "react-datepicker/dist/react-datepicker.css";
+import "react-phone-input-2/lib/style.css";
 import "./globals.css";
 
 export const metadata: Metadata = {

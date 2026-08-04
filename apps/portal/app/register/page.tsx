@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Shell } from "@/components/shell";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/ui/icon";
+import { InternationalPhoneInput } from "@/components/ui/international-phone-input";
 import { useToast } from "@/components/ui/toast-provider";
 import { hasPendingBooking } from "@/lib/pending-booking";
 import { homeForRoles } from "@/lib/types";
@@ -108,9 +109,9 @@ export default function RegisterPage() {
                 <label><span className="label">الاسم الأخير</span><input className="input" value={form.lastName} onChange={(event) => update("lastName", event.target.value)} autoComplete="family-name" required /></label>
               </div>
               <label><span className="label">البريد الإلكتروني</span><div className="input-with-icon auth-input"><Icon name="user" size={19} /><input className="input ltr-input" type="email" value={form.email} onChange={(event) => update("email", event.target.value)} autoComplete="email" placeholder="name@example.com" required /></div></label>
-              <label><span className="label">رقم WhatsApp مع رمز الدولة</span><div className="input-with-icon auth-input"><Icon name="phone" size={19} /><input className="input ltr-input" value={form.phone} onChange={(event) => update("phone", event.target.value)} autoComplete="tel" placeholder="+963944000000" required /></div></label>
-              <label><span className="label">كلمة المرور</span><div className="input-with-icon auth-input"><Icon name="lock" size={19} /><input className="input ltr-input" type={showPassword ? "text" : "password"} minLength={10} value={form.password} onChange={(event) => update("password", event.target.value)} autoComplete="new-password" required /><button className="password-toggle" type="button" onClick={() => setShowPassword((current) => !current)}><Icon name={showPassword ? "eye-off" : "eye"} size={19} /></button></div></label>
-              <label><span className="label">تأكيد كلمة المرور</span><div className="input-with-icon auth-input"><Icon name="lock" size={19} /><input className="input ltr-input" type={showPassword ? "text" : "password"} minLength={10} value={form.confirmPassword} onChange={(event) => update("confirmPassword", event.target.value)} autoComplete="new-password" required /></div></label>
+              <label><span className="label">رقم WhatsApp مع رمز الدولة</span><InternationalPhoneInput value={form.phone} onChange={(value) => update("phone", value)} name="phone" required /></label>
+              <label><span className="label">كلمة المرور</span><div className="input-with-icon auth-input"><Icon name="lock" size={19} /><input className="input ltr-input" type={showPassword ? "text" : "password"} value={form.password} onChange={(event) => update("password", event.target.value)} autoComplete="new-password" required /><button className="password-toggle" type="button" onClick={() => setShowPassword((current) => !current)}><Icon name={showPassword ? "eye-off" : "eye"} size={19} /></button></div></label>
+              <label><span className="label">تأكيد كلمة المرور</span><div className="input-with-icon auth-input"><Icon name="lock" size={19} /><input className="input ltr-input" type={showPassword ? "text" : "password"} value={form.confirmPassword} onChange={(event) => update("confirmPassword", event.target.value)} autoComplete="new-password" required /></div></label>
               <label className="whatsapp-consent-row"><input type="checkbox" checked={form.whatsappOptIn} onChange={(event) => update("whatsappOptIn", event.target.checked)} /><span><strong>أوافق على استلام تحديثات الحجز على WhatsApp</strong><small>مثل التأكيد وتعيين السائق وبدء الرحلة. يمكنك إيقافها لاحقًا من الحساب.</small></span></label>
 
               {error ? <div className="notice error" role="alert">{error}</div> : null}

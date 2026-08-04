@@ -2047,7 +2047,7 @@ textarea {
   scroll-margin-top: 100px;
   max-width: 1000px;
   margin: 0 auto;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--border);
   border-radius: 28px;
   background: #fff;
@@ -2282,6 +2282,57 @@ textarea {
   gap: 18px;
 }
 
+.react-datepicker-wrapper,
+.react-datepicker__input-container {
+  display: block;
+  width: 100%;
+}
+
+.date-time-picker-input {
+  direction: rtl;
+  text-align: right;
+  cursor: pointer;
+}
+
+.arrival-date-time-popper {
+  z-index: 80;
+}
+
+.arrival-calendar {
+  direction: rtl;
+  overflow: hidden;
+  border-color: var(--border-strong);
+  border-radius: 15px;
+  font-family: inherit;
+  box-shadow: var(--shadow);
+}
+
+.arrival-calendar .react-datepicker__header {
+  border-bottom-color: var(--border);
+  background: #f4faf7;
+}
+
+.arrival-calendar .react-datepicker__day--selected,
+.arrival-calendar .react-datepicker__day--keyboard-selected,
+.arrival-calendar .react-datepicker__time-list-item--selected {
+  color: #fff !important;
+  background: var(--primary) !important;
+}
+
+.arrival-calendar .react-datepicker__day:hover,
+.arrival-calendar .react-datepicker__time-list-item:hover {
+  background: var(--primary-soft) !important;
+}
+
+.arrival-time-calendar .react-datepicker__time-container {
+  width: 130px;
+  border: 0;
+}
+
+.arrival-time-calendar .react-datepicker__time-box {
+  width: 130px !important;
+}
+
 .capacity-policy-card {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -2429,6 +2480,78 @@ textarea {
   font-weight: 750;
 }
 
+.international-phone-input.react-tel-input {
+  width: 100%;
+  margin-top: 7px;
+  direction: ltr;
+  font-family: inherit;
+}
+
+.international-phone-input.react-tel-input .form-control.international-phone-field {
+  width: 100%;
+  height: 49px;
+  margin: 0;
+  padding-right: 14px;
+  padding-left: 58px;
+  border-color: var(--border);
+  border-radius: 13px;
+  color: var(--text-strong);
+  background: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+}
+
+.international-phone-input.react-tel-input .form-control.international-phone-field:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(8, 122, 85, 0.11);
+}
+
+.international-phone-input.react-tel-input .international-phone-country-button {
+  border-color: var(--border);
+  border-radius: 13px 0 0 13px;
+  background: #f7faf8;
+}
+
+.international-phone-input.react-tel-input .international-phone-country-button:hover,
+.international-phone-input.react-tel-input .international-phone-country-button.open {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.international-phone-input.react-tel-input .international-phone-dropdown {
+  width: min(330px, calc(100vw - 44px));
+  max-height: 280px;
+  direction: rtl;
+  border-color: var(--border);
+  border-radius: 14px;
+  color: var(--text);
+  background: #fff;
+  text-align: right;
+  box-shadow: var(--shadow);
+}
+
+.international-phone-input.react-tel-input .country-list .search {
+  z-index: 2;
+  padding: 10px;
+  background: #fff;
+}
+
+.international-phone-input.react-tel-input .international-phone-search {
+  width: calc(100% - 8px);
+  margin: 0;
+  padding: 10px 12px;
+  direction: rtl;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  font-family: inherit;
+}
+
+.international-phone-input.react-tel-input .international-phone-search:focus {
+  border-color: var(--primary);
+}
+
 .capacity-tier-limits {
   display: grid;
   gap: 7px;
@@ -2457,6 +2580,35 @@ textarea {
   margin: 12px 2px 0;
   color: var(--muted);
   font-size: 11px;
+}
+
+.review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.review-grid > div {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: #f8faf9;
+}
+
+.review-grid > div > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.review-grid > div > strong {
+  color: var(--text-strong);
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
 }
 
 .input-with-icon {
@@ -2630,6 +2782,7 @@ textarea {
   gap: 12px;
   padding: 20px 30px;
   border-top: 1px solid var(--border);
+  border-radius: 0 0 28px 28px;
   background: #fafcfb;
 }
 
@@ -3913,6 +4066,7 @@ textarea {
   .choice-grid,
   .capacity-tier-grid,
   .form-grid.wizard-form-grid,
+  .review-grid,
   .review-layout,
   .success-summary-grid { grid-template-columns: 1fr; }
   .choice-card { min-height: 99px; padding: 14px; }

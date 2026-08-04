@@ -2,9 +2,9 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsEmail,
+  IsNotEmpty,
   IsString,
-  MaxLength,
-  MinLength
+  MaxLength
 } from 'class-validator';
 
 export class RegisterDto {
@@ -14,7 +14,7 @@ export class RegisterDto {
 
   @ApiProperty({ example: 'StrongPassword123!' })
   @IsString()
-  @MinLength(10)
+  @IsNotEmpty({ message: 'كلمة المرور مطلوبة.' })
   password!: string;
 
   @ApiProperty({ example: 'Ali' })

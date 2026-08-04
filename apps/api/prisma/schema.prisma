@@ -343,6 +343,7 @@ model PricingRule {
 model VehicleClassConfig {
   vehicleClass      VehicleClass @id
   passengerCapacity Int
+  luggageCapacity   Int          @default(4)
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 }
@@ -495,25 +496,26 @@ model ServiceLocation {
 }
 
 model ServiceRoute {
-  id                    String                @id @default(uuid()) @db.Uuid
-  code                  String                @unique
-  nameAr                String
-  nameEn                String?
-  originId              String                @db.Uuid
-  destinationId         String                @db.Uuid
-  routeType             RouteType
-  requiresFlightDetails Boolean               @default(false)
-  estimatedMinutes      Int?
-  distanceKm            Decimal?              @db.Decimal(10, 2)
-  isActive              Boolean               @default(true)
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
-  origin                ServiceLocation       @relation("RouteOrigin", fields: [originId], references: [id])
-  destination           ServiceLocation       @relation("RouteDestination", fields: [destinationId], references: [id])
-  requiredRegions       RouteRequiredRegion[]
-  pricingRules          PricingRule[]
-  trips                 Trip[]
-  serviceRuns           ServiceRun[]
+  id                          String                @id @default(uuid()) @db.Uuid
+  code                        String                @unique
+  nameAr                      String
+  nameEn                      String?
+  originId                    String                @db.Uuid
+  destinationId               String                @db.Uuid
+  routeType                   RouteType
+  requiresFlightDetails       Boolean               @default(false)
+  flightTicketUploadEnabled   Boolean               @default(true)
+  estimatedMinutes            Int?
+  distanceKm                  Decimal?              @db.Decimal(10, 2)
+  isActive                    Boolean               @default(true)
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
+  origin                      ServiceLocation       @relation("RouteOrigin", fields: [originId], references: [id])
+  destination                 ServiceLocation       @relation("RouteDestination", fields: [destinationId], references: [id])
+  requiredRegions             RouteRequiredRegion[]
+  pricingRules                PricingRule[]
+  trips                       Trip[]
+  serviceRuns                 ServiceRun[]
 
   @@unique([originId, destinationId])
   @@index([isActive, routeType])
