@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Patch, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '../iam/auth-user.type';
 import { CurrentUser } from '../iam/current-user.decorator';
@@ -6,6 +6,7 @@ import { Permissions } from '../iam/permissions.decorator';
 import { AdminBookingsService } from './admin-bookings.service';
 import { AdminBookingsQueryDto } from './dto/admin-bookings-query.dto';
 import { RejectBookingDto } from './dto/reject-booking.dto';
+import { UpdateBookingDto } from './dto/update-booking.dto';
 
 @ApiTags('Administration - Bookings')
 @ApiBearerAuth()
@@ -45,5 +46,11 @@ export class AdminBookingsController {
     @Body() dto: RejectBookingDto
   ) {
     return this.bookings.reject(user, id, dto.note);
+  }
+
+  @Permissions('booking:update:any')
+  @Patch('bookings/:id')
+  update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateBookingDto) {
+    return this.bookings.update(user, id, dto);
   }
 }
