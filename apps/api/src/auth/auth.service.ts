@@ -99,10 +99,10 @@ export class AuthService {
 
   async refresh(refreshToken: string, context?: SessionContext) {
     const tokenHash = this.hashRefreshToken(refreshToken);
-    const session = await this.prisma.authSession.findUnique({
-      where: { tokenHash },
-      include: { user: true } // 👈 يحل مشكلة TS2339 الخاصة بـ session.user
-    });
+const session = await this.prisma.authSession.findFirst({
+  where: { tokenHash },
+  include: { user: true }
+});
 
     if (
       !session ||
