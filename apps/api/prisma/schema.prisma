@@ -308,6 +308,7 @@ model PricingRule {
 
 model Trip {
   id                        String                    @id @default(uuid()) @db.Uuid
+  clientRequestId String?  @unique 
   passengerId               String                    @db.Uuid
   driverId                  String?                   @db.Uuid
   pricingRuleId             String?                   @db.Uuid
