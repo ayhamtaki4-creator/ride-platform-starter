@@ -565,8 +565,8 @@ export class RoutesService {
     pricingRules: Array<{
       id: string;
       isActive: boolean;
-      bookingType: string;
-    vehicleClass?: string;
+      bookingType: string | null;
+      vehicleClass?: string;
       passengerPrice: unknown;
       currency: string;
     }>;
