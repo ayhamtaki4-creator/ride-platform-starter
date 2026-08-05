@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Inject,
   Logger,
   NotFoundException,
   OnModuleDestroy,
@@ -33,8 +34,8 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
   private processing = false;
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly config: ConfigService
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ConfigService) private readonly config: ConfigService
   ) {
     this.enabled = this.config.get<string>('WHATSAPP_ENABLED') === 'true';
     this.token = this.config.get<string>('WHATSAPP_ACCESS_TOKEN') ?? '';

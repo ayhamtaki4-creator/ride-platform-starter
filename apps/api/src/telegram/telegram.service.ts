@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -57,8 +58,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private processing = false;
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly config: ConfigService
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ConfigService) private readonly config: ConfigService
   ) {
     this.enabled = this.config.get<string>('TELEGRAM_ENABLED') === 'true';
     this.botToken = this.config.get<string>('TELEGRAM_BOT_TOKEN')?.trim() ?? '';

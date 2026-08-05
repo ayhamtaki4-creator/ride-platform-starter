@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
   OnModuleInit
@@ -43,8 +44,8 @@ export class MediaService implements OnModuleInit {
   private readonly publicApiUrl: string;
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly config: ConfigService
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ConfigService) private readonly config: ConfigService
   ) {
     const configuredRoot = this.config.get<string>('MEDIA_STORAGE_ROOT') ?? './storage/media';
     this.root = resolve(process.cwd(), configuredRoot);

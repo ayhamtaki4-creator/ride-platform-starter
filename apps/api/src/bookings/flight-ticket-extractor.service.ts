@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UploadedMediaFile } from '../media/media.service';
 
@@ -30,7 +30,7 @@ type RawExtraction = {
 export class FlightTicketExtractorService {
   private readonly logger = new Logger(FlightTicketExtractorService.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(@Inject(ConfigService) private readonly config: ConfigService) {}
 
   async extract(
     file: UploadedMediaFile,

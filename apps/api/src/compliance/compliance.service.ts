@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
   OnModuleDestroy,
@@ -45,9 +46,9 @@ export class ComplianceService implements OnModuleInit, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly media: MediaService,
-    private readonly config: ConfigService
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ConfigService) private readonly media: MediaService,
+    @Inject(ConfigService) private readonly config: ConfigService
   ) {}
 
   onModuleInit() {
