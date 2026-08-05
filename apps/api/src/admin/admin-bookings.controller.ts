@@ -21,7 +21,7 @@ export class AdminBookingsController {
   }
 
   @Permissions('booking:read:any')
-  @Get('bookings')  
+  @Get('bookings')
   list(@Query() query: AdminBookingsQueryDto) {
     return this.bookings.list(query);
   }

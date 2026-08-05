@@ -5,7 +5,7 @@
     "dev": "nest start --watch",
     "prebuild": "prisma generate --schema=./prisma/schema.prisma",
     "build": "nest build",
-    "start": "node dist/main.js",
+    "start": "node dist/src/main.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
