@@ -215,7 +215,7 @@ export class BookingsService {
     if (dto.clientRequestId) {
       const existing = await this.prisma.trip.findFirst({
         where: {
-          clientRequestId: dto.clientRequestId,
+          // clientRequestId: dto.clientRequestId,
           passengerId: user.sub
         },
         include: bookingInclude
@@ -334,7 +334,7 @@ export class BookingsService {
       ) {
         const existing = await this.prisma.trip.findFirst({
           where: {
-            clientRequestId: dto.clientRequestId,
+            // clientRequestId: dto.clientRequestId,
             passengerId: user.sub
           },
           include: bookingInclude
