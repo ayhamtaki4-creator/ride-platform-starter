@@ -314,6 +314,7 @@ model Trip {
   pricingRuleId             String?                   @db.Uuid
   routeId                   String?                   @db.Uuid
   serviceRunId              String?                   @db.Uuid
+  vehicleClass               VehicleClass        @default(SMALL)
   serviceRunPassengerStatus ServiceRunPassengerStatus @default(WAITING)
   pickupOrder               Int?
   pickedUpAt                DateTime?

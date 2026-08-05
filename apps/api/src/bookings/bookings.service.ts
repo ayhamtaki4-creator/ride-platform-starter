@@ -292,8 +292,6 @@ export class BookingsService {
           bookingReference,
           direction: quote.direction,
           bookingType: dto.bookingType,
-          vehicleClass: quote.vehicleClass,
-          travelDate,
           flightArrivalTime: dto.flightArrivalTime?.trim() || null,
           flightNumber: dto.flightNumber?.trim() || null,
           flightTicketMediaId: flightTicket?.id,
