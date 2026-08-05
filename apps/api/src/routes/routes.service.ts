@@ -566,7 +566,7 @@ export class RoutesService {
       id: string;
       isActive: boolean;
       bookingType: string | null;
-      vehicleClass?: string;
+      vehicleClass?: string | null;
       passengerPrice: unknown;
       currency: string;
     }>;
