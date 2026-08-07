@@ -18,6 +18,8 @@ import { MoveRunBookingDto } from './dto/move-run-booking.dto';
 import { ReplaceRunDriverDto } from './dto/replace-run-driver.dto';
 import { RunNoteDto } from './dto/run-note.dto';
 
+const TERMINAL_RUN_STATUSES = new Set<ServiceRunStatus>(['COMPLETED', 'CANCELLED']);
+
 @ApiTags('Admin Service Runs')
 @ApiBearerAuth()
 @Controller('admin/runs')
@@ -26,12 +28,17 @@ export class AdminRunsController {
 
   @Permissions('trip:read:any')
   @Get()
-  list(
+  async list(
     @Query('status') status?: ServiceRunStatus,
     @Query('date') date?: string,
-    @Query('search') search?: string
+    @Query('search') search?: string,
+    @Query('history') history?: string
   ) {
-    return this.runs.list(status, date, search);
+    const rows = await this.runs.list(status, date, search);
+    const showHistory = history === 'true';
+    return rows.filter((run) =>
+      showHistory ? TERMINAL_RUN_STATUSES.has(run.status) : !TERMINAL_RUN_STATUSES.has(run.status)
+    );
   }
 
   @Permissions('trip:read:any')
