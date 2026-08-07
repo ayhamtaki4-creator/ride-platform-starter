@@ -6,6 +6,7 @@ import { DashboardHeader } from "@/components/dashboard-header";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Shell } from "@/components/shell";
 import { StatusPill } from "@/components/admin/status-pill";
+import { InternationalPhoneInput } from "@/components/ui/international-phone-input";
 import { apiFetch } from "@/lib/api";
 import { DriverAdminRecord, ServiceRegion } from "@/lib/admin-operations";
 
@@ -107,7 +108,7 @@ export default function AdminDriversPage() {
             <label><span className="label">الاسم الأول</span><input className="input" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} required /></label>
             <label><span className="label">الاسم الأخير</span><input className="input" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} required /></label>
             <label><span className="label">البريد الإلكتروني</span><input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required /></label>
-            <label><span className="label">رقم الهاتف</span><input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
+            <label><span className="label">رقم الهاتف</span><InternationalPhoneInput value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} name="adminDriverPhone" /></label>
             <label><span className="label">كلمة المرور المؤقتة</span><input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} minLength={8} required /></label>
             <label><span className="label">رقم رخصة القيادة</span><input className="input" value={form.licenseNumber} onChange={(e) => setForm({ ...form, licenseNumber: e.target.value })} /></label>
             <label><span className="label">مركز السائق</span><select className="input" value={form.baseRegionCode} onChange={(e) => setForm({ ...form, baseRegionCode: e.target.value })}>{hubs.map((region) => <option key={region.id} value={region.code}>{region.nameAr}</option>)}</select></label>
