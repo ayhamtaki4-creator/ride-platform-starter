@@ -88,6 +88,16 @@ export class TrackingService {
         "updatedAt" = CURRENT_TIMESTAMP
     `;
 
+    if (distanceKm !== null || durationMinutes !== null) {
+      await this.prisma.trip.update({
+        where: { id: tripId },
+        data: {
+          ...(distanceKm !== null ? { estimatedDistanceKm: distanceKm } : {}),
+          ...(durationMinutes !== null ? { estimatedDurationMinutes: durationMinutes } : {})
+        }
+      });
+    }
+
     await this.prisma.auditLog.create({
       data: {
         actorId: user.sub,
@@ -196,6 +206,7 @@ export class TrackingService {
     });
     if (!trip) throw new NotFoundException('الحجز غير موجود.');
     if (trip.passengerId !== user.sub) throw new ForbiddenException('لا يمكنك إلغاء هذا الرابط.');
+    if (!this.isUuid(shareId)) throw new BadRequestException('معرف رابط المشاركة غير صالح.');
 
     await this.prisma.$executeRaw`
       UPDATE "TripTrackingShare"
@@ -233,8 +244,7 @@ export class TrackingService {
         driver: {
           select: {
             firstName: true,
-            lastName: true,
-            driverProfile: { select: { avatarUrl: true } }
+            lastName: true
           }
         }
       }
@@ -245,11 +255,7 @@ export class TrackingService {
     return {
       ...payload,
       trip: {
-        id: trip.id,
-        status: trip.status,
-        pickupAddress: trip.pickupAddress,
-        dropoffAddress: trip.dropoffAddress,
-        travelDate: trip.travelDate,
+        ...payload.trip,
         driver: trip.driver
           ? { firstName: trip.driver.firstName, lastName: trip.driver.lastName }
           : null
@@ -371,5 +377,9 @@ export class TrackingService {
 
   private hash(token: string) {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private isUuid(value: string) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
   }
 }
