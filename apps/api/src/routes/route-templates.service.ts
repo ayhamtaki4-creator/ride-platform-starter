@@ -126,7 +126,7 @@ export class RouteTemplatesService {
         ${routeId}::uuid,
         ${value.originAddress}, ${value.originLatitude}, ${value.originLongitude},
         ${value.destinationAddress}, ${value.destinationLatitude}, ${value.destinationLongitude},
-        ${value.geometry ? JSON.stringify(value.geometry) : null}::jsonb,
+        ${JSON.stringify(value.geometry)}::jsonb,
         ${JSON.stringify(value.waypoints)}::jsonb,
         ${value.distanceKm}, ${value.durationMinutes},
         ${actor.sub}::uuid, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -208,7 +208,7 @@ export class RouteTemplatesService {
           "version", "updatedById", "createdAt", "updatedAt"
         ) VALUES (
           ${tripId}::uuid,
-          ${value.geometry ? JSON.stringify(value.geometry) : null}::jsonb,
+          ${JSON.stringify(value.geometry)}::jsonb,
           ${JSON.stringify(value.waypoints)}::jsonb,
           ${value.distanceKm}, ${value.durationMinutes}, 1,
           ${actor.sub}::uuid, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -273,7 +273,15 @@ export class RouteTemplatesService {
       180,
       'خط طول الوصول'
     );
-    const geometry = input.geometry == null ? null : this.validateGeometry(input.geometry);
+    const geometry = input.geometry == null
+      ? {
+          type: 'LineString' as const,
+          coordinates: [
+            [originLongitude, originLatitude],
+            [destinationLongitude, destinationLatitude]
+          ]
+        }
+      : this.validateGeometry(input.geometry);
     const waypoints = this.validateWaypoints(input.waypoints);
     const distanceKm = this.optionalPositive(input.distanceKm, 'المسافة');
     const durationMinutes = this.optionalPositiveInteger(input.durationMinutes, 'المدة');
