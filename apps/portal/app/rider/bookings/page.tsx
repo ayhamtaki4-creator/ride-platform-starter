@@ -11,6 +11,8 @@ import { Icon } from "@/components/ui/icon";
 import { useRiderBookings } from "@/hooks/use-rider-bookings";
 import {
   getBookingTab,
+  isBookingCancelled,
+  isBookingCompleted,
   RiderBookingTab,
   sortBookingsNewest,
 } from "@/lib/rider-bookings";
@@ -20,8 +22,6 @@ const tabs: Array<{ value: RiderBookingTab | "ALL"; label: string }> = [
   { value: "ALL", label: "الكل" },
   { value: "UPCOMING", label: "القادمة" },
   { value: "ACTIVE", label: "الجارية" },
-  { value: "COMPLETED", label: "المكتملة" },
-  { value: "CANCELLED", label: "الملغاة" },
 ];
 
 const pageSize = 6;
@@ -40,25 +40,30 @@ export default function RiderBookingsPage() {
   const [direction, setDirection] = useState<BookingDirection | "ALL">("ALL");
   const [page, setPage] = useState(1);
 
+  const activeBookings = useMemo(
+    () => bookings.filter((booking) => !isBookingCompleted(booking) && !isBookingCancelled(booking)),
+    [bookings],
+  );
+
   const counts = useMemo(() => {
     const result: Record<RiderBookingTab | "ALL", number> = {
-      ALL: bookings.length,
+      ALL: activeBookings.length,
       UPCOMING: 0,
       ACTIVE: 0,
       COMPLETED: 0,
       CANCELLED: 0,
     };
 
-    bookings.forEach((booking) => {
+    activeBookings.forEach((booking) => {
       result[getBookingTab(booking)] += 1;
     });
     return result;
-  }, [bookings]);
+  }, [activeBookings]);
 
   const filteredBookings = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
-    return sortBookingsNewest(bookings).filter((booking) => {
+    return sortBookingsNewest(activeBookings).filter((booking) => {
       if (tab !== "ALL" && getBookingTab(booking) !== tab) return false;
       if (direction !== "ALL" && booking.direction !== direction) return false;
 
@@ -74,7 +79,7 @@ export default function RiderBookingsPage() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(normalizedQuery));
     });
-  }, [bookings, direction, query, tab]);
+  }, [activeBookings, direction, query, tab]);
 
   const totalPages = Math.max(1, Math.ceil(filteredBookings.length / pageSize));
   const visibleBookings = filteredBookings.slice((page - 1) * pageSize, page * pageSize);
@@ -89,12 +94,13 @@ export default function RiderBookingsPage() {
       <Shell>
         <DashboardHeader
           eyebrow="حساب المسافر / الحجوزات"
-          title="سجل الحجوزات"
-          subtitle="راجع جميع حجوزاتك وتابع حالتها وبيانات الرحلة والسائق من مكان واحد."
+          title="حجوزاتي الحالية"
+          subtitle="الحجوزات الجديدة والجارية فقط، مرتبة بحيث يظهر الأحدث أولًا. الحجوزات المكتملة والملغاة محفوظة في الحجوزات المنتهية."
           actions={
-            <Link className="button primary" href="/#booking">
-              <Icon name="calendar" size={18} /> حجز جديد
-            </Link>
+            <div className="actions">
+              <Link className="button" href="/rider/completed-bookings"><Icon name="check" size={18} /> الحجوزات المنتهية</Link>
+              <Link className="button primary" href="/#booking"><Icon name="calendar" size={18} /> حجز جديد</Link>
+            </div>
           }
         />
 
@@ -188,14 +194,15 @@ export default function RiderBookingsPage() {
           ) : (
             <div className="rider-empty-state rider-empty-state-featured">
               <span><Icon name="bookings" size={32} /></span>
-              <h3>لا توجد حجوزات مطابقة</h3>
-              <p>جرّب تغيير التصفية أو البحث، أو أنشئ حجزًا جديدًا.</p>
+              <h3>لا توجد حجوزات حالية مطابقة</h3>
+              <p>الحجوزات المكتملة أو الملغاة ستجدها في صفحة الحجوزات المنتهية.</p>
               <div className="actions">
                 {(query || direction !== "ALL" || tab !== "ALL") ? (
                   <button className="button" type="button" onClick={() => { setQuery(""); setDirection("ALL"); setTab("ALL"); }}>
                     مسح التصفية
                   </button>
                 ) : null}
+                <Link className="button" href="/rider/completed-bookings">الحجوزات المنتهية</Link>
                 <Link className="button primary" href="/#booking">حجز رحلة جديدة</Link>
               </div>
             </div>
