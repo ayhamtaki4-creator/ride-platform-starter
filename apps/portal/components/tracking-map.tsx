@@ -1,7 +1,7 @@
 "use client";
 
 import L, { LatLngBoundsExpression, LatLngExpression } from "leaflet";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   MapContainer,
   Marker,
@@ -19,6 +19,7 @@ export type TrackingMapProps = {
   liveLocation?: TripLiveLocation | null;
   editable?: boolean;
   onAddWaypoint?: (point: { latitude: number; longitude: number }) => void;
+  searchPoint?: { latitude: number; longitude: number; label?: string } | null;
   height?: number;
 };
 
@@ -36,17 +37,37 @@ const pickupIcon = icon("A", "ride-marker-pickup");
 const dropoffIcon = icon("B", "ride-marker-dropoff");
 const driverIcon = icon("D", "ride-marker-driver");
 const waypointIcon = icon("•", "ride-marker-waypoint");
+const searchIcon = icon("S", "ride-marker-waypoint");
 
-function Viewport({ points }: { points: LatLngExpression[] }) {
+function Viewport({ points, fitKey }: { points: LatLngExpression[]; fitKey: string }) {
   const map = useMap();
+  const lastFitKey = useRef("");
+
   useEffect(() => {
-    if (points.length === 0) return;
+    if (points.length === 0 || lastFitKey.current === fitKey) return;
+    lastFitKey.current = fitKey;
     if (points.length === 1) {
       map.setView(points[0], 14);
       return;
     }
     map.fitBounds(points as LatLngBoundsExpression, { padding: [42, 42], maxZoom: 16 });
-  }, [map, points]);
+  }, [fitKey, map, points]);
+
+  return null;
+}
+
+function SearchViewport({ point }: { point?: TrackingMapProps["searchPoint"] }) {
+  const map = useMap();
+  const lastSearchKey = useRef("");
+
+  useEffect(() => {
+    if (!point) return;
+    const key = `${point.latitude.toFixed(6)}:${point.longitude.toFixed(6)}`;
+    if (lastSearchKey.current === key) return;
+    lastSearchKey.current = key;
+    map.setView([point.latitude, point.longitude], Math.max(map.getZoom(), 15), { animate: true });
+  }, [map, point]);
+
   return null;
 }
 
@@ -69,6 +90,7 @@ export default function TrackingMap({
   liveLocation,
   editable = false,
   onAddWaypoint,
+  searchPoint,
   height = 440,
 }: TrackingMapProps) {
   const pickup: LatLngExpression = [trip.pickupLatitude, trip.pickupLongitude];
@@ -80,11 +102,7 @@ export default function TrackingMap({
     return coordinates.map(([longitude, latitude]) => [latitude, longitude] as LatLngExpression);
   }, [routePlan, trip.pickupLatitude, trip.pickupLongitude, trip.dropoffLatitude, trip.dropoffLongitude]);
 
-  const points = useMemo(() => {
-    const result: LatLngExpression[] = [...route];
-    if (liveLocation) result.push([liveLocation.latitude, liveLocation.longitude]);
-    return result;
-  }, [route, liveLocation]);
+  const fitKey = `${routePlan?.version ?? "fallback"}:${trip.pickupLatitude}:${trip.pickupLongitude}:${trip.dropoffLatitude}:${trip.dropoffLongitude}`;
 
   return (
     <div className="ride-map-frame tracking-map-frame" style={{ height }}>
@@ -94,7 +112,8 @@ export default function TrackingMap({
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={19}
         />
-        <Viewport points={points} />
+        <Viewport points={route} fitKey={fitKey} />
+        <SearchViewport point={searchPoint} />
         <ClickEditor enabled={editable} onAddWaypoint={onAddWaypoint} />
 
         <Marker position={pickup} icon={pickupIcon}><Popup><div dir="rtl"><strong>الانطلاق</strong><br />{trip.pickupAddress}</div></Popup></Marker>
@@ -105,6 +124,12 @@ export default function TrackingMap({
             <Popup><div dir="rtl"><strong>نقطة مرور {index + 1}</strong>{point.label ? <><br />{point.label}</> : null}</div></Popup>
           </Marker>
         ))}
+
+        {searchPoint ? (
+          <Marker position={[searchPoint.latitude, searchPoint.longitude]} icon={searchIcon}>
+            <Popup><div dir="rtl"><strong>نتيجة البحث</strong>{searchPoint.label ? <><br />{searchPoint.label}</> : null}</div></Popup>
+          </Marker>
+        ) : null}
 
         {liveLocation ? (
           <Marker position={[liveLocation.latitude, liveLocation.longitude]} icon={driverIcon}>

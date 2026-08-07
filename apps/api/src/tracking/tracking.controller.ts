@@ -5,11 +5,15 @@ import { CurrentUser } from '../iam/current-user.decorator';
 import { Permissions } from '../iam/permissions.decorator';
 import { Public } from '../iam/public.decorator';
 import { TrackingService } from './tracking.service';
+import { TripRouteEditingService } from './trip-route-editing.service';
 
 @ApiTags('Trip Tracking')
 @Controller('tracking')
 export class TrackingController {
-  constructor(private readonly tracking: TrackingService) {}
+  constructor(
+    private readonly tracking: TrackingService,
+    private readonly routeEditing: TripRouteEditingService
+  ) {}
 
   @ApiBearerAuth()
   @Permissions()
@@ -19,7 +23,7 @@ export class TrackingController {
   }
 
   @ApiBearerAuth()
-  @Permissions('booking:update:any')
+  @Permissions()
   @Patch('trips/:tripId/route-plan')
   updateRoutePlan(
     @CurrentUser() user: AuthUser,
@@ -32,7 +36,7 @@ export class TrackingController {
       durationMinutes?: number;
     }
   ) {
-    return this.tracking.updateRoutePlan(user, tripId, body);
+    return this.routeEditing.updateRoutePlan(user, tripId, body);
   }
 
   @ApiBearerAuth()
