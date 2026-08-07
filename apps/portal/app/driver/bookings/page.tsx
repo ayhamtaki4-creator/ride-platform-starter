@@ -60,7 +60,7 @@ export default function DriverBookingsPage() {
             <div className="schedule-card-grid driver-assignment-grid">
               {schedule.map((trip) => {
                 const requestBusy = Boolean(working);
-                const trackingAvailable = Boolean(trip.driverId) && !["COMPLETED", "CANCELLED_BY_DRIVER", "CANCELLED_BY_PASSENGER"].includes(trip.status);
+                const trackingAvailable = Boolean(trip.driver) && !["COMPLETED", "CANCELLED_BY_DRIVER", "CANCELLED_BY_PASSENGER"].includes(trip.status);
                 return (
                   <article className="booking-card driver-assignment-card" key={trip.id}>
                     <div className="booking-card-head">
