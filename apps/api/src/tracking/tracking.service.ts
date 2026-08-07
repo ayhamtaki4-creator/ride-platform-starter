@@ -30,6 +30,15 @@ type LiveLocationRow = {
   recordedAt: Date;
 };
 
+const TERMINAL_TRIP_STATUSES = [
+  'COMPLETED',
+  'CANCELLED_BY_PASSENGER',
+  'CANCELLED_BY_DRIVER',
+  'NO_DRIVER_AVAILABLE',
+  'PASSENGER_NO_SHOW',
+  'DRIVER_NO_SHOW'
+] as const;
+
 @Injectable()
 export class TrackingService {
   constructor(private readonly prisma: PrismaService) {}
@@ -62,7 +71,7 @@ export class TrackingService {
     });
     if (!trip) throw new NotFoundException('الحجز غير موجود.');
     if (trip.driverId) {
-      throw new ForbiddenException('تم قفل المسار بعد تعيين السائق. ألغِ التعيين أولًا لتعديله.');
+      throw new ForbiddenException('تم قفل المسار بعد تعيين السائق ولا يمكن تعديله.');
     }
 
     const geometry = this.validateGeometry(input.geometry);
@@ -182,7 +191,7 @@ export class TrackingService {
     });
     if (!trip) throw new NotFoundException('الحجز غير موجود.');
     if (trip.passengerId !== user.sub) throw new ForbiddenException('لا يمكنك مشاركة هذه الرحلة.');
-    if (['COMPLETED', 'CANCELLED_BY_PASSENGER', 'CANCELLED_BY_DRIVER'].includes(trip.status)) {
+    if (TERMINAL_TRIP_STATUSES.includes(trip.status as (typeof TERMINAL_TRIP_STATUSES)[number])) {
       throw new BadRequestException('انتهت الرحلة ولا يمكن إنشاء رابط تتبع جديد.');
     }
 
@@ -190,6 +199,12 @@ export class TrackingService {
     const tokenHash = this.hash(token);
     const id = randomUUID();
     const expiresAt = new Date(Date.now() + 36 * 60 * 60 * 1000);
+
+    await this.prisma.$executeRaw`
+      UPDATE "TripTrackingShare"
+      SET "revokedAt" = CURRENT_TIMESTAMP
+      WHERE "tripId" = ${tripId}::uuid AND "revokedAt" IS NULL
+    `;
 
     await this.prisma.$executeRaw`
       INSERT INTO "TripTrackingShare" ("id", "tripId", "tokenHash", "expiresAt", "createdAt")
@@ -219,11 +234,20 @@ export class TrackingService {
   async getPublicTracking(token: string) {
     const tokenHash = this.hash(token);
     const rows = await this.prisma.$queryRaw<Array<{ tripId: string }>>`
-      SELECT "tripId"
-      FROM "TripTrackingShare"
-      WHERE "tokenHash" = ${tokenHash}
-        AND "revokedAt" IS NULL
-        AND "expiresAt" > CURRENT_TIMESTAMP
+      SELECT s."tripId"
+      FROM "TripTrackingShare" s
+      INNER JOIN "Trip" t ON t."id" = s."tripId"
+      WHERE s."tokenHash" = ${tokenHash}
+        AND s."revokedAt" IS NULL
+        AND s."expiresAt" > CURRENT_TIMESTAMP
+        AND t."status"::text NOT IN (
+          'COMPLETED',
+          'CANCELLED_BY_PASSENGER',
+          'CANCELLED_BY_DRIVER',
+          'NO_DRIVER_AVAILABLE',
+          'PASSENGER_NO_SHOW',
+          'DRIVER_NO_SHOW'
+        )
       LIMIT 1
     `;
     const share = rows[0];
