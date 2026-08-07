@@ -25,40 +25,70 @@ type AdminPolicyRow = PolicyRow & {
 export class RouteBookingPoliciesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async publicList() {
-    return this.prisma.$queryRaw<PolicyRow[]>(Prisma.sql`
-      SELECT
-        policy."routeId",
-        policy."passengerCanEditPickup",
-        policy."passengerCanEditDropoff",
-        policy."flightTimeMode"
-      FROM "RouteBookingPolicy" policy
-      JOIN "ServiceRoute" route ON route."id" = policy."routeId"
-      WHERE route."isActive" = TRUE
-      ORDER BY route."nameAr" ASC
-    `);
+  async publicList(): Promise<PolicyRow[]> {
+    try {
+      return await this.prisma.$queryRaw<PolicyRow[]>(Prisma.sql`
+        SELECT
+          policy."routeId",
+          policy."passengerCanEditPickup",
+          policy."passengerCanEditDropoff",
+          policy."flightTimeMode"
+        FROM "RouteBookingPolicy" policy
+        JOIN "ServiceRoute" route ON route."id" = policy."routeId"
+        WHERE route."isActive" = TRUE
+        ORDER BY route."nameAr" ASC
+      `);
+    } catch {
+      const routes = await this.prisma.serviceRoute.findMany({
+        where: { isActive: true },
+        orderBy: { nameAr: 'asc' },
+        include: { origin: true, destination: true }
+      });
+      return routes.map((route) => this.defaultPolicy(
+        route.id,
+        route.origin.type,
+        route.destination.type
+      ));
+    }
   }
 
-  async adminList() {
-    return this.prisma.$queryRaw<AdminPolicyRow[]>(Prisma.sql`
-      SELECT
-        policy."routeId",
-        policy."passengerCanEditPickup",
-        policy."passengerCanEditDropoff",
-        policy."flightTimeMode",
-        route."code" AS "routeCode",
-        route."nameAr" AS "routeNameAr",
-        route."requiresFlightDetails",
-        origin."nameAr" AS "originNameAr",
-        origin."type"::text AS "originType",
-        destination."nameAr" AS "destinationNameAr",
-        destination."type"::text AS "destinationType"
-      FROM "RouteBookingPolicy" policy
-      JOIN "ServiceRoute" route ON route."id" = policy."routeId"
-      JOIN "ServiceLocation" origin ON origin."id" = route."originId"
-      JOIN "ServiceLocation" destination ON destination."id" = route."destinationId"
-      ORDER BY route."isActive" DESC, route."nameAr" ASC
-    `);
+  async adminList(): Promise<AdminPolicyRow[]> {
+    try {
+      return await this.prisma.$queryRaw<AdminPolicyRow[]>(Prisma.sql`
+        SELECT
+          policy."routeId",
+          policy."passengerCanEditPickup",
+          policy."passengerCanEditDropoff",
+          policy."flightTimeMode",
+          route."code" AS "routeCode",
+          route."nameAr" AS "routeNameAr",
+          route."requiresFlightDetails",
+          origin."nameAr" AS "originNameAr",
+          origin."type"::text AS "originType",
+          destination."nameAr" AS "destinationNameAr",
+          destination."type"::text AS "destinationType"
+        FROM "RouteBookingPolicy" policy
+        JOIN "ServiceRoute" route ON route."id" = policy."routeId"
+        JOIN "ServiceLocation" origin ON origin."id" = route."originId"
+        JOIN "ServiceLocation" destination ON destination."id" = route."destinationId"
+        ORDER BY route."isActive" DESC, route."nameAr" ASC
+      `);
+    } catch {
+      const routes = await this.prisma.serviceRoute.findMany({
+        orderBy: [{ isActive: 'desc' }, { nameAr: 'asc' }],
+        include: { origin: true, destination: true }
+      });
+      return routes.map((route) => ({
+        ...this.defaultPolicy(route.id, route.origin.type, route.destination.type),
+        routeCode: route.code,
+        routeNameAr: route.nameAr,
+        requiresFlightDetails: route.requiresFlightDetails,
+        originNameAr: route.origin.nameAr,
+        originType: route.origin.type,
+        destinationNameAr: route.destination.nameAr,
+        destinationType: route.destination.type
+      }));
+    }
   }
 
   async update(actor: AuthUser, routeId: string, dto: UpdateRouteBookingPolicyDto) {
@@ -100,6 +130,15 @@ export class RouteBookingPoliciesService {
     });
 
     return rows[0];
+  }
+
+  private defaultPolicy(routeId: string, originType: string, destinationType: string): PolicyRow {
+    return {
+      routeId,
+      passengerCanEditPickup: originType !== 'AIRPORT',
+      passengerCanEditDropoff: destinationType !== 'AIRPORT',
+      flightTimeMode: destinationType === 'AIRPORT' ? 'DEPARTURE' : 'ARRIVAL'
+    };
   }
 
   private async ensurePolicy(routeId: string) {
