@@ -114,11 +114,20 @@ export class RealtimeGateway
 
       const tokenHash = createHash('sha256').update(trackingToken).digest('hex');
       const shares = await this.prisma.$queryRaw<Array<{ tripId: string }>>`
-        SELECT "tripId"
-        FROM "TripTrackingShare"
-        WHERE "tokenHash" = ${tokenHash}
-          AND "revokedAt" IS NULL
-          AND "expiresAt" > CURRENT_TIMESTAMP
+        SELECT s."tripId"
+        FROM "TripTrackingShare" s
+        INNER JOIN "Trip" t ON t."id" = s."tripId"
+        WHERE s."tokenHash" = ${tokenHash}
+          AND s."revokedAt" IS NULL
+          AND s."expiresAt" > CURRENT_TIMESTAMP
+          AND t."status"::text NOT IN (
+            'COMPLETED',
+            'CANCELLED_BY_PASSENGER',
+            'CANCELLED_BY_DRIVER',
+            'NO_DRIVER_AVAILABLE',
+            'PASSENGER_NO_SHOW',
+            'DRIVER_NO_SHOW'
+          )
         LIMIT 1
       `;
       const share = shares[0];
