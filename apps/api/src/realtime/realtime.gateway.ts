@@ -8,6 +8,7 @@ import {
   WsException
 } from '@nestjs/websockets';
 import { JwtService } from '@nestjs/jwt';
+import { createHash } from 'crypto';
 import { Namespace, Server, Socket } from 'socket.io';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
@@ -20,6 +21,7 @@ type TokenPayload = {
 
 type SocketData = {
   user?: AuthUser;
+  publicTripId?: string;
 };
 
 type AuthenticatedSocket = Socket & { data: SocketData };
@@ -47,62 +49,85 @@ export class RealtimeGateway
   async handleConnection(client: AuthenticatedSocket) {
     try {
       const token = this.extractToken(client);
-      if (!token) throw new Error('Missing token');
-
-      const payload = this.jwt.verify<TokenPayload>(token);
-      const user = await this.prisma.user.findUnique({
-        where: { id: payload.sub },
-        include: {
-          roles: {
-            include: {
-              role: {
-                include: {
-                  permissions: {
-                    include: { permission: true }
+      if (token) {
+        const payload = this.jwt.verify<TokenPayload>(token);
+        const user = await this.prisma.user.findUnique({
+          where: { id: payload.sub },
+          include: {
+            roles: {
+              include: {
+                role: {
+                  include: {
+                    permissions: {
+                      include: { permission: true }
+                    }
                   }
                 }
               }
             }
           }
+        });
+
+        if (!user || user.status !== 'ACTIVE') {
+          throw new Error('Inactive user');
         }
-      });
 
-      if (!user || user.status !== 'ACTIVE') {
-        throw new Error('Inactive user');
-      }
-
-      const roles = user.roles.map((item) => item.role.code);
-      const permissions = Array.from(
-        new Set(
-          user.roles.flatMap((item) =>
-            item.role.permissions.map((entry) => entry.permission.code)
+        const roles = user.roles.map((item) => item.role.code);
+        const permissions = Array.from(
+          new Set(
+            user.roles.flatMap((item) =>
+              item.role.permissions.map((entry) => entry.permission.code)
+            )
           )
-        )
-      );
+        );
 
-      client.data.user = {
-        sub: user.id,
-        email: user.email,
-        roles,
-        permissions
-      };
+        client.data.user = {
+          sub: user.id,
+          email: user.email,
+          roles,
+          permissions
+        };
 
-      await client.join(`user:${user.id}`);
+        await client.join(`user:${user.id}`);
 
-      if (
-        roles.some((role) =>
-          ['SUPER_ADMIN', 'ADMIN', 'OPERATIONS_MANAGER'].includes(role)
-        )
-      ) {
-        await client.join('role:dispatch');
+        if (
+          roles.some((role) =>
+            ['SUPER_ADMIN', 'ADMIN', 'OPERATIONS_MANAGER'].includes(role)
+          )
+        ) {
+          await client.join('role:dispatch');
+        }
+
+        if (roles.includes('DRIVER')) await client.join('role:driver');
+        if (roles.includes('PASSENGER')) await client.join('role:passenger');
+
+        client.emit('realtime.ready', {
+          userId: user.id,
+          roles,
+          occurredAt: new Date().toISOString()
+        });
+        return;
       }
 
-      if (roles.includes('DRIVER')) await client.join('role:driver');
-      if (roles.includes('PASSENGER')) await client.join('role:passenger');
+      const trackingToken = this.extractTrackingToken(client);
+      if (!trackingToken) throw new Error('Missing token');
 
-      client.emit('realtime.ready', {
-        userId: user.id,
-        roles,
+      const tokenHash = createHash('sha256').update(trackingToken).digest('hex');
+      const shares = await this.prisma.$queryRaw<Array<{ tripId: string }>>`
+        SELECT "tripId"
+        FROM "TripTrackingShare"
+        WHERE "tokenHash" = ${tokenHash}
+          AND "revokedAt" IS NULL
+          AND "expiresAt" > CURRENT_TIMESTAMP
+        LIMIT 1
+      `;
+      const share = shares[0];
+      if (!share) throw new Error('Invalid tracking token');
+
+      client.data.publicTripId = share.tripId;
+      await client.join(`public-trip:${share.tripId}`);
+      client.emit('tracking.ready', {
+        tripId: share.tripId,
         occurredAt: new Date().toISOString()
       });
     } catch {
@@ -239,6 +264,7 @@ export class RealtimeGateway
     };
 
     this.server.to(`trip:${tripId}`).emit('trip.location.updated', event);
+    this.server.to(`public-trip:${tripId}`).emit('trip.location.updated', event);
     this.server.to(`user:${trip.passengerId}`).emit('trip.location.updated', event);
     this.server.to('role:dispatch').emit('trip.location.updated', event);
 
@@ -257,5 +283,12 @@ export class RealtimeGateway
     }
 
     return undefined;
+  }
+
+  private extractTrackingToken(client: AuthenticatedSocket) {
+    const trackingToken = client.handshake.auth?.trackingToken;
+    return typeof trackingToken === 'string' && trackingToken.trim()
+      ? trackingToken.trim()
+      : undefined;
   }
 }
