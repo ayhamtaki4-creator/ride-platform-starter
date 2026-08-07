@@ -31,33 +31,9 @@ ALTER TABLE "ServiceRouteTemplate"
   ADD CONSTRAINT "ServiceRouteTemplate_destinationLatitude_check" CHECK ("destinationLatitude" BETWEEN -90 AND 90),
   ADD CONSTRAINT "ServiceRouteTemplate_destinationLongitude_check" CHECK ("destinationLongitude" BETWEEN -180 AND 180);
 
--- Backfill templates for routes whose ServiceLocation coordinates are already valid.
-INSERT INTO "ServiceRouteTemplate" (
-  "routeId",
-  "originAddress", "originLatitude", "originLongitude",
-  "destinationAddress", "destinationLatitude", "destinationLongitude",
-  "geometry", "waypoints", "distanceKm", "durationMinutes"
-)
-SELECT
-  r."id",
-  o."nameAr", o."latitude"::double precision, o."longitude"::double precision,
-  d."nameAr", d."latitude"::double precision, d."longitude"::double precision,
-  jsonb_build_object(
-    'type', 'LineString',
-    'coordinates', jsonb_build_array(
-      jsonb_build_array(o."longitude"::double precision, o."latitude"::double precision),
-      jsonb_build_array(d."longitude"::double precision, d."latitude"::double precision)
-    )
-  ),
-  '[]'::jsonb,
-  r."distanceKm"::double precision,
-  r."estimatedMinutes"
-FROM "ServiceRoute" r
-JOIN "ServiceLocation" o ON o."id" = r."originId"
-JOIN "ServiceLocation" d ON d."id" = r."destinationId"
-WHERE o."latitude" IS NOT NULL AND o."longitude" IS NOT NULL
-  AND d."latitude" IS NOT NULL AND d."longitude" IS NOT NULL
-ON CONFLICT ("routeId") DO NOTHING;
+-- Templates are intentionally NOT backfilled from legacy ServiceLocation coordinates.
+-- Some legacy coordinates may be broad or incorrect; an administrator explicitly
+-- reviews and saves each reusable template from the map before it becomes authoritative.
 
 -- Every newly submitted booking on a templated route receives the exact saved
 -- endpoint addresses/coordinates and route estimates, regardless of client input.
