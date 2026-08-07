@@ -13,6 +13,7 @@ import { PricingModule } from './pricing/pricing.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { RoutesModule } from './routes/routes.module';
+import { TrackingModule } from './tracking/tracking.module';
 import { TripsModule } from './trips/trips.module';
 import { UsersModule } from './users/users.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -36,6 +37,7 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     BookingsModule,
     PricingModule,
     RoutesModule,
+    TrackingModule,
     AdminModule
   ],
   controllers: [HealthController],

@@ -56,9 +56,13 @@ export default function AdminPage() {
       <Link className="panel operations-shortcut" href="/admin/users"><span>الحسابات</span><strong>إنشاء المستخدمين والموظفين</strong><small>الأدوار والتفعيل وكلمات المرور.</small></Link>
     </section>
     <section className="panel">
-      <div className="section-heading"><div><h2>أحدث الحجوزات</h2><p className="subtitle">الطلبات الأحدث ومراحل مراجعتها.</p></div><Link className="button" href="/admin/bookings">عرض الكل</Link></div>
+      <div className="section-heading"><div><h2>أحدث الحجوزات</h2><p className="subtitle">الطلبات الأحدث ومراحل مراجعتها. يمكن اعتماد مسار كل حجز قبل تعيين السائق.</p></div><Link className="button" href="/admin/bookings">عرض الكل</Link></div>
       <div className="booking-list">{data?.latest.map((booking) => <article className="booking-card compact" key={booking.id}>
         <div className="booking-card-head"><div><strong>{booking.bookingReference}</strong><small>{booking.contactName} · {booking.route?.nameAr ?? (booking.direction ? DIRECTION_LABELS[booking.direction] : booking.pickupAddress)}</small></div><span className="status">{booking.bookingReviewStatus ? BOOKING_REVIEW_LABELS[booking.bookingReviewStatus] : booking.status}</span></div>
+        <div className="actions">
+          <Link className="button primary compact-button" href={`/admin/bookings/${booking.id}/tracking`}>{booking.driver ? "تتبع الرحلة" : "تخطيط المسار"}</Link>
+          <Link className="button compact-button" href={`/admin/bookings/${booking.id}`}>تفاصيل الحجز</Link>
+        </div>
       </article>)}</div>
     </section>
   </Shell></ProtectedRoute>;

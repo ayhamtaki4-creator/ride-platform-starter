@@ -24,6 +24,7 @@ export function RiderBookingCard({
   const status = getBookingStatus(booking);
   const vehicle = booking.driver?.driverProfile?.vehicles[0];
   const runStatus = getRunStatusLabel(booking);
+  const canTrack = !["CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER"].includes(booking.status);
 
   return (
     <article className={`rider-booking-card ${compact ? "is-compact" : ""}`}>
@@ -91,9 +92,16 @@ export function RiderBookingCard({
           <small>قيمة الحجز</small>
           <strong>{formatBookingMoney(booking.estimatedFare, booking.currency)}</strong>
         </div>
-        <Link className="button compact-button" href={`/rider/bookings/${booking.id}`}>
-          عرض التفاصيل <Icon name="arrow-left" size={17} />
-        </Link>
+        <div className="actions">
+          {canTrack ? (
+            <Link className="button compact-button primary" href={`/rider/bookings/${booking.id}/tracking`}>
+              الخريطة والتتبع <Icon name="map-pin" size={17} />
+            </Link>
+          ) : null}
+          <Link className="button compact-button" href={`/rider/bookings/${booking.id}`}>
+            عرض التفاصيل <Icon name="arrow-left" size={17} />
+          </Link>
+        </div>
       </div>
     </article>
   );

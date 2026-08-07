@@ -60,6 +60,7 @@ export default function DriverBookingsPage() {
             <div className="schedule-card-grid driver-assignment-grid">
               {schedule.map((trip) => {
                 const requestBusy = Boolean(working);
+                const trackingAvailable = Boolean(trip.driver) && !["COMPLETED", "CANCELLED_BY_DRIVER", "CANCELLED_BY_PASSENGER"].includes(trip.status);
                 return (
                   <article className="booking-card driver-assignment-card" key={trip.id}>
                     <div className="booking-card-head">
@@ -77,7 +78,10 @@ export default function DriverBookingsPage() {
                     <div className="driver-passenger-contact"><span><Icon name="user" size={18} /></span><div><small>المسافر</small><strong>{trip.contactName || trip.passenger?.firstName || "—"}</strong><a href={`tel:${trip.contactPhone || ""}`}>{trip.contactPhone || "لا يوجد رقم"}</a></div></div>
                     <div className="detail-list compact-detail-list"><div><span>الالتقاط</span><strong>{trip.pickupAddress}</strong></div><div><span>الوصول</span><strong>{trip.dropoffAddress}</strong></div>{trip.flightNumber ? <div><span>الطائرة</span><strong>{trip.flightNumber} · {trip.flightArrivalTime}</strong></div> : null}</div>
 
-                    {trip.serviceRun ? <Link className="notice success driver-run-link" href={`/driver/runs/${trip.serviceRun.id}`}>الرحلة التشغيلية {trip.serviceRun.runReference}</Link> : null}
+                    <div className="actions">
+                      {trackingAvailable ? <Link className="button primary" href={`/driver/bookings/${trip.id}/tracking`}><Icon name="map-pin" size={17} /> الخريطة ومشاركة GPS</Link> : null}
+                      {trip.serviceRun ? <Link className="button" href={`/driver/runs/${trip.serviceRun.id}`}>الرحلة التشغيلية {trip.serviceRun.runReference}</Link> : null}
+                    </div>
 
                     {trip.driverAssignmentStatus === "PENDING" ? (
                       <div className="driver-assignment-actions">

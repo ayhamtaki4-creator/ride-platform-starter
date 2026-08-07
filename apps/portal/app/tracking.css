@@ -1,0 +1,134 @@
+.tracking-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.tracking-panel .section-heading {
+  margin-bottom: 0;
+}
+
+.tracking-map-frame {
+  margin-top: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.ride-marker-waypoint {
+  color: #173226;
+  background: #ffd384;
+}
+
+.tracking-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tracking-summary-grid > div,
+.public-tracking-summary > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: #f8faf9;
+}
+
+.tracking-summary-grid small,
+.public-tracking-summary small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.tracking-summary-grid strong,
+.public-tracking-summary strong {
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+  font-size: 14px;
+}
+
+.driver-location-controls {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.public-tracking-page {
+  width: min(1180px, calc(100% - 32px));
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 32px 0 52px;
+}
+
+.public-tracking-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  margin-bottom: 20px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.public-tracking-header > div:first-child {
+  min-width: 0;
+}
+
+.public-tracking-header > div:last-child {
+  display: grid;
+  justify-items: end;
+  gap: 9px;
+}
+
+.public-tracking-header h1 {
+  margin: 5px 0;
+  font-size: clamp(27px, 4vw, 42px);
+}
+
+.public-tracking-header p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.public-tracking-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+@media (max-width: 900px) {
+  .public-tracking-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .tracking-summary-grid,
+  .public-tracking-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .public-tracking-page {
+    width: min(100% - 20px, 1180px);
+    padding-top: 10px;
+  }
+
+  .public-tracking-header {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 18px;
+  }
+
+  .public-tracking-header > div:last-child {
+    justify-items: start;
+  }
+
+  .tracking-map-frame {
+    height: 390px !important;
+  }
+}
