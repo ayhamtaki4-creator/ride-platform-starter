@@ -48,6 +48,13 @@ const DEFAULT_VEHICLE_CLASSES: VehicleClassConfig[] = [
   { vehicleClass: "LARGE", passengerCapacity: 8, luggageCapacity: 8 },
 ];
 
+type RouteBookingPolicy = {
+  routeId: string;
+  passengerCanEditPickup: boolean;
+  passengerCanEditDropoff: boolean;
+  flightTimeMode: "ARRIVAL" | "DEPARTURE";
+};
+
 type BookingFormState = PendingBookingForm;
 type PickerButtonProps = {
   value?: string;
@@ -136,6 +143,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   const { user } = useAuth();
   const { showToast } = useToast();
   const [routes, setRoutes] = useState<ServiceRoute[]>([]);
+  const [routePolicies, setRoutePolicies] = useState<Record<string, RouteBookingPolicy>>({});
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<BookingFormState>({
     routeId: "",
@@ -166,6 +174,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   const [working, setWorking] = useState(false);
   const [mapWorking, setMapWorking] = useState(false);
   const [mapSelectionMode, setMapSelectionMode] = useState<"pickup" | "dropoff">("pickup");
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [error, setError] = useState("");
   const resumeStarted = useRef(false);
 
@@ -173,6 +183,22 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     () => routes.find((route) => route.id === form.routeId) ?? null,
     [form.routeId, routes],
   );
+  const selectedPolicy = useMemo<RouteBookingPolicy | null>(() => {
+    if (!selectedRoute) return null;
+    return routePolicies[selectedRoute.id] ?? {
+      routeId: selectedRoute.id,
+      passengerCanEditPickup: selectedRoute.origin.type !== "AIRPORT",
+      passengerCanEditDropoff: selectedRoute.destination.type !== "AIRPORT",
+      flightTimeMode: selectedRoute.destination.type === "AIRPORT" ? "DEPARTURE" : "ARRIVAL",
+    };
+  }, [routePolicies, selectedRoute]);
+  const canEditPickup = selectedPolicy?.passengerCanEditPickup ?? true;
+  const canEditDropoff = selectedPolicy?.passengerCanEditDropoff ?? true;
+  const flightTimeMode = selectedPolicy?.flightTimeMode ?? "ARRIVAL";
+  const flightDateLabel = flightTimeMode === "DEPARTURE" ? "تاريخ إقلاع الطائرة" : "تاريخ وصول الطائرة";
+  const flightTimeLabel = flightTimeMode === "DEPARTURE" ? "وقت إقلاع الطائرة" : "وقت وصول الطائرة";
+  const flightTimePlaceholder = flightTimeMode === "DEPARTURE" ? "اختر وقت الإقلاع" : "اختر وقت الوصول";
+
   const availableBookingTypes = selectedRoute?.bookingTypes ?? [];
   const isPassenger = Boolean(user?.roles.includes("PASSENGER"));
   const vehicleClasses = selectedRoute?.vehicleClasses?.length
@@ -186,39 +212,20 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   );
 
   const pickupMapPoint =
-    form.useCustomMapLocations &&
-    form.pickupLatitude !== null &&
-    form.pickupLongitude !== null
-      ? {
-          latitude: form.pickupLatitude,
-          longitude: form.pickupLongitude,
-          label: form.pickupAddress,
-        }
+    form.useCustomMapLocations && form.pickupLatitude !== null && form.pickupLongitude !== null
+      ? { latitude: form.pickupLatitude, longitude: form.pickupLongitude, label: form.pickupAddress }
       : null;
   const dropoffMapPoint =
-    form.useCustomMapLocations &&
-    form.dropoffLatitude !== null &&
-    form.dropoffLongitude !== null
-      ? {
-          latitude: form.dropoffLatitude,
-          longitude: form.dropoffLongitude,
-          label: form.dropoffAddress,
-        }
+    form.useCustomMapLocations && form.dropoffLatitude !== null && form.dropoffLongitude !== null
+      ? { latitude: form.dropoffLatitude, longitude: form.dropoffLongitude, label: form.dropoffAddress }
       : null;
 
   function tierPrice(vehicleClass: VehicleClass) {
     const rule = selectedRoute?.pricingRules.find(
-      (item) =>
-        item.bookingType === form.bookingType &&
-        item.vehicleClass === vehicleClass &&
-        item.isActive !== false,
+      (item) => item.bookingType === form.bookingType && item.vehicleClass === vehicleClass && item.isActive !== false,
     );
     if (!rule) return null;
-
-    return {
-      amount: Number(rule.passengerPrice),
-      currency: rule.currency,
-    };
+    return { amount: Number(rule.passengerPrice), currency: rule.currency };
   }
 
   useEffect(() => {
@@ -233,38 +240,31 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   }, []);
 
   useEffect(() => {
-    void apiFetch<ServiceRoute[]>("/routes", { skipAuth: true })
-      .then((data) => {
+    void Promise.all([
+      apiFetch<ServiceRoute[]>("/routes", { skipAuth: true }),
+      apiFetch<RouteBookingPolicy[]>("/route-booking-policies", { skipAuth: true }),
+    ])
+      .then(([data, policies]) => {
         setRoutes(data);
+        setRoutePolicies(Object.fromEntries(policies.map((policy) => [policy.routeId, policy])));
         const first = data.find((route) => route.bookable);
         if (first) {
           setForm((current) => {
-            const restoredRoute = data.find(
-              (item) => item.id === current.routeId && item.bookable,
-            );
+            const restoredRoute = data.find((item) => item.id === current.routeId && item.bookable);
             const route = restoredRoute ?? first;
             const bookingType = preferredBookingType(route, current.bookingType);
             const keepsVehicleClass =
               bookingType !== "PRIVATE_CAR" ||
               route.pricingRules.some(
-                (rule) =>
-                  rule.bookingType === bookingType &&
-                  rule.vehicleClass === current.vehicleClass &&
-                  rule.isActive !== false,
+                (rule) => rule.bookingType === bookingType && rule.vehicleClass === current.vehicleClass && rule.isActive !== false,
               );
             return {
               ...current,
               routeId: route.id,
               bookingType,
-              vehicleClass: keepsVehicleClass
-                ? current.vehicleClass
-                : firstPricedVehicleClass(route, bookingType),
-              pickupAddress: restoredRoute
-                ? current.pickupAddress || route.origin.nameAr
-                : route.origin.nameAr,
-              dropoffAddress: restoredRoute
-                ? current.dropoffAddress || route.destination.nameAr
-                : route.destination.nameAr,
+              vehicleClass: keepsVehicleClass ? current.vehicleClass : firstPricedVehicleClass(route, bookingType),
+              pickupAddress: restoredRoute ? current.pickupAddress || route.origin.nameAr : route.origin.nameAr,
+              dropoffAddress: restoredRoute ? current.dropoffAddress || route.destination.nameAr : route.destination.nameAr,
             };
           });
         }
@@ -282,10 +282,17 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     }
   }, [form.passengerName, form.passengerPhone, user]);
 
+  useEffect(() => {
+    if (!form.useCustomMapLocations) return;
+    if (mapSelectionMode === "pickup" && !canEditPickup && canEditDropoff) setMapSelectionMode("dropoff");
+    if (mapSelectionMode === "dropoff" && !canEditDropoff && canEditPickup) setMapSelectionMode("pickup");
+  }, [canEditDropoff, canEditPickup, form.useCustomMapLocations, mapSelectionMode]);
+
   function chooseRoute(route: ServiceRoute) {
     const bookingType = preferredBookingType(route, form.bookingType);
-    const ticketUploadEnabled =
-      route.requiresFlightDetails && route.flightTicketUploadEnabled !== false;
+    const ticketUploadEnabled = route.requiresFlightDetails && route.flightTicketUploadEnabled !== false;
+    const policy = routePolicies[route.id];
+    const initialMapMode = policy?.passengerCanEditPickup === false && policy?.passengerCanEditDropoff !== false ? "dropoff" : "pickup";
     setForm((current) => ({
       ...current,
       routeId: route.id,
@@ -303,7 +310,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       flightTicketMediaId: ticketUploadEnabled ? current.flightTicketMediaId : "",
       flightTicketFileName: ticketUploadEnabled ? current.flightTicketFileName : "",
     }));
-    setMapSelectionMode("pickup");
+    setMapSelectionMode(initialMapMode);
     if (!ticketUploadEnabled) {
       setTicketExtraction(null);
       void deletePendingTicket(draftId).catch(() => undefined);
@@ -333,7 +340,10 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       setError("اختر مسار الرحلة أولًا.");
       return;
     }
-
+    if (enabled && !canEditPickup && !canEditDropoff) {
+      setError("الإدارة جعلت نقطتي الانطلاق والوصول ثابتتين لهذا المسار.");
+      return;
+    }
     if (!enabled) {
       setForm((current) => ({
         ...current,
@@ -345,7 +355,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         pickupAddress: selectedRoute.origin.nameAr,
         dropoffAddress: selectedRoute.destination.nameAr,
       }));
-      setMapSelectionMode("pickup");
+      setMapSelectionMode(canEditPickup ? "pickup" : "dropoff");
       setError("");
       return;
     }
@@ -354,12 +364,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     const pickupLongitude = numericCoordinate(selectedRoute.origin.longitude);
     const dropoffLatitude = numericCoordinate(selectedRoute.destination.latitude);
     const dropoffLongitude = numericCoordinate(selectedRoute.destination.longitude);
-    if (
-      pickupLatitude === null ||
-      pickupLongitude === null ||
-      dropoffLatitude === null ||
-      dropoffLongitude === null
-    ) {
+    if (pickupLatitude === null || pickupLongitude === null || dropoffLatitude === null || dropoffLongitude === null) {
       setError("لا توجد إحداثيات صالحة لهذا المسار. اطلب من الإدارة ضبط قالب المسار أولًا.");
       return;
     }
@@ -374,13 +379,17 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       pickupAddress: current.pickupAddress || selectedRoute.origin.nameAr,
       dropoffAddress: current.dropoffAddress || selectedRoute.destination.nameAr,
     }));
-    setMapSelectionMode("pickup");
+    setMapSelectionMode(canEditPickup ? "pickup" : "dropoff");
     setError("");
   }
 
   async function selectMapLocation(point: { latitude: number; longitude: number }) {
     if (!form.useCustomMapLocations) return;
     const mode = mapSelectionMode;
+    if ((mode === "pickup" && !canEditPickup) || (mode === "dropoff" && !canEditDropoff)) {
+      setError("هذه النقطة ثابتة حسب إعدادات الإدارة لهذا المسار.");
+      return;
+    }
     setMapWorking(true);
     setError("");
 
@@ -394,21 +403,11 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
 
     setForm((current) =>
       mode === "pickup"
-        ? {
-            ...current,
-            pickupLatitude: point.latitude,
-            pickupLongitude: point.longitude,
-            pickupAddress: label,
-          }
-        : {
-            ...current,
-            dropoffLatitude: point.latitude,
-            dropoffLongitude: point.longitude,
-            dropoffAddress: label,
-          },
+        ? { ...current, pickupLatitude: point.latitude, pickupLongitude: point.longitude, pickupAddress: label }
+        : { ...current, dropoffLatitude: point.latitude, dropoffLongitude: point.longitude, dropoffAddress: label },
     );
     showToast(mode === "pickup" ? "تم تحديد نقطة الانطلاق." : "تم تحديد نقطة الوصول.", "success");
-    if (mode === "pickup") setMapSelectionMode("dropoff");
+    if (mode === "pickup" && canEditDropoff) setMapSelectionMode("dropoff");
     setMapWorking(false);
   }
 
@@ -431,7 +430,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       (!form.flightArrivalTime || !form.flightNumber.trim()) &&
       !(!isPassenger && isTicketUploadEnabled && form.flightTicketFileName)
     ) {
-      setError("أرفق تذكرة الطيران أو أدخل وقت الوصول ورقم الرحلة.");
+      setError("أرفق تذكرة الطيران أو أدخل وقت الرحلة ورقم الرحلة.");
       return false;
     }
     if (step === 3 && (!form.passengerName.trim() || !form.passengerPhone.trim())) {
@@ -445,14 +444,11 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     if (
       step === 3 &&
       form.useCustomMapLocations &&
-      [
-        form.pickupLatitude,
-        form.pickupLongitude,
-        form.dropoffLatitude,
-        form.dropoffLongitude,
-      ].some((value) => value === null || !Number.isFinite(value))
+      [form.pickupLatitude, form.pickupLongitude, form.dropoffLatitude, form.dropoffLongitude].some(
+        (value) => value === null || !Number.isFinite(value),
+      )
     ) {
-      setError("حدد نقطتي الانطلاق والوصول على الخريطة قبل المتابعة.");
+      setError("تعذر تجهيز نقاط الخريطة. أعد فتح الخريطة وحاول مجددًا.");
       return false;
     }
     return true;
@@ -499,10 +495,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     }
   }
 
-  function withExtraction(
-    candidate: BookingFormState,
-    upload: FlightTicketUploadResponse,
-  ): BookingFormState {
+  function withExtraction(candidate: BookingFormState, upload: FlightTicketUploadResponse): BookingFormState {
     const { extraction } = upload;
     return {
       ...candidate,
@@ -511,9 +504,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       travelDate: extraction.arrivalDate || candidate.travelDate,
       flightArrivalTime: extraction.arrivalTime || candidate.flightArrivalTime,
       flightNumber: extraction.flightNumber || candidate.flightNumber,
-      passengerName: candidate.passengerName.trim()
-        ? candidate.passengerName
-        : extraction.passengerName || candidate.passengerName,
+      passengerName: candidate.passengerName.trim() ? candidate.passengerName : extraction.passengerName || candidate.passengerName,
     };
   }
 
@@ -533,37 +524,19 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     }
 
     setTicketExtraction(null);
-    const candidate: BookingFormState = {
-      ...form,
-      flightTicketFileName: file.name,
-      flightTicketMediaId: "",
-    };
+    const candidate: BookingFormState = { ...form, flightTicketFileName: file.name, flightTicketMediaId: "" };
     setForm(candidate);
 
     try {
       await storePendingTicket(draftId, file);
-      savePendingBooking({
-        id: draftId,
-        form: candidate,
-        step,
-        submitAfterAuth: false,
-      });
-
+      savePendingBooking({ id: draftId, form: candidate, step, submitAfterAuth: false });
       if (isPassenger) {
         const upload = await uploadTicketFile(file, candidate.routeId);
         const extracted = withExtraction(candidate, upload);
         setForm(extracted);
-        savePendingBooking({
-          id: draftId,
-          form: extracted,
-          step,
-          submitAfterAuth: false,
-        });
+        savePendingBooking({ id: draftId, form: extracted, step, submitAfterAuth: false });
       } else {
-        showToast(
-          "تم حفظ ملف التذكرة مؤقتًا، وسيُحلل تلقائيًا بعد تسجيل الدخول.",
-          "success",
-        );
+        showToast("تم حفظ ملف التذكرة مؤقتًا، وسيُحلل تلقائيًا بعد تسجيل الدخول.", "success");
       }
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "تعذر حفظ أو تحليل التذكرة.";
@@ -596,45 +569,47 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       });
 
       let mapLocationsSaved = true;
-      if (
-        useCustomMapLocations &&
-        pickupLatitude !== null &&
-        pickupLongitude !== null &&
-        dropoffLatitude !== null &&
-        dropoffLongitude !== null
-      ) {
-        try {
-          await apiFetch(`/tracking/trips/${booking.id}/endpoints`, {
-            method: "PATCH",
-            body: JSON.stringify({
-              originAddress: candidate.pickupAddress.trim(),
-              originLatitude: pickupLatitude,
-              originLongitude: pickupLongitude,
-              destinationAddress: candidate.dropoffAddress.trim(),
-              destinationLatitude: dropoffLatitude,
-              destinationLongitude: dropoffLongitude,
-              geometry: {
-                type: "LineString",
-                coordinates: [
-                  [pickupLongitude, pickupLatitude],
-                  [dropoffLongitude, dropoffLatitude],
-                ],
-              },
-              waypoints: [],
-            }),
-          });
-        } catch {
-          mapLocationsSaved = false;
+      if (useCustomMapLocations) {
+        const finalPickupLatitude = canEditPickup ? pickupLatitude : booking.pickupLatitude;
+        const finalPickupLongitude = canEditPickup ? pickupLongitude : booking.pickupLongitude;
+        const finalDropoffLatitude = canEditDropoff ? dropoffLatitude : booking.dropoffLatitude;
+        const finalDropoffLongitude = canEditDropoff ? dropoffLongitude : booking.dropoffLongitude;
+        const finalPickupAddress = canEditPickup ? candidate.pickupAddress.trim() : booking.pickupAddress;
+        const finalDropoffAddress = canEditDropoff ? candidate.dropoffAddress.trim() : booking.dropoffAddress;
+
+        if (
+          finalPickupLatitude != null && finalPickupLongitude != null && finalDropoffLatitude != null && finalDropoffLongitude != null
+        ) {
+          try {
+            await apiFetch(`/tracking/trips/${booking.id}/endpoints`, {
+              method: "PATCH",
+              body: JSON.stringify({
+                originAddress: finalPickupAddress,
+                originLatitude: finalPickupLatitude,
+                originLongitude: finalPickupLongitude,
+                destinationAddress: finalDropoffAddress,
+                destinationLatitude: finalDropoffLatitude,
+                destinationLongitude: finalDropoffLongitude,
+                geometry: {
+                  type: "LineString",
+                  coordinates: [
+                    [finalPickupLongitude, finalPickupLatitude],
+                    [finalDropoffLongitude, finalDropoffLatitude],
+                  ],
+                },
+                waypoints: [],
+              }),
+            });
+          } catch {
+            mapLocationsSaved = false;
+          }
         }
       }
 
       clearPendingBooking();
       await deletePendingTicket(requestId).catch(() => undefined);
       if (!mapLocationsSaved) {
-        showToast(
-          `تم إنشاء الحجز ${booking.bookingReference ?? ""}، لكن تعذر حفظ نقاط الخريطة. يمكنك تعديلها لاحقًا من صفحة التتبع.`,
-          "error",
-        );
+        showToast(`تم إنشاء الحجز ${booking.bookingReference ?? ""}، لكن تعذر حفظ نقطة الخريطة.`, "error");
       } else {
         showToast(`تم إرسال الحجز ${booking.bookingReference ?? ""}.`, "success");
       }
@@ -652,12 +627,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   }
 
   function continueToLogin() {
-    savePendingBooking({
-      id: draftId,
-      form,
-      step: 4,
-      submitAfterAuth: true,
-    });
+    savePendingBooking({ id: draftId, form, step: 4, submitAfterAuth: true });
     router.push("/login?continue=booking");
   }
 
@@ -682,40 +652,24 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   }
 
   useEffect(() => {
-    if (
-      !draftLoaded ||
-      !restoredDraft?.submitAfterAuth ||
-      !isPassenger ||
-      routes.length === 0 ||
-      resumeStarted.current
-    ) {
-      return;
-    }
+    if (!draftLoaded || !restoredDraft?.submitAfterAuth || !isPassenger || routes.length === 0 || resumeStarted.current) return;
 
     resumeStarted.current = true;
     void (async () => {
       let candidate: BookingFormState = {
         ...restoredDraft.form,
-        passengerName:
-          restoredDraft.form.passengerName || `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim(),
+        passengerName: restoredDraft.form.passengerName || `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim(),
         passengerPhone: restoredDraft.form.passengerPhone || user?.phone || "",
       };
 
       try {
         const route = routes.find((item) => item.id === candidate.routeId);
-        const canUploadTicket = Boolean(
-          route?.requiresFlightDetails && route.flightTicketUploadEnabled !== false,
-        );
+        const canUploadTicket = Boolean(route?.requiresFlightDetails && route.flightTicketUploadEnabled !== false);
 
         if (!canUploadTicket && candidate.flightTicketFileName) {
-          candidate = {
-            ...candidate,
-            flightTicketMediaId: "",
-            flightTicketFileName: "",
-          };
+          candidate = { ...candidate, flightTicketMediaId: "", flightTicketFileName: "" };
           await deletePendingTicket(restoredDraft.id).catch(() => undefined);
         }
-
         if (canUploadTicket && candidate.flightTicketFileName && !candidate.flightTicketMediaId) {
           const ticketFile = await loadPendingTicket(restoredDraft.id);
           if (!ticketFile) {
@@ -728,23 +682,13 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
           candidate = withExtraction(candidate, upload);
           setForm(candidate);
         }
-
-        if (
-          route?.requiresFlightDetails &&
-          (!candidate.flightArrivalTime || !candidate.flightNumber.trim())
-        ) {
+        if (route?.requiresFlightDetails && (!candidate.flightArrivalTime || !candidate.flightNumber.trim())) {
           setForm(candidate);
           setStep(2);
-          savePendingBooking({
-            id: restoredDraft.id,
-            form: candidate,
-            step: 2,
-            submitAfterAuth: false,
-          });
-          setError("راجع بيانات التذكرة وأكمل وقت الوصول ورقم الرحلة قبل الإرسال.");
+          savePendingBooking({ id: restoredDraft.id, form: candidate, step: 2, submitAfterAuth: false });
+          setError("راجع بيانات التذكرة وأكمل وقت الرحلة ورقم الرحلة قبل الإرسال.");
           return;
         }
-
         const restoredQuote = await loadQuoteFor(candidate);
         if (!restoredQuote) return;
         await createBooking(candidate, restoredDraft.id);
@@ -759,81 +703,36 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   return (
     <form id="booking-card" className="booking-wizard" onSubmit={submit}>
       <div className="wizard-header">
-        <div>
-          <span className="wizard-step-label">الخطوة {step} من 4</span>
-          <h3>{stepTitles[step - 1]}</h3>
-        </div>
-        <span className="wizard-secure">
-          <Icon name="shield" size={17} />حجز آمن
-        </span>
+        <div><span className="wizard-step-label">الخطوة {step} من 4</span><h3>{stepTitles[step - 1]}</h3></div>
+        <span className="wizard-secure"><Icon name="shield" size={17} />حجز آمن</span>
       </div>
       <ol className="wizard-progress">
         {stepTitles.map((title, index) => {
           const number = index + 1;
-          return (
-            <li
-              className={`${number < step ? "is-done" : ""} ${number === step ? "is-current" : ""}`}
-              key={title}
-            >
-              <span>{number < step ? <Icon name="check" size={16} /> : number}</span>
-              <small>{title}</small>
-            </li>
-          );
+          return <li className={`${number < step ? "is-done" : ""} ${number === step ? "is-current" : ""}`} key={title}><span>{number < step ? <Icon name="check" size={16} /> : number}</span><small>{title}</small></li>;
         })}
       </ol>
       <div className="wizard-body">
         {step === 1 ? (
           <div className="wizard-pane">
-            <div className="pane-heading">
-              <h4>اختر خط الرحلة</h4>
-              <p>تظهر هنا المسارات الفعالة التي لديها سعر متاح.</p>
-            </div>
-            {routes.length === 0 ? (
-              <div className="empty-state">لا توجد مسارات قابلة للحجز حاليًا.</div>
-            ) : (
+            <div className="pane-heading"><h4>اختر خط الرحلة</h4><p>تظهر هنا المسارات الفعالة التي لديها سعر متاح.</p></div>
+            {routes.length === 0 ? <div className="empty-state">لا توجد مسارات قابلة للحجز حاليًا.</div> : (
               <div className="dynamic-route-grid">
-                {routes
-                  .filter((route) => route.bookable)
-                  .map((route) => (
-                    <button
-                      className={`route-choice-card ${route.id === form.routeId ? "is-selected" : ""}`}
-                      type="button"
-                      key={route.id}
-                      onClick={() => chooseRoute(route)}
-                    >
-                      <span className="choice-icon">
-                        <Icon name={route.requiresFlightDetails ? "plane" : "route"} size={24} />
-                      </span>
-                      <span>
-                        <strong>{route.nameAr}</strong>
-                        <small>
-                          {ROUTE_TYPE_LABELS[route.routeType]} ·{" "}
-                          {route.estimatedMinutes ? `${route.estimatedMinutes} دقيقة` : "المدة حسب التشغيل"}
-                        </small>
-                      </span>
-                      {route.id === form.routeId ? <Icon name="check" size={18} /> : null}
-                    </button>
-                  ))}
+                {routes.filter((route) => route.bookable).map((route) => (
+                  <button className={`route-choice-card ${route.id === form.routeId ? "is-selected" : ""}`} type="button" key={route.id} onClick={() => chooseRoute(route)}>
+                    <span className="choice-icon"><Icon name={route.requiresFlightDetails ? "plane" : "route"} size={24} /></span>
+                    <span><strong>{route.nameAr}</strong><small>{ROUTE_TYPE_LABELS[route.routeType]} · {route.estimatedMinutes ? `${route.estimatedMinutes} دقيقة` : "المدة حسب التشغيل"}</small></span>
+                    {route.id === form.routeId ? <Icon name="check" size={18} /> : null}
+                  </button>
+                ))}
               </div>
             )}
-            <div className="pane-heading secondary-pane-heading">
-              <h4>نوع الحجز</h4>
-            </div>
+            <div className="pane-heading secondary-pane-heading"><h4>نوع الحجز</h4></div>
             <div className="choice-grid">
               {availableBookingTypes.map((value) => (
-                <button
-                  className={`choice-card ${form.bookingType === value ? "is-selected" : ""}`}
-                  type="button"
-                  key={value}
-                  onClick={() => chooseBookingType(value)}
-                >
-                  <span className="choice-icon">
-                    <Icon name={value === "SHARED_SEAT" ? "users" : "car"} size={24} />
-                  </span>
-                  <span>
-                    <strong>{BOOKING_TYPE_LABELS[value]}</strong>
-                    <small>{value === "SHARED_SEAT" ? "حجز مقعد واحد" : "المركبة كاملة"}</small>
-                  </span>
+                <button className={`choice-card ${form.bookingType === value ? "is-selected" : ""}`} type="button" key={value} onClick={() => chooseBookingType(value)}>
+                  <span className="choice-icon"><Icon name={value === "SHARED_SEAT" ? "users" : "car"} size={24} /></span>
+                  <span><strong>{BOOKING_TYPE_LABELS[value]}</strong><small>{value === "SHARED_SEAT" ? "حجز مقعد واحد" : "المركبة كاملة"}</small></span>
                 </button>
               ))}
             </div>
@@ -843,87 +742,28 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         {step === 2 ? (
           <div className="wizard-pane">
             <div className="pane-heading">
-              <h4>
-                {form.bookingType === "PRIVATE_CAR"
-                  ? "اختر موعد الرحلة وحجم السيارة"
-                  : "اختر موعد الرحلة"}
-              </h4>
-              <p>
-                {selectedRoute?.requiresFlightDetails
-                  ? "بيانات الطائرة مطلوبة لهذا المسار."
-                  : "بيانات الطائرة اختيارية لهذا المسار."}
-              </p>
+              <h4>{form.bookingType === "PRIVATE_CAR" ? "اختر موعد الرحلة وحجم السيارة" : "اختر موعد الرحلة"}</h4>
+              <p>{selectedRoute?.requiresFlightDetails ? `بيانات ${flightTimeMode === "DEPARTURE" ? "إقلاع" : "وصول"} الطائرة مطلوبة لهذا المسار.` : "بيانات الطائرة اختيارية لهذا المسار."}</p>
             </div>
 
             {isTicketUploadEnabled ? (
               <section className={`flight-ticket-upload ${form.flightTicketFileName ? "has-file" : ""}`}>
-                <div className="flight-ticket-upload-copy">
-                  <span className="flight-ticket-icon">
-                    <Icon name="plane" size={24} />
-                  </span>
-                  <div>
-                    <strong>أرفق تذكرة الطيران (إختياري)</strong>
-                    <small>
-                      سنقرأ تاريخ ووقت الوصول ورقم الرحلة تلقائيًا. الصيغ: JPG، PNG، WEBP أو PDF حتى 10 MB.
-                    </small>
-                  </div>
-                </div>
+                <div className="flight-ticket-upload-copy"><span className="flight-ticket-icon"><Icon name="plane" size={24} /></span><div><strong>أرفق تذكرة الطيران (إختياري)</strong><small>سنقرأ تاريخ ووقت الرحلة ورقم الرحلة تلقائيًا. الصيغ: JPG، PNG، WEBP أو PDF حتى 10 MB.</small></div></div>
                 <label className={`button ${form.flightTicketFileName ? "" : "primary"}`}>
-                  <input
-                    hidden
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf"
-                    disabled={ticketWorking}
-                    onChange={(event) => void handleTicketSelected(event.target.files?.[0])}
-                  />
-                  {ticketWorking
-                    ? "جارٍ تحليل التذكرة..."
-                    : form.flightTicketFileName
-                    ? "استبدال التذكرة"
-                    : "اختيار التذكرة"}
+                  <input hidden type="file" accept="image/jpeg,image/png,image/webp,application/pdf" disabled={ticketWorking} onChange={(event) => void handleTicketSelected(event.target.files?.[0])} />
+                  {ticketWorking ? "جارٍ تحليل التذكرة..." : form.flightTicketFileName ? "استبدال التذكرة" : "اختيار التذكرة"}
                 </label>
-                {form.flightTicketFileName ? (
-                  <div className="flight-ticket-result">
-                    <Icon name="check" size={18} />
-                    <span>
-                      <strong>{form.flightTicketFileName}</strong>
-                      <small>
-                        {form.flightTicketMediaId
-                          ? "تم رفعها وحفظها بصورة خاصة"
-                          : "محفوظة مؤقتًا حتى تسجيل الدخول"}
-                      </small>
-                    </span>
-                  </div>
-                ) : null}
-                {ticketExtraction ? (
-                  <div
-                    className={`ticket-extraction-status ${
-                      ticketExtraction.status === "EXTRACTED" ? "success" : "warning"
-                    }`}
-                  >
-                    <strong>
-                      {ticketExtraction.status === "EXTRACTED"
-                        ? "تمت تعبئة البيانات تلقائيًا"
-                        : "تحتاج البيانات إلى مراجعة"}
-                    </strong>
-                    <span>دقة القراءة التقريبية: {Math.round(ticketExtraction.confidence * 100)}%</span>
-                    {ticketExtraction.warning ? <small>{ticketExtraction.warning}</small> : null}
-                  </div>
-                ) : null}
+                {form.flightTicketFileName ? <div className="flight-ticket-result"><Icon name="check" size={18} /><span><strong>{form.flightTicketFileName}</strong><small>{form.flightTicketMediaId ? "تم رفعها وحفظها بصورة خاصة" : "محفوظة مؤقتًا حتى تسجيل الدخول"}</small></span></div> : null}
+                {ticketExtraction ? <div className={`ticket-extraction-status ${ticketExtraction.status === "EXTRACTED" ? "success" : "warning"}`}><strong>{ticketExtraction.status === "EXTRACTED" ? "تمت تعبئة البيانات تلقائيًا" : "تحتاج البيانات إلى مراجعة"}</strong><span>دقة القراءة التقريبية: {Math.round(ticketExtraction.confidence * 100)}%</span>{ticketExtraction.warning ? <small>{ticketExtraction.warning}</small> : null}</div> : null}
               </section>
             ) : null}
 
             <div className="form-grid wizard-form-grid">
               <label>
-                <span className="label">
-                  {selectedRoute?.requiresFlightDetails ? "تاريخ وصول الطائرة" : "تاريخ الرحلة"}
-                </span>
-
+                <span className="label">{selectedRoute?.requiresFlightDetails ? flightDateLabel : "تاريخ الرحلة"}</span>
                 <DatePicker
                   selected={parseDateValue(form.travelDate)}
-                  onChange={(date: Date | null) =>
-                    update("travelDate", date ? format(date, "yyyy-MM-dd") : "")
-                  }
+                  onChange={(date: Date | null) => { update("travelDate", date ? format(date, "yyyy-MM-dd") : ""); setDatePickerOpen(false); }}
                   minDate={tomorrowDate}
                   locale={ar}
                   dateFormat="dd/MM/yyyy"
@@ -931,18 +771,19 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                   calendarClassName="arrival-calendar"
                   popperClassName="arrival-date-time-popper"
                   showPopperArrow={false}
+                  open={datePickerOpen}
+                  onInputClick={() => setDatePickerOpen(true)}
+                  onClickOutside={() => setDatePickerOpen(false)}
+                  shouldCloseOnSelect
                   required
                 />
               </label>
 
               <label>
-                <span className="label">وقت وصول الطائرة</span>
-
+                <span className="label">{selectedRoute?.requiresFlightDetails ? flightTimeLabel : "وقت الرحلة"}</span>
                 <DatePicker
                   selected={parseTimeValue(form.flightArrivalTime)}
-                  onChange={(time: Date | null) =>
-                    update("flightArrivalTime", time ? format(time, "HH:mm") : "")
-                  }
+                  onChange={(time: Date | null) => { update("flightArrivalTime", time ? format(time, "HH:mm") : ""); setTimePickerOpen(false); }}
                   locale={ar}
                   showTimeSelect
                   showTimeSelectOnly
@@ -950,300 +791,105 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                   timeCaption="الوقت"
                   timeFormat="HH:mm"
                   dateFormat="HH:mm"
-                  customInput={<PickerButton placeholder="اختر وقت الوصول" />}
+                  customInput={<PickerButton placeholder={selectedRoute?.requiresFlightDetails ? flightTimePlaceholder : "اختر الوقت"} />}
                   calendarClassName="arrival-calendar arrival-time-calendar"
                   popperClassName="arrival-date-time-popper"
                   showPopperArrow={false}
+                  open={timePickerOpen}
+                  onInputClick={() => setTimePickerOpen(true)}
+                  onClickOutside={() => setTimePickerOpen(false)}
+                  shouldCloseOnSelect
                   required={selectedRoute?.requiresFlightDetails}
                 />
               </label>
 
-              <label>
-                <span className="label">رقم الرحلة الجوية</span>
-
-                <input
-                  className="input"
-                  value={form.flightNumber}
-                  onChange={(event) => update("flightNumber", event.target.value)}
-                  placeholder="مثال: ME 265"
-                  required={selectedRoute?.requiresFlightDetails}
-                />
-              </label>
+              <label><span className="label">رقم الرحلة الجوية</span><input className="input" value={form.flightNumber} onChange={(event) => update("flightNumber", event.target.value)} placeholder="مثال: ME 265" required={selectedRoute?.requiresFlightDetails} /></label>
             </div>
 
             {form.bookingType === "PRIVATE_CAR" ? (
               <>
-                <div className="pane-heading secondary-pane-heading">
-                  <h4>حجم السيارة</h4>
-                  <p>اختر الفئة التي تريد طلبها. السعة تُحددها إدارة المنصة.</p>
-                </div>
+                <div className="pane-heading secondary-pane-heading"><h4>حجم السيارة</h4><p>اختر الفئة التي تريد طلبها. السعة تُحددها إدارة المنصة.</p></div>
                 <div className="capacity-tier-grid vehicle-choice-grid">
                   {vehicleClasses.map((config) => {
                     const price = tierPrice(config.vehicleClass);
                     const isSelected = config.vehicleClass === form.vehicleClass;
-                    return (
-                      <button
-                        className={`capacity-tier-card vehicle-choice-card ${
-                          isSelected ? "is-selected" : ""
-                        }`}
-                        data-vehicle-class={config.vehicleClass}
-                        disabled={!price}
-                        key={config.vehicleClass}
-                        onClick={() => update("vehicleClass", config.vehicleClass)}
-                        type="button"
-                      >
-                        <span className="capacity-tier-heading">
-                          <span className="vehicle-class-title">
-                            <strong>{VEHICLE_CLASS_LABELS[config.vehicleClass]}</strong>
-                            <small className="vehicle-capacity-label">
-                              تتسع حتى {config.passengerCapacity} أشخاص و{config.luggageCapacity} حقائب
-                            </small>
-                          </span>
-                          {isSelected ? (
-                            <span className="vehicle-selected-badge">
-                              <Icon name="check" size={13} />محددة
-                            </span>
-                          ) : null}
-                        </span>
-                        <span className="capacity-tier-price">
-                          {price
-                            ? `${formatMoney(price.amount, price.currency)} للسيارة`
-                            : "السعر غير متاح حاليًا"}
-                        </span>
-                      </button>
-                    );
+                    return <button className={`capacity-tier-card vehicle-choice-card ${isSelected ? "is-selected" : ""}`} data-vehicle-class={config.vehicleClass} disabled={!price} key={config.vehicleClass} onClick={() => update("vehicleClass", config.vehicleClass)} type="button"><span className="capacity-tier-heading"><span className="vehicle-class-title"><strong>{VEHICLE_CLASS_LABELS[config.vehicleClass]}</strong><small className="vehicle-capacity-label">تتسع حتى {config.passengerCapacity} أشخاص و{config.luggageCapacity} حقائب</small></span>{isSelected ? <span className="vehicle-selected-badge"><Icon name="check" size={13} />محددة</span> : null}</span><span className="capacity-tier-price">{price ? `${formatMoney(price.amount, price.currency)} للسيارة` : "السعر غير متاح حاليًا"}</span></button>;
                   })}
                 </div>
               </>
-            ) : (
-              <div className="notice">
-                الحجز لمقعد واحد، وتختار الإدارة المركبة المناسبة للرحلة المشتركة.
-              </div>
-            )}
+            ) : <div className="notice">الحجز لمقعد واحد، وتختار الإدارة المركبة المناسبة للرحلة المشتركة.</div>}
           </div>
         ) : null}
 
         {step === 3 ? (
           <div className="wizard-pane">
-            <div className="pane-heading">
-              <h4>بيانات المسافر والعناوين</h4>
-            </div>
+            <div className="pane-heading"><h4>بيانات المسافر والعناوين</h4></div>
             <div className="form-grid wizard-form-grid">
-              <label>
-                <span className="label">الاسم الكامل</span>
-                <input
-                  className="input"
-                  value={form.passengerName}
-                  onChange={(e) => update("passengerName", e.target.value)}
-                  required
-                />
-              </label>
-              <label>
-                <span className="label">رقم الهاتف</span>
-                <InternationalPhoneInput
-                  value={form.passengerPhone}
-                  onChange={(value) => update("passengerPhone", value)}
-                  name="passengerPhone"
-                  required
-                />
-              </label>
+              <label><span className="label">الاسم الكامل</span><input className="input" value={form.passengerName} onChange={(e) => update("passengerName", e.target.value)} required /></label>
+              <label><span className="label">رقم الهاتف</span><InternationalPhoneInput value={form.passengerPhone} onChange={(value) => update("passengerPhone", value)} name="passengerPhone" required /></label>
 
-              <label
-                className="full-width notice"
-                style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}
-              >
-                <input
-                  type="checkbox"
-                  checked={form.useCustomMapLocations}
-                  onChange={(event) => toggleMapLocations(event.target.checked)}
-                  style={{ width: 20, height: 20, marginTop: 2, flex: "0 0 auto" }}
-                />
-                <span style={{ display: "grid", gap: 4 }}>
-                  <strong>تحديد مكان الانطلاق أو الوصول عبر الخريطة</strong>
-                  <small>
-                    خيار اختياري. عند عدم تفعيله تُستخدم نقاط المسار التي حددتها الإدارة تلقائيًا.
-                  </small>
-                </span>
-              </label>
+              {(canEditPickup || canEditDropoff) ? (
+                <label className="full-width notice" style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
+                  <input type="checkbox" checked={form.useCustomMapLocations} onChange={(event) => toggleMapLocations(event.target.checked)} style={{ width: 20, height: 20, marginTop: 2, flex: "0 0 auto" }} />
+                  <span style={{ display: "grid", gap: 4 }}>
+                    <strong>تحديد مكان الانطلاق أو الوصول عبر الخريطة</strong>
+                    <small>{canEditPickup && canEditDropoff ? "يمكنك تحديد النقطتين بدقة." : canEditPickup ? "نقطة الوصول ثابتة حسب إعدادات الإدارة؛ يمكنك تحديد نقطة الانطلاق فقط." : "نقطة الانطلاق ثابتة حسب إعدادات الإدارة؛ يمكنك تحديد نقطة الوصول فقط."}</small>
+                  </span>
+                </label>
+              ) : <div className="full-width notice">نقطتا الانطلاق والوصول ثابتتان حسب إعدادات الإدارة لهذا المسار.</div>}
 
               {form.useCustomMapLocations ? (
                 <div className="full-width" style={{ display: "grid", gap: 14 }}>
                   <div className="section-heading" style={{ marginBottom: 0 }}>
-                    <div>
-                      <strong>حدد النقطة المطلوبة ثم اضغط على الخريطة</strong>
-                      <small>
-                        بعد اختيار الانطلاق ننتقل تلقائيًا إلى وضع تحديد الوصول. يمكنك العودة لأي نقطة وتعديلها.
-                      </small>
-                    </div>
+                    <div><strong>اختر النقطة التي تريد تحديدها</strong><small>ستفتح الخريطة في نافذة مستقلة مناسبة للهاتف، ويمكنك البحث عن مكان أو الضغط مباشرة على الخريطة.</small></div>
                     <div className="actions">
-                      <button
-                        className={`button ${mapSelectionMode === "pickup" ? "primary" : ""}`}
-                        type="button"
-                        onClick={() => setMapSelectionMode("pickup")}
-                      >
-                        <Icon name="map-pin" size={17} /> تحديد الانطلاق
-                      </button>
-                      <button
-                        className={`button ${mapSelectionMode === "dropoff" ? "primary" : ""}`}
-                        type="button"
-                        onClick={() => setMapSelectionMode("dropoff")}
-                      >
-                        <Icon name="map-pin" size={17} /> تحديد الوصول
-                      </button>
+                      {canEditPickup ? <button className={`button ${mapSelectionMode === "pickup" ? "primary" : ""}`} type="button" onClick={() => setMapSelectionMode("pickup")}><Icon name="map-pin" size={17} /> تحديد الانطلاق</button> : null}
+                      {canEditDropoff ? <button className={`button ${mapSelectionMode === "dropoff" ? "primary" : ""}`} type="button" onClick={() => setMapSelectionMode("dropoff")}><Icon name="map-pin" size={17} /> تحديد الوصول</button> : null}
                     </div>
                   </div>
-
-                  <BookingLocationMap
-                    pickup={pickupMapPoint}
-                    dropoff={dropoffMapPoint}
-                    activeMode={mapSelectionMode}
-                    fitKey={`${selectedRoute?.id ?? "route"}:booking-location-picker`}
-                    onSelect={(point) => void selectMapLocation(point)}
-                  />
-
-                  {mapWorking ? (
-                    <div className="notice">جارٍ قراءة اسم المكان المحدد...</div>
-                  ) : (
-                    <div className="booking-meta">
-                      <span>
-                        A · {pickupMapPoint ? "تم تحديد نقطة الانطلاق" : "حدد نقطة الانطلاق"}
-                      </span>
-                      <span>
-                        B · {dropoffMapPoint ? "تم تحديد نقطة الوصول" : "حدد نقطة الوصول"}
-                      </span>
-                    </div>
-                  )}
+                  <BookingLocationMap pickup={pickupMapPoint} dropoff={dropoffMapPoint} activeMode={mapSelectionMode} fitKey={`${selectedRoute?.id ?? "route"}:booking-location-picker`} onSelect={selectMapLocation} />
+                  {mapWorking ? <div className="notice">جارٍ قراءة اسم المكان المحدد...</div> : <div className="booking-meta"><span>A · {canEditPickup ? "قابلة للتعديل" : "ثابتة من الإدارة"}</span><span>B · {canEditDropoff ? "قابلة للتعديل" : "ثابتة من الإدارة"}</span></div>}
                 </div>
               ) : null}
 
               <label>
                 <span className="label">عنوان الالتقاط</span>
-                <input
-                  className="input"
-                  value={form.pickupAddress}
-                  onChange={(e) => update("pickupAddress", e.target.value)}
-                  required
-                />
+                <input className="input" value={form.pickupAddress} onChange={(e) => canEditPickup && update("pickupAddress", e.target.value)} readOnly={!canEditPickup} required />
+                {!canEditPickup ? <small className="booking-location-policy-note">ثابت حسب إعدادات الإدارة.</small> : null}
               </label>
               <label>
                 <span className="label">عنوان الوصول</span>
-                <input
-                  className="input"
-                  value={form.dropoffAddress}
-                  onChange={(e) => update("dropoffAddress", e.target.value)}
-                  required
-                />
+                <input className="input" value={form.dropoffAddress} onChange={(e) => canEditDropoff && update("dropoffAddress", e.target.value)} readOnly={!canEditDropoff} required />
+                {!canEditDropoff ? <small className="booking-location-policy-note">ثابت حسب إعدادات الإدارة.</small> : null}
               </label>
-              <label className="full-width">
-                <span className="label">ملاحظات</span>
-                <textarea
-                  className="input"
-                  rows={4}
-                  value={form.notes}
-                  onChange={(e) => update("notes", e.target.value)}
-                />
-              </label>
+              <label className="full-width"><span className="label">ملاحظات</span><textarea className="input" rows={4} value={form.notes} onChange={(e) => update("notes", e.target.value)} /></label>
             </div>
           </div>
         ) : null}
 
         {step === 4 ? (
           <div className="wizard-pane">
-            <div className="pane-heading">
-              <h4>راجع طلبك</h4>
-              <p>السعر مأخوذ من قاعدة السعر الفعالة للمسار والفئة.</p>
-            </div>
+            <div className="pane-heading"><h4>راجع طلبك</h4><p>السعر مأخوذ من قاعدة السعر الفعالة للمسار والفئة.</p></div>
             <div className="review-grid">
-              <div>
-                <span>المسار</span>
-                <strong>{selectedRoute?.nameAr}</strong>
-              </div>
-              <div>
-                <span>نوع الحجز</span>
-                <strong>{BOOKING_TYPE_LABELS[form.bookingType]}</strong>
-              </div>
-              {form.bookingType === "PRIVATE_CAR" ? (
-                <div>
-                  <span>فئة السيارة</span>
-                  <strong>
-                    {VEHICLE_CLASS_LABELS[form.vehicleClass]} · حتى{" "}
-                    {quote?.passengerCapacity ?? selectedClassConfig.passengerCapacity} أشخاص و
-                    {quote?.luggageCapacity ?? selectedClassConfig.luggageCapacity} حقائب
-                  </strong>
-                </div>
-              ) : null}
-              <div>
-                <span>يوم وتاريخ الوصول</span>
-                <strong>{formatArrivalDate(form.travelDate)}</strong>
-              </div>
-              {selectedRoute?.requiresFlightDetails ? (
-                <div>
-                  <span>الرحلة الجوية</span>
-                  <strong>
-                    {form.flightNumber || "بانتظار الاستخراج"} · {form.flightArrivalTime || "—"}
-                  </strong>
-                </div>
-              ) : null}
-              {isTicketUploadEnabled && form.flightTicketFileName ? (
-                <div>
-                  <span>تذكرة الطيران</span>
-                  <strong>{form.flightTicketFileName}</strong>
-                </div>
-              ) : null}
-              <div>
-                <span>الانطلاق</span>
-                <strong>{form.pickupAddress}</strong>
-              </div>
-              <div>
-                <span>الوصول</span>
-                <strong>{form.dropoffAddress}</strong>
-              </div>
-              {form.useCustomMapLocations ? (
-                <div>
-                  <span>تحديد المواقع</span>
-                  <strong>تم تحديد الانطلاق والوصول عبر الخريطة</strong>
-                </div>
-              ) : null}
+              <div><span>المسار</span><strong>{selectedRoute?.nameAr}</strong></div>
+              <div><span>نوع الحجز</span><strong>{BOOKING_TYPE_LABELS[form.bookingType]}</strong></div>
+              {form.bookingType === "PRIVATE_CAR" ? <div><span>فئة السيارة</span><strong>{VEHICLE_CLASS_LABELS[form.vehicleClass]} · حتى {quote?.passengerCapacity ?? selectedClassConfig.passengerCapacity} أشخاص و{quote?.luggageCapacity ?? selectedClassConfig.luggageCapacity} حقائب</strong></div> : null}
+              <div><span>{selectedRoute?.requiresFlightDetails ? flightDateLabel : "تاريخ الرحلة"}</span><strong>{formatArrivalDate(form.travelDate)}</strong></div>
+              {selectedRoute?.requiresFlightDetails ? <div><span>الرحلة الجوية</span><strong>{form.flightNumber || "بانتظار الاستخراج"} · {form.flightArrivalTime || "—"}</strong></div> : null}
+              {isTicketUploadEnabled && form.flightTicketFileName ? <div><span>تذكرة الطيران</span><strong>{form.flightTicketFileName}</strong></div> : null}
+              <div><span>الانطلاق</span><strong>{form.pickupAddress}</strong></div>
+              <div><span>الوصول</span><strong>{form.dropoffAddress}</strong></div>
+              {form.useCustomMapLocations ? <div><span>تحديد المواقع</span><strong>تم تخصيص النقاط المسموح بها عبر الخريطة</strong></div> : null}
             </div>
-            <div className="quote-card">
-              <span>السعر التقديري</span>
-              <strong>{quote ? formatMoney(quote.passengerPrice, quote.currency) : "—"}</strong>
-            </div>
-            {!isPassenger ? (
-              <div className="notice success">
-                تفاصيل هذا الحجز محفوظة. بعد الدخول أو إنشاء حساب سنرسله تلقائيًا ونفتح صفحة التفاصيل.
-              </div>
-            ) : null}
+            <div className="quote-card"><span>السعر التقديري</span><strong>{quote ? formatMoney(quote.passengerPrice, quote.currency) : "—"}</strong></div>
+            {!isPassenger ? <div className="notice success">تفاصيل هذا الحجز محفوظة. بعد الدخول أو إنشاء حساب سنرسله تلقائيًا ونفتح صفحة التفاصيل.</div> : null}
           </div>
         ) : null}
       </div>
       {error ? <div className="notice error">{error}</div> : null}
       <div className="wizard-actions">
-        {step > 1 ? (
-          <button className="button" type="button" onClick={() => setStep((current) => current - 1)}>
-            السابق
-          </button>
-        ) : (
-          <span />
-        )}
-        {step < 4 ? (
-          <button
-            className="button primary"
-            type="button"
-            disabled={working || ticketWorking || mapWorking}
-            onClick={() => void nextStep()}
-          >
-            التالي
-          </button>
-        ) : isPassenger ? (
-          <button className="button primary" type="submit" disabled={working || ticketWorking || mapWorking}>
-            {working ? "جارٍ الإرسال..." : "إرسال الحجز"}
-          </button>
-        ) : (
-          <button className="button primary" type="button" onClick={continueToLogin} disabled={mapWorking}>
-            تسجيل الدخول وإكمال الحجز
-          </button>
-        )}
+        {step > 1 ? <button className="button" type="button" onClick={() => setStep((current) => current - 1)}>السابق</button> : <span />}
+        {step < 4 ? <button className="button primary" type="button" disabled={working || ticketWorking || mapWorking} onClick={() => void nextStep()}>التالي</button> : isPassenger ? <button className="button primary" type="submit" disabled={working || ticketWorking || mapWorking}>{working ? "جارٍ الإرسال..." : "إرسال الحجز"}</button> : <button className="button primary" type="button" onClick={continueToLogin} disabled={mapWorking}>تسجيل الدخول وإكمال الحجز</button>}
       </div>
     </form>
   );
