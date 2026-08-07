@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useAuth } from "@/components/auth-provider";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Shell } from "@/components/shell";
@@ -9,6 +10,7 @@ import { Icon } from "@/components/ui/icon";
 import { useDriverData } from "@/hooks/use-driver-data";
 import { apiFetch } from "@/lib/api";
 import { isTripEnded, sortTripsNewestFirst } from "@/lib/completed-bookings";
+import { startDriverLiveLocation, stopDriverLiveLocation } from "@/lib/driver-live-location";
 import {
   BOOKING_TYPE_LABELS,
   DRIVER_ASSIGNMENT_LABELS,
@@ -17,6 +19,7 @@ import {
 } from "@/lib/types";
 
 export default function DriverBookingsPage() {
+  const { socket } = useAuth();
   const { schedule, error, isLoading, reload } = useDriverData();
   const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({});
   const [working, setWorking] = useState("");
@@ -39,11 +42,32 @@ export default function DriverBookingsPage() {
       });
       setMessage(success || "تم تحديث المهمة.");
       await reload();
+      return true;
     } catch (caught) {
       setLocalError(caught instanceof Error ? caught.message : "تعذر تنفيذ العملية.");
+      return false;
     } finally {
       setWorking("");
     }
+  }
+
+  async function arrivedAndStartTracking(tripId: string) {
+    startDriverLiveLocation(
+      tripId,
+      socket,
+      (gpsError) => setLocalError(gpsError),
+      () => setMessage("تم تشغيل مشاركة الموقع تلقائيًا."),
+    );
+    await request(`/trips/${tripId}/arrived`, undefined, "تم تسجيل وصولك وبدأ التتبع المباشر تلقائيًا.");
+  }
+
+  async function completeTrip(tripId: string) {
+    const completed = await request(
+      `/trips/${tripId}/complete`,
+      { note: "Completed from driver bookings page" },
+      "تم إنهاء الرحلة.",
+    );
+    if (completed) stopDriverLiveLocation(tripId, true);
   }
 
   return (
@@ -85,7 +109,7 @@ export default function DriverBookingsPage() {
                     <div className="detail-list compact-detail-list"><div><span>الالتقاط</span><strong>{trip.pickupAddress}</strong></div><div><span>الوصول</span><strong>{trip.dropoffAddress}</strong></div>{trip.flightNumber ? <div><span>الطائرة</span><strong>{trip.flightNumber} · {trip.flightArrivalTime}</strong></div> : null}</div>
 
                     <div className="actions">
-                      {trackingAvailable ? <Link className="button primary" href={`/driver/bookings/${trip.id}/tracking`}><Icon name="map-pin" size={17} /> الخريطة ومشاركة GPS</Link> : null}
+                      {trackingAvailable ? <Link className="button primary" href={`/driver/bookings/${trip.id}/tracking`}><Icon name="map-pin" size={17} /> الخريطة والتتبع</Link> : null}
                       {trip.serviceRun ? <Link className="button" href={`/driver/runs/${trip.serviceRun.id}`}>الرحلة التشغيلية {trip.serviceRun.runReference}</Link> : null}
                     </div>
 
@@ -100,9 +124,9 @@ export default function DriverBookingsPage() {
                     ) : null}
 
                     {trip.driverAssignmentStatus === "ACCEPTED" && trip.status === "DRIVER_ASSIGNED" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void request(`/trips/${trip.id}/arriving`, undefined, "تم إبلاغ المسافر أنك في الطريق.")}>أنا في الطريق</button> : null}
-                    {trip.status === "DRIVER_ARRIVING" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void request(`/trips/${trip.id}/arrived`, undefined, "تم تسجيل وصولك إلى المسافر.")}>وصلت إلى المسافر</button> : null}
+                    {trip.status === "DRIVER_ARRIVING" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void arrivedAndStartTracking(trip.id)}>وصلت إلى المسافر</button> : null}
                     {trip.status === "DRIVER_ARRIVED" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void request(`/trips/${trip.id}/start`, undefined, "تم بدء الرحلة.")}>بدء الرحلة</button> : null}
-                    {trip.status === "IN_PROGRESS" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void request(`/trips/${trip.id}/complete`, { note: "Completed from driver bookings page" }, "تم إنهاء الرحلة.")}>إنهاء الرحلة</button> : null}
+                    {trip.status === "IN_PROGRESS" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void completeTrip(trip.id)}>إنهاء الرحلة</button> : null}
                   </article>
                 );
               })}

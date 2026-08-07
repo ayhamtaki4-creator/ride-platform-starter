@@ -185,7 +185,7 @@ export class AdminService {
     const profiles = await this.prisma.driverProfile.findMany({
       where: {
         status: 'APPROVED',
-        availability: 'ONLINE',
+        availability: { in: ['ONLINE', 'ON_TRIP'] },
         user: { status: 'ACTIVE' },
         vehicles: { some: { isActive: true } }
       },
@@ -593,7 +593,7 @@ export class AdminService {
     if (
       !driver ||
       driver.status !== 'APPROVED' ||
-      driver.availability !== 'ONLINE' ||
+      !['ONLINE', 'ON_TRIP'].includes(driver.availability) ||
       driver.user.status !== 'ACTIVE'
     ) {
       throw new ConflictException('السائق غير متاح أو غير معتمد.');

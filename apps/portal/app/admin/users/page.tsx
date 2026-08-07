@@ -5,6 +5,7 @@ import { DashboardHeader } from "@/components/dashboard-header";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Shell } from "@/components/shell";
 import { StatusPill } from "@/components/admin/status-pill";
+import { InternationalPhoneInput } from "@/components/ui/international-phone-input";
 import { apiFetch } from "@/lib/api";
 import { AdminUserRecord } from "@/lib/admin-operations";
 
@@ -30,6 +31,8 @@ export default function AdminUsersPage() {
   const [form, setForm] = useState(initialForm);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [editingPhoneUser, setEditingPhoneUser] = useState<AdminUserRecord | null>(null);
+  const [editingPhone, setEditingPhone] = useState("");
   const [working, setWorking] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -108,19 +111,24 @@ export default function AdminUsersPage() {
     } finally { setWorking(""); }
   }
 
-  async function editContact(user: AdminUserRecord) {
-    const phone = window.prompt(
-      "رقم WhatsApp مع رمز الدولة، مثل +963 أو +961 أو +962:",
-      user.phone ?? "+963",
-    );
-    if (!phone) return;
-    setWorking(user.id); setMessage(""); setError("");
+  function beginEditContact(user: AdminUserRecord) {
+    setEditingPhoneUser(user);
+    setEditingPhone(user.phone ?? "+963");
+    setError("");
+    setMessage("");
+  }
+
+  async function saveContact() {
+    if (!editingPhoneUser || !editingPhone) return;
+    setWorking(editingPhoneUser.id); setMessage(""); setError("");
     try {
-      await apiFetch(`/admin/users/${user.id}`, {
+      await apiFetch(`/admin/users/${editingPhoneUser.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone: editingPhone }),
       });
-      setMessage("تم تحديث رقم الهاتف وتفعيل رسائل WhatsApp للحساب.");
+      setMessage("تم تحديث رقم الهاتف.");
+      setEditingPhoneUser(null);
+      setEditingPhone("");
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "تعذر تحديث رقم الهاتف.");
@@ -141,12 +149,22 @@ export default function AdminUsersPage() {
             <label><span className="label">الاسم الأول</span><input className="input" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} required /></label>
             <label><span className="label">الاسم الأخير</span><input className="input" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} required /></label>
             <label><span className="label">البريد الإلكتروني</span><input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required /></label>
-            <label><span className="label">رقم الهاتف</span><input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
+            <label><span className="label">رقم الهاتف</span><InternationalPhoneInput value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} name="adminUserPhone" /></label>
             <label><span className="label">كلمة المرور المؤقتة</span><input className="input" type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required /></label>
             <fieldset className="checkbox-fieldset"><legend>الأدوار</legend>{roleOptions.map((role) => <label className="checkbox-row" key={role.code}><input type="checkbox" checked={form.roleCodes.includes(role.code)} onChange={(e) => toggleRole(role.code, e.target.checked)} />{role.label}</label>)}</fieldset>
             <button className="button primary full-width" disabled={working === "create"} type="submit">إنشاء الحساب</button>
           </form>
         </section>
+
+        {editingPhoneUser ? (
+          <section className="panel">
+            <div className="section-heading"><div><h2>تعديل رقم {editingPhoneUser.firstName} {editingPhoneUser.lastName}</h2><p className="subtitle">اختر رمز الدولة أو ابحث عنها ثم أدخل الرقم.</p></div></div>
+            <div className="admin-form-grid">
+              <label className="full-width"><span className="label">رقم الهاتف الدولي</span><InternationalPhoneInput value={editingPhone} onChange={setEditingPhone} name="adminEditUserPhone" required /></label>
+              <div className="actions full-width"><button className="button primary" disabled={working === editingPhoneUser.id} type="button" onClick={() => void saveContact()}>حفظ الرقم</button><button className="button" type="button" onClick={() => setEditingPhoneUser(null)}>إلغاء</button></div>
+            </div>
+          </section>
+        ) : null}
 
         <section className="panel filters">
           <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="بحث بالاسم أو البريد أو الهاتف" />
@@ -155,7 +173,7 @@ export default function AdminUsersPage() {
         </section>
 
         <section className="panel">
-          <div className="table-wrap"><table className="data-table"><thead><tr><th>المستخدم</th><th>الأدوار</th><th>الحالة</th><th>الحجوزات</th><th>الإنفاق</th><th>تاريخ الإنشاء</th><th>الإجراءات</th></tr></thead><tbody>{filtered.map((user) => <tr key={user.id}><td><strong>{user.firstName} {user.lastName}</strong><small>{user.phone || user.email}</small></td><td><div className="tag-list compact-tags">{user.roles.map((item) => <span key={item.role.code}>{item.role.name || item.role.code}</span>)}</div></td><td><StatusPill status={user.status} label={user.status === "ACTIVE" ? "فعال" : "معلق"} /></td><td>{user.bookingCount} / {user.completedBookings} مكتملة</td><td>{user.totalSpent.toLocaleString("ar")} {user.currency}</td><td>{new Date(user.createdAt).toLocaleDateString("ar")}</td><td><div className="actions"><button className="button compact-button" disabled={working === user.id} type="button" onClick={() => void editContact(user)}>الهاتف</button><button className="button compact-button" disabled={working === user.id} type="button" onClick={() => void editRoles(user)}>الأدوار</button><button className="button compact-button" disabled={working === user.id} type="button" onClick={() => void resetPassword(user)}>كلمة المرور</button>{user.status === "ACTIVE" ? <button className="button danger compact-button" disabled={working === user.id} type="button" onClick={() => void changeStatus(user, "suspend")}>تعليق</button> : <button className="button primary compact-button" disabled={working === user.id} type="button" onClick={() => void changeStatus(user, "activate")}>تفعيل</button>}</div></td></tr>)}</tbody></table></div>
+          <div className="table-wrap"><table className="data-table"><thead><tr><th>المستخدم</th><th>الأدوار</th><th>الحالة</th><th>الحجوزات</th><th>الإنفاق</th><th>تاريخ الإنشاء</th><th>الإجراءات</th></tr></thead><tbody>{filtered.map((user) => <tr key={user.id}><td><strong>{user.firstName} {user.lastName}</strong><small>{user.phone || user.email}</small></td><td><div className="tag-list compact-tags">{user.roles.map((item) => <span key={item.role.code}>{item.role.name || item.role.code}</span>)}</div></td><td><StatusPill status={user.status} label={user.status === "ACTIVE" ? "فعال" : "معلق"} /></td><td>{user.bookingCount} / {user.completedBookings} مكتملة</td><td>{user.totalSpent.toLocaleString("ar")} {user.currency}</td><td>{new Date(user.createdAt).toLocaleDateString("ar")}</td><td><div className="actions"><button className="button compact-button" disabled={working === user.id} type="button" onClick={() => beginEditContact(user)}>الهاتف</button><button className="button compact-button" disabled={working === user.id} type="button" onClick={() => void editRoles(user)}>الأدوار</button><button className="button compact-button" disabled={working === user.id} type="button" onClick={() => void resetPassword(user)}>كلمة المرور</button>{user.status === "ACTIVE" ? <button className="button danger compact-button" disabled={working === user.id} type="button" onClick={() => void changeStatus(user, "suspend")}>تعليق</button> : <button className="button primary compact-button" disabled={working === user.id} type="button" onClick={() => void changeStatus(user, "activate")}>تفعيل</button>}</div></td></tr>)}</tbody></table></div>
         </section>
       </Shell>
     </ProtectedRoute>

@@ -7,6 +7,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import "react-phone-input-2/lib/style.css";
 import "./globals.css";
 import "./tracking.css";
+import "./booking-mobile.css";
 
 export const metadata: Metadata = {
   title: {

@@ -1,6 +1,11 @@
 import { Module } from '@nestjs/common';
 import { AdminRoutesController } from './admin-routes.controller';
 import {
+  AdminRouteBookingPoliciesController,
+  RouteBookingPoliciesController
+} from './route-booking-policies.controller';
+import { RouteBookingPoliciesService } from './route-booking-policies.service';
+import {
   AdminRouteTemplatesController,
   RouteTemplatesController,
   TripRouteEndpointsController
@@ -15,9 +20,11 @@ import { RoutesService } from './routes.service';
     AdminRoutesController,
     RouteTemplatesController,
     AdminRouteTemplatesController,
-    TripRouteEndpointsController
+    TripRouteEndpointsController,
+    RouteBookingPoliciesController,
+    AdminRouteBookingPoliciesController
   ],
-  providers: [RoutesService, RouteTemplatesService],
-  exports: [RoutesService, RouteTemplatesService]
+  providers: [RoutesService, RouteTemplatesService, RouteBookingPoliciesService],
+  exports: [RoutesService, RouteTemplatesService, RouteBookingPoliciesService]
 })
 export class RoutesModule {}

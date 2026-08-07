@@ -7,6 +7,7 @@ import { DashboardHeader } from "@/components/dashboard-header";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Shell } from "@/components/shell";
 import { Icon } from "@/components/ui/icon";
+import { InternationalPhoneInput } from "@/components/ui/international-phone-input";
 import { useToast } from "@/components/ui/toast-provider";
 import { useDriverData } from "@/hooks/use-driver-data";
 import { apiFetch } from "@/lib/api";
@@ -86,16 +87,12 @@ export default function DriverProfilePage() {
             </main>
 
             <aside className="driver-profile-aside">
-              <section className="panel rider-account-card">
-                <div className="rider-account-avatar">{user?.firstName.slice(0, 1)}{user?.lastName.slice(0, 1)}</div>
-                <div><small>حساب السائق</small><strong>{user?.firstName} {user?.lastName}</strong><span>{user?.email}</span></div>
-                <span className="status">{profile?.status ?? "—"}</span>
-              </section>
+              <section className="panel rider-account-card"><div className="rider-account-avatar">{user?.firstName.slice(0, 1)}{user?.lastName.slice(0, 1)}</div><div><small>حساب السائق</small><strong>{user?.firstName} {user?.lastName}</strong><span>{user?.email}</span></div><span className="status">{profile?.status ?? "—"}</span></section>
 
               <section className="panel rider-preferences-card">
                 <span className="eyebrow">WhatsApp</span><h2>تحديثات المهام</h2><p className="subtitle">تصل التعيينات وتغييرات الرحلات التشغيلية إلى هذا الرقم.</p>
                 <div className="rider-preference-list">
-                  <label><span className="label">رقم الهاتف مع رمز الدولة</span><input className="input ltr-input" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+963944000000" /></label>
+                  <label><span className="label">رقم الهاتف مع رمز الدولة</span><InternationalPhoneInput value={phone} onChange={setPhone} name="driverProfilePhone" /></label>
                   <label className="rider-preference-row"><span className="rider-preference-icon"><Icon name="bell" size={21} /></span><span className="rider-preference-copy"><strong>تفعيل رسائل WhatsApp</strong><small>إشعارات تشغيلية فقط.</small></span><input type="checkbox" checked={whatsappOptIn} onChange={(event) => setWhatsappOptIn(event.target.checked)} /><span className="rider-toggle" aria-hidden="true" /></label>
                 </div>
                 <button className="button primary full-width" type="button" disabled={Boolean(working)} onClick={() => void saveWhatsApp()}>{working === "whatsapp" ? "جارٍ الحفظ..." : "حفظ الإعدادات"}</button>

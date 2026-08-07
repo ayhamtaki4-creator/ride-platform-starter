@@ -1,8 +1,10 @@
 "use client";
 
 import L, { LatLngBoundsExpression, LatLngExpression } from "leaflet";
-import { useEffect, useRef } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { searchPlace } from "@/lib/geocoding";
 
 export type BookingMapPoint = {
   latitude: number;
@@ -15,7 +17,7 @@ type BookingLocationMapProps = {
   dropoff: BookingMapPoint | null;
   activeMode: "pickup" | "dropoff";
   fitKey: string;
-  onSelect: (point: { latitude: number; longitude: number }) => void;
+  onSelect: (point: { latitude: number; longitude: number }) => void | Promise<void>;
 };
 
 function icon(label: string, className: string) {
@@ -40,20 +42,13 @@ function PickerEvents({
 }) {
   useMapEvents({
     click(event) {
-      onSelect({
+      void onSelect({
         latitude: Number(event.latlng.lat.toFixed(6)),
         longitude: Number(event.latlng.lng.toFixed(6)),
       });
     },
   });
-
-  return (
-    <div className="map-selection-hint">
-      {activeMode === "pickup"
-        ? "انقر على الخريطة لتحديد نقطة الانطلاق"
-        : "انقر على الخريطة لتحديد نقطة الوصول"}
-    </div>
-  );
+  return null;
 }
 
 function InitialViewport({ points, fitKey }: { points: LatLngExpression[]; fitKey: string }) {
@@ -73,6 +68,14 @@ function InitialViewport({ points, fitKey }: { points: LatLngExpression[]; fitKe
   return null;
 }
 
+function SearchViewport({ point }: { point: BookingMapPoint | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (point) map.setView([point.latitude, point.longitude], 16);
+  }, [map, point]);
+  return null;
+}
+
 export default function BookingLocationMap({
   pickup,
   dropoff,
@@ -80,6 +83,42 @@ export default function BookingLocationMap({
   fitKey,
   onSelect,
 }: BookingLocationMapProps) {
+  const [open, setOpen] = useState(true);
+  const [mounted, setMounted] = useState(false);
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [searchPoint, setSearchPoint] = useState<BookingMapPoint | null>(null);
+
+  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [open]);
+
+  async function search(event: FormEvent) {
+    event.preventDefault();
+    setSearching(true);
+    setSearchError("");
+    try {
+      const result = await searchPlace(query);
+      setSearchPoint(result);
+    } catch (caught) {
+      setSearchError(caught instanceof Error ? caught.message : "تعذر البحث عن الموقع.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  async function chooseSearchResult() {
+    if (!searchPoint) return;
+    await onSelect({ latitude: searchPoint.latitude, longitude: searchPoint.longitude });
+    setSearchPoint(null);
+    setQuery("");
+  }
+
   const fallback: LatLngExpression = [33.5138, 36.2765];
   const center: LatLngExpression = pickup
     ? [pickup.latitude, pickup.longitude]
@@ -90,49 +129,83 @@ export default function BookingLocationMap({
   if (pickup) points.push([pickup.latitude, pickup.longitude]);
   if (dropoff) points.push([dropoff.latitude, dropoff.longitude]);
 
-  return (
-    <div className="ride-map-frame booking-location-map" style={{ height: 390 }}>
-      <MapContainer center={center} zoom={11} className="ride-map" scrollWheelZoom>
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          maxZoom={19}
-        />
-        <InitialViewport points={points} fitKey={fitKey} />
-        <PickerEvents activeMode={activeMode} onSelect={onSelect} />
+  if (!mounted) return null;
+  if (!open) {
+    return (
+      <div className="booking-map-reopen-card">
+        <div>
+          <strong>الموقع محدد عبر الخريطة</strong>
+          <small>يمكنك فتح الخريطة مرة أخرى لتعديل النقطة.</small>
+        </div>
+        <button className="button" type="button" onClick={() => setOpen(true)}>فتح الخريطة</button>
+      </div>
+    );
+  }
 
-        {pickup ? (
-          <Marker position={[pickup.latitude, pickup.longitude]} icon={pickupIcon}>
-            <Popup>
-              <div dir="rtl">
-                <strong>نقطة الانطلاق</strong>
-                {pickup.label ? <><br />{pickup.label}</> : null}
-              </div>
-            </Popup>
-          </Marker>
-        ) : null}
+  return createPortal(
+    <div className="booking-map-modal-backdrop" role="presentation">
+      <section className="booking-map-modal" role="dialog" aria-modal="true" aria-label="تحديد موقع الرحلة على الخريطة">
+        <header className="booking-map-modal-header">
+          <div>
+            <strong>{activeMode === "pickup" ? "حدد نقطة الانطلاق" : "حدد نقطة الوصول"}</strong>
+            <small>ابحث عن المكان أو حرّك الخريطة واضغط على النقطة الدقيقة.</small>
+          </div>
+          <button className="booking-map-modal-close" type="button" aria-label="إغلاق الخريطة" onClick={() => setOpen(false)}>×</button>
+        </header>
 
-        {dropoff ? (
-          <Marker position={[dropoff.latitude, dropoff.longitude]} icon={dropoffIcon}>
-            <Popup>
-              <div dir="rtl">
-                <strong>نقطة الوصول</strong>
-                {dropoff.label ? <><br />{dropoff.label}</> : null}
-              </div>
-            </Popup>
-          </Marker>
-        ) : null}
-
-        {pickup && dropoff ? (
-          <Polyline
-            positions={[
-              [pickup.latitude, pickup.longitude],
-              [dropoff.latitude, dropoff.longitude],
-            ]}
-            pathOptions={{ weight: 4, opacity: 0.7, dashArray: "8 8" }}
+        <form className="booking-map-search" onSubmit={search}>
+          <input
+            className="input"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="ابحث عن حي، شارع، فندق أو مطار..."
+            autoComplete="off"
           />
+          <button className="button primary" disabled={searching} type="submit">{searching ? "جارٍ البحث..." : "بحث"}</button>
+        </form>
+        {searchError ? <div className="notice error compact-notice">{searchError}</div> : null}
+        {searchPoint ? (
+          <div className="booking-map-search-result">
+            <div><strong>{searchPoint.label}</strong><small>{searchPoint.latitude.toFixed(5)}, {searchPoint.longitude.toFixed(5)}</small></div>
+            <button className="button primary" type="button" onClick={() => void chooseSearchResult()}>
+              {activeMode === "pickup" ? "تعيين كنقطة انطلاق" : "تعيين كنقطة وصول"}
+            </button>
+          </div>
         ) : null}
-      </MapContainer>
-    </div>
+
+        <div className="booking-map-modal-map">
+          <MapContainer center={center} zoom={11} className="ride-map" scrollWheelZoom>
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+              maxZoom={19}
+            />
+            <InitialViewport points={points} fitKey={fitKey} />
+            <SearchViewport point={searchPoint} />
+            <PickerEvents activeMode={activeMode} onSelect={onSelect} />
+            {pickup ? (
+              <Marker position={[pickup.latitude, pickup.longitude]} icon={pickupIcon}>
+                <Popup><div dir="rtl"><strong>نقطة الانطلاق</strong>{pickup.label ? <><br />{pickup.label}</> : null}</div></Popup>
+              </Marker>
+            ) : null}
+            {dropoff ? (
+              <Marker position={[dropoff.latitude, dropoff.longitude]} icon={dropoffIcon}>
+                <Popup><div dir="rtl"><strong>نقطة الوصول</strong>{dropoff.label ? <><br />{dropoff.label}</> : null}</div></Popup>
+              </Marker>
+            ) : null}
+            {searchPoint ? <Marker position={[searchPoint.latitude, searchPoint.longitude]} /> : null}
+            {pickup && dropoff ? (
+              <Polyline positions={[[pickup.latitude, pickup.longitude], [dropoff.latitude, dropoff.longitude]]} pathOptions={{ weight: 4, opacity: 0.7, dashArray: "8 8" }} />
+            ) : null}
+          </MapContainer>
+        </div>
+
+        <footer className="booking-map-modal-footer">
+          <span>{activeMode === "pickup" ? "اضغط على مكان الانطلاق الدقيق" : "اضغط على مكان الوصول الدقيق"}</span>
+          <button className="button" type="button" onClick={() => setOpen(false)}>تم</button>
+        </footer>
+      </section>
+    </div>,
+    document.body,
   );
 }

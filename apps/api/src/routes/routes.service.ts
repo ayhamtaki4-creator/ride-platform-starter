@@ -374,7 +374,7 @@ export class RoutesService {
     const profiles = await this.prisma.driverProfile.findMany({
       where: {
         status: 'APPROVED',
-        ...(query.includeOffline ? {} : { availability: 'ONLINE' }),
+        ...(query.includeOffline ? {} : { availability: { in: ['ONLINE', 'ON_TRIP'] } }),
         user: { status: 'ACTIVE' },
         ...(query.baseRegionCode
           ? { baseRegion: { code: this.normalizeCode(query.baseRegionCode) } }
