@@ -72,6 +72,14 @@ SELECT
 FROM "Trip" t
 ON CONFLICT ("tripId") DO NOTHING;
 
+-- Existing assignments must be locked immediately as well.
+UPDATE "TripRoutePlan" plan
+SET "lockedAt" = CURRENT_TIMESTAMP,
+    "updatedAt" = CURRENT_TIMESTAMP
+FROM "Trip" trip
+WHERE plan."tripId" = trip."id"
+  AND trip."driverId" IS NOT NULL;
+
 CREATE OR REPLACE FUNCTION create_default_trip_route_plan()
 RETURNS TRIGGER AS $$
 BEGIN
