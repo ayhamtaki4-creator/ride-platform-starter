@@ -10,7 +10,7 @@ import { Icon } from "@/components/ui/icon";
 import { useDriverData } from "@/hooks/use-driver-data";
 import { apiFetch } from "@/lib/api";
 import { isTripEnded, sortTripsNewestFirst } from "@/lib/completed-bookings";
-import { startDriverLiveLocation } from "@/lib/driver-live-location";
+import { startDriverLiveLocation, stopDriverLiveLocation } from "@/lib/driver-live-location";
 import {
   BOOKING_TYPE_LABELS,
   DRIVER_ASSIGNMENT_LABELS,
@@ -42,8 +42,10 @@ export default function DriverBookingsPage() {
       });
       setMessage(success || "تم تحديث المهمة.");
       await reload();
+      return true;
     } catch (caught) {
       setLocalError(caught instanceof Error ? caught.message : "تعذر تنفيذ العملية.");
+      return false;
     } finally {
       setWorking("");
     }
@@ -57,6 +59,15 @@ export default function DriverBookingsPage() {
       () => setMessage("تم تشغيل مشاركة الموقع تلقائيًا."),
     );
     await request(`/trips/${tripId}/arrived`, undefined, "تم تسجيل وصولك وبدأ التتبع المباشر تلقائيًا.");
+  }
+
+  async function completeTrip(tripId: string) {
+    const completed = await request(
+      `/trips/${tripId}/complete`,
+      { note: "Completed from driver bookings page" },
+      "تم إنهاء الرحلة.",
+    );
+    if (completed) stopDriverLiveLocation(tripId, true);
   }
 
   return (
@@ -115,7 +126,7 @@ export default function DriverBookingsPage() {
                     {trip.driverAssignmentStatus === "ACCEPTED" && trip.status === "DRIVER_ASSIGNED" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void request(`/trips/${trip.id}/arriving`, undefined, "تم إبلاغ المسافر أنك في الطريق.")}>أنا في الطريق</button> : null}
                     {trip.status === "DRIVER_ARRIVING" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void arrivedAndStartTracking(trip.id)}>وصلت إلى المسافر</button> : null}
                     {trip.status === "DRIVER_ARRIVED" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void request(`/trips/${trip.id}/start`, undefined, "تم بدء الرحلة.")}>بدء الرحلة</button> : null}
-                    {trip.status === "IN_PROGRESS" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void request(`/trips/${trip.id}/complete`, { note: "Completed from driver bookings page" }, "تم إنهاء الرحلة.")}>إنهاء الرحلة</button> : null}
+                    {trip.status === "IN_PROGRESS" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void completeTrip(trip.id)}>إنهاء الرحلة</button> : null}
                   </article>
                 );
               })}
