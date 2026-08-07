@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Shell } from "@/components/shell";
 import { Icon } from "@/components/ui/icon";
 import { useDriverData } from "@/hooks/use-driver-data";
 import { apiFetch } from "@/lib/api";
+import { isTripEnded, sortTripsNewestFirst } from "@/lib/completed-bookings";
 import {
   BOOKING_TYPE_LABELS,
   DRIVER_ASSIGNMENT_LABELS,
@@ -21,6 +22,11 @@ export default function DriverBookingsPage() {
   const [working, setWorking] = useState("");
   const [message, setMessage] = useState("");
   const [localError, setLocalError] = useState("");
+
+  const activeSchedule = useMemo(
+    () => sortTripsNewestFirst(schedule.filter((trip) => !isTripEnded(trip))),
+    [schedule],
+  );
 
   async function request(path: string, body?: object, success?: string) {
     setWorking(path);
@@ -45,20 +51,20 @@ export default function DriverBookingsPage() {
       <Shell>
         <DashboardHeader
           eyebrow="السائق / المهام"
-          title="الحجوزات والمهام"
-          subtitle="اقبل التعيينات أو ارفضها، ثم حدّث مراحل الوصول وبدء الرحلة وإنهائها."
-          actions={<Link className="button" href="/driver"><Icon name="arrow-right" size={17} /> لوحة السائق</Link>}
+          title="الحجوزات والمهام الحالية"
+          subtitle="تظهر المهام الجديدة أولًا. الحجوزات المكتملة أو الملغاة نُقلت إلى الحجوزات المنتهية."
+          actions={<div className="actions"><Link className="button" href="/driver/completed-bookings"><Icon name="check" size={17} /> الحجوزات المنتهية</Link><Link className="button" href="/driver"><Icon name="arrow-right" size={17} /> لوحة السائق</Link></div>}
         />
 
         {error || localError ? <div className="notice error">{localError || error}</div> : null}
         {message ? <div className="notice success">{message}</div> : null}
 
         <section className="panel">
-          <div className="section-heading"><div><span className="eyebrow">الجدول</span><h2>المهام المجدولة</h2><p className="subtitle">مرتبة حسب التاريخ والحالة التشغيلية.</p></div><button className="button" type="button" onClick={() => void reload()}>تحديث</button></div>
+          <div className="section-heading"><div><span className="eyebrow">الجدول</span><h2>المهام الحالية</h2><p className="subtitle">مرتبة من أحدث حجز إلى الأقدم.</p></div><button className="button" type="button" onClick={() => void reload()}>تحديث</button></div>
 
-          {isLoading ? <div className="empty-state">جارٍ تحميل المهام...</div> : schedule.length === 0 ? <div className="empty-state">لا توجد مهام مجدولة.</div> : (
+          {isLoading ? <div className="empty-state">جارٍ تحميل المهام...</div> : activeSchedule.length === 0 ? <div className="empty-state">لا توجد مهام حالية. راجع الحجوزات المنتهية للسجل السابق.</div> : (
             <div className="schedule-card-grid driver-assignment-grid">
-              {schedule.map((trip) => {
+              {activeSchedule.map((trip) => {
                 const requestBusy = Boolean(working);
                 const trackingAvailable = Boolean(trip.driver) && !["COMPLETED", "CANCELLED_BY_DRIVER", "CANCELLED_BY_PASSENGER"].includes(trip.status);
                 return (

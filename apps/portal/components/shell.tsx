@@ -14,6 +14,7 @@ const adminItems: NavItem[] = [
   { href: "/admin", label: "نظرة عامة", icon: "dashboard" },
   { href: "/admin/bookings", label: "الحجوزات", icon: "bookings" },
   { href: "/admin/runs", label: "الرحلات التشغيلية", icon: "route" },
+  { href: "/admin/completed-bookings", label: "الحجوزات المنتهية", icon: "check" },
   { href: "/admin/routes", label: "المواقع والمسارات", icon: "map-pin" },
   { href: "/admin/route-templates", label: "قوالب المسارات", icon: "route" },
   { href: "/admin/drivers", label: "السائقون والمركبات", icon: "drivers" },
@@ -45,6 +46,7 @@ export function Shell({ children }: { children: ReactNode }) {
       items.push(
         { href: "/rider", label: "الرئيسية", icon: "dashboard" },
         { href: "/rider/bookings", label: "حجوزاتي", icon: "bookings" },
+        { href: "/rider/completed-bookings", label: "الحجوزات المنتهية", icon: "check" },
         { href: "/rider/profile", label: "حسابي", icon: "user" },
       );
     }
@@ -53,6 +55,7 @@ export function Shell({ children }: { children: ReactNode }) {
         { href: "/driver", label: "لوحة السائق", icon: "dashboard" },
         { href: "/driver/bookings", label: "الحجوزات والمهام", icon: "briefcase" },
         { href: "/driver/runs", label: "الرحلات التشغيلية", icon: "route" },
+        { href: "/driver/completed-bookings", label: "الحجوزات المنتهية", icon: "check" },
         { href: "/driver/profile", label: "الحساب والمركبة", icon: "user" },
       );
     }

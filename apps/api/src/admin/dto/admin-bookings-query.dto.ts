@@ -1,5 +1,5 @@
 import { BookingReviewStatus } from '@prisma/client';
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEnum, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class AdminBookingsQueryDto {
   @IsOptional()
@@ -10,4 +10,8 @@ export class AdminBookingsQueryDto {
   @IsString()
   @MaxLength(120)
   search?: string;
+
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  history?: 'true' | 'false';
 }

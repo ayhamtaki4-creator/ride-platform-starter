@@ -9,6 +9,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { AdminBookingsQueryDto } from './dto/admin-bookings-query.dto';
 
+const TERMINAL_TRIP_STATUSES = [
+  'COMPLETED',
+  'CANCELLED_BY_PASSENGER',
+  'CANCELLED_BY_DRIVER',
+  'NO_DRIVER_AVAILABLE',
+  'PASSENGER_NO_SHOW',
+  'DRIVER_NO_SHOW'
+] as const;
+
 const bookingInclude = {
   route: {
     include: {
@@ -155,8 +164,12 @@ export class AdminBookingsService {
 
   async list(query: AdminBookingsQueryDto) {
     const search = query.search?.trim();
+    const history = query.history === 'true';
     const where: Prisma.TripWhereInput = {
       bookingReference: { not: null },
+      status: history
+        ? { in: [...TERMINAL_TRIP_STATUSES] }
+        : { notIn: [...TERMINAL_TRIP_STATUSES] },
       ...(query.status ? { bookingReviewStatus: query.status } : {}),
       ...(search
         ? {
@@ -172,7 +185,7 @@ export class AdminBookingsService {
 
     const bookings = await this.prisma.trip.findMany({
       where,
-      orderBy: [{ travelDate: 'asc' }, { requestedAt: 'desc' }],
+      orderBy: [{ requestedAt: 'desc' }],
       take: 300,
       include: bookingInclude
     });
