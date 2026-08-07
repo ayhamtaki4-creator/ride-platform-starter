@@ -1,0 +1,146 @@
+.booking-map-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(10, 18, 32, 0.68);
+  backdrop-filter: blur(6px);
+}
+
+.booking-map-modal {
+  width: min(980px, 100%);
+  max-height: min(900px, calc(100dvh - 36px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 24px;
+  background: var(--surface, #fff);
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.28);
+}
+
+.booking-map-modal-header,
+.booking-map-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+}
+
+.booking-map-modal-header strong { display: block; font-size: 1.05rem; }
+.booking-map-modal-header small,
+.booking-map-modal-footer span,
+.booking-map-reopen-card small { display: block; color: var(--muted, #64748b); margin-top: 3px; }
+
+.booking-map-modal-close {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(100, 116, 139, 0.12);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.booking-map-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 0 18px 12px;
+}
+
+.booking-map-search-result {
+  margin: 0 18px 12px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 14px;
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.booking-map-search-result strong,
+.booking-map-search-result small { display: block; }
+.booking-map-search-result small { margin-top: 4px; color: var(--muted, #64748b); direction: ltr; text-align: right; }
+.booking-map-modal .compact-notice { margin: 0 18px 12px; }
+
+.booking-map-modal-map {
+  min-height: 360px;
+  height: min(58vh, 570px);
+  flex: 1 1 auto;
+  border-block: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.booking-map-modal-map .leaflet-container,
+.booking-map-modal-map .ride-map { width: 100%; height: 100%; }
+
+.booking-map-reopen-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 16px;
+  background: rgba(37, 99, 235, 0.04);
+}
+
+.booking-location-policy-note {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted, #64748b);
+  font-size: 0.82rem;
+}
+
+/* New Syrian flag (green/white/black with three red stars) for react-phone-input-2. */
+.international-phone-input .flag.sy,
+.international-phone-dropdown .flag.sy {
+  width: 24px !important;
+  height: 18px !important;
+  border-radius: 2px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='600' viewBox='0 0 900 600'%3E%3Cpath fill='%23007a3d' d='M0 0h900v200H0z'/%3E%3Cpath fill='%23fff' d='M0 200h900v200H0z'/%3E%3Cpath fill='%23000' d='M0 400h900v200H0z'/%3E%3Cg fill='%23ce1126'%3E%3Cpath d='M225 238l12 37h39l-32 23 12 37-31-23-31 23 12-37-32-23h39z'/%3E%3Cpath d='M450 238l12 37h39l-32 23 12 37-31-23-31 23 12-37-32-23h39z'/%3E%3Cpath d='M675 238l12 37h39l-32 23 12 37-31-23-31 23 12-37-32-23h39z'/%3E%3C/g%3E%3C/svg%3E") !important;
+  background-position: center !important;
+  background-size: cover !important;
+  background-repeat: no-repeat !important;
+}
+
+@media (max-width: 700px) {
+  .booking-map-modal-backdrop {
+    padding: 0;
+    align-items: end;
+  }
+  .booking-map-modal {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+  .booking-map-modal-header { padding: 12px 14px; }
+  .booking-map-search {
+    grid-template-columns: 1fr;
+    padding: 0 14px 10px;
+  }
+  .booking-map-search .button { min-height: 44px; }
+  .booking-map-search-result {
+    margin: 0 14px 10px;
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .booking-map-modal-map {
+    height: auto;
+    min-height: 0;
+    flex: 1 1 0;
+  }
+  .booking-map-modal-footer {
+    padding: 10px 14px max(10px, env(safe-area-inset-bottom));
+  }
+  .booking-map-reopen-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
