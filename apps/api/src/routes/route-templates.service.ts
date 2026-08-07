@@ -38,6 +38,11 @@ type RouteTemplateInput = {
 
 type TripEndpointsInput = RouteTemplateInput;
 
+type RouteBookingPolicyRow = {
+  passengerCanEditPickup: boolean;
+  passengerCanEditDropoff: boolean;
+};
+
 const TERMINAL_OR_STARTED = [
   'IN_PROGRESS',
   'COMPLETED',
@@ -170,7 +175,18 @@ export class RouteTemplatesService {
   async updateTripEndpoints(actor: AuthUser, tripId: string, input: TripEndpointsInput) {
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
-      select: { id: true, passengerId: true, status: true }
+      select: {
+        id: true,
+        passengerId: true,
+        routeId: true,
+        status: true,
+        pickupAddress: true,
+        pickupLatitude: true,
+        pickupLongitude: true,
+        dropoffAddress: true,
+        dropoffLatitude: true,
+        dropoffLongitude: true
+      }
     });
     if (!trip) throw new NotFoundException('الحجز غير موجود.');
 
@@ -185,6 +201,44 @@ export class RouteTemplatesService {
     }
 
     const value = this.validateInput(input);
+    if (!dispatch && trip.routeId) {
+      const policyRows = await this.prisma.$queryRaw<RouteBookingPolicyRow[]>(Prisma.sql`
+        SELECT "passengerCanEditPickup", "passengerCanEditDropoff"
+        FROM "RouteBookingPolicy"
+        WHERE "routeId" = ${trip.routeId}::uuid
+        LIMIT 1
+      `);
+      const policy = policyRows[0];
+      if (policy) {
+        if (
+          !policy.passengerCanEditPickup &&
+          this.endpointChanged(
+            trip.pickupAddress,
+            trip.pickupLatitude,
+            trip.pickupLongitude,
+            value.originAddress,
+            value.originLatitude,
+            value.originLongitude
+          )
+        ) {
+          throw new ForbiddenException('نقطة الانطلاق ثابتة حسب إعدادات الإدارة لهذا المسار.');
+        }
+        if (
+          !policy.passengerCanEditDropoff &&
+          this.endpointChanged(
+            trip.dropoffAddress,
+            trip.dropoffLatitude,
+            trip.dropoffLongitude,
+            value.destinationAddress,
+            value.destinationLatitude,
+            value.destinationLongitude
+          )
+        ) {
+          throw new ForbiddenException('نقطة الوصول ثابتة حسب إعدادات الإدارة لهذا المسار.');
+        }
+      }
+    }
+
     await this.prisma.$transaction(async (tx) => {
       await tx.trip.update({
         where: { id: tripId },
@@ -298,6 +352,21 @@ export class RouteTemplatesService {
       distanceKm,
       durationMinutes
     };
+  }
+
+  private endpointChanged(
+    currentAddress: string,
+    currentLatitude: number,
+    currentLongitude: number,
+    nextAddress: string,
+    nextLatitude: number,
+    nextLongitude: number
+  ) {
+    return (
+      currentAddress.trim() !== nextAddress.trim() ||
+      Math.abs(currentLatitude - nextLatitude) > 0.000001 ||
+      Math.abs(currentLongitude - nextLongitude) > 0.000001
+    );
   }
 
   private validateGeometry(value: unknown) {
