@@ -12,7 +12,7 @@ type NavItem = { href: string; label: string; icon: IconName };
 
 const adminItems: NavItem[] = [
   { href: "/admin", label: "نظرة عامة", icon: "dashboard" },
-  { href: "/admin/bookings", label: "الحجوزات", icon: "bookings" },
+  { href: "/admin/bookings", label: "الحجوزات الحالية", icon: "bookings" },
   { href: "/admin/runs", label: "الرحلات التشغيلية", icon: "route" },
   { href: "/admin/completed-bookings", label: "الحجوزات المنتهية", icon: "check" },
   { href: "/admin/routes", label: "المواقع والمسارات", icon: "map-pin" },
@@ -45,7 +45,7 @@ export function Shell({ children }: { children: ReactNode }) {
     if (isPassenger) {
       items.push(
         { href: "/rider", label: "الرئيسية", icon: "dashboard" },
-        { href: "/rider/bookings", label: "حجوزاتي", icon: "bookings" },
+        { href: "/rider/bookings", label: "الحجوزات الحالية", icon: "bookings" },
         { href: "/rider/completed-bookings", label: "الحجوزات المنتهية", icon: "check" },
         { href: "/rider/profile", label: "حسابي", icon: "user" },
       );
@@ -53,7 +53,7 @@ export function Shell({ children }: { children: ReactNode }) {
     if (isDriver) {
       items.push(
         { href: "/driver", label: "لوحة السائق", icon: "dashboard" },
-        { href: "/driver/bookings", label: "الحجوزات والمهام", icon: "briefcase" },
+        { href: "/driver/bookings", label: "الحجوزات والمهام الحالية", icon: "briefcase" },
         { href: "/driver/runs", label: "الرحلات التشغيلية", icon: "route" },
         { href: "/driver/completed-bookings", label: "الحجوزات المنتهية", icon: "check" },
         { href: "/driver/profile", label: "الحساب والمركبة", icon: "user" },
