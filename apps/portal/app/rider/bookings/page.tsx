@@ -9,12 +9,12 @@ import { RiderBookingSkeleton } from "@/components/rider/rider-loading";
 import { Shell } from "@/components/shell";
 import { Icon } from "@/components/ui/icon";
 import { useRiderBookings } from "@/hooks/use-rider-bookings";
+import { sortTripsNewestFirst } from "@/lib/completed-bookings";
 import {
   getBookingTab,
   isBookingCancelled,
   isBookingCompleted,
   RiderBookingTab,
-  sortBookingsNewest,
 } from "@/lib/rider-bookings";
 import { BookingDirection, DIRECTION_LABELS } from "@/lib/types";
 
@@ -63,7 +63,7 @@ export default function RiderBookingsPage() {
   const filteredBookings = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
-    return sortBookingsNewest(activeBookings).filter((booking) => {
+    return sortTripsNewestFirst(activeBookings).filter((booking) => {
       if (tab !== "ALL" && getBookingTab(booking) !== tab) return false;
       if (direction !== "ALL" && booking.direction !== direction) return false;
 
@@ -95,7 +95,7 @@ export default function RiderBookingsPage() {
         <DashboardHeader
           eyebrow="حساب المسافر / الحجوزات"
           title="حجوزاتي الحالية"
-          subtitle="الحجوزات الجديدة والجارية فقط، مرتبة بحيث يظهر الأحدث أولًا. الحجوزات المكتملة والملغاة محفوظة في الحجوزات المنتهية."
+          subtitle="الحجوزات الجديدة والجارية فقط، مرتبة بحيث يظهر أحدث طلب أولًا. الحجوزات المكتملة والملغاة محفوظة في الحجوزات المنتهية."
           actions={
             <div className="actions">
               <Link className="button" href="/rider/completed-bookings"><Icon name="check" size={18} /> الحجوزات المنتهية</Link>
