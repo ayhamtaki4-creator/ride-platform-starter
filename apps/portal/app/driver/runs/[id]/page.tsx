@@ -105,6 +105,7 @@ export default function DriverRunDetailPage() {
   const pickedUpCount = run.bookings.filter(
     (booking) => booking.serviceRunPassengerStatus === "PICKED_UP"
   ).length;
+  const singleBooking = run.bookings.length === 1 ? run.bookings[0] : null;
 
   return (
     <ProtectedRoute roles={["DRIVER"]}>
@@ -112,17 +113,25 @@ export default function DriverRunDetailPage() {
         <DashboardHeader
           eyebrow="الرحلة التشغيلية"
           title={run.runReference}
-subtitle={`${
-  run.direction
-    ? (DIRECTION_LABELS[run.direction] ?? run.direction)
-    : "مسار غير محدد"
-} · ${new Date(run.travelDate).toLocaleString("ar")}`}        />
+          subtitle={`${
+            run.direction
+              ? (DIRECTION_LABELS[run.direction] ?? run.direction)
+              : "مسار غير محدد"
+          } · ${new Date(run.travelDate).toLocaleString("ar")}`}
+        />
 
         <div className="realtime-toolbar">
           <span className={`connection-badge ${isRealtimeConnected ? "is-online" : "is-offline"}`}>
             {isRealtimeConnected ? "التحديث المباشر فعّال" : "جارٍ استعادة الاتصال"}
           </span>
-          <Link className="button" href="/driver">العودة للجدول</Link>
+          <div className="actions">
+            {singleBooking ? (
+              <Link className="button primary" href={`/driver/bookings/${singleBooking.id}/tracking`}>
+                الخريطة ومشاركة موقعي
+              </Link>
+            ) : null}
+            <Link className="button" href="/driver">العودة للجدول</Link>
+          </div>
         </div>
 
         {message ? <div className="notice success">{message}</div> : null}
@@ -145,6 +154,14 @@ subtitle={`${
             </div>
             <span className="status">{SERVICE_RUN_STATUS_LABELS[run.status]}</span>
           </div>
+
+          {singleBooking ? (
+            <div className="actions">
+              <Link className="button primary" href={`/driver/bookings/${singleBooking.id}/tracking`}>
+                الخريطة والتتبع المباشر
+              </Link>
+            </div>
+          ) : null}
 
           {run.driverRejectionReason ? <div className="notice error">{run.driverRejectionReason}</div> : null}
 
@@ -245,6 +262,12 @@ subtitle={`${
                 <div className="notice">
                   <strong>الالتقاط:</strong> {booking.pickupAddress}<br />
                   <strong>الوصول:</strong> {booking.dropoffAddress}
+                </div>
+
+                <div className="actions">
+                  <Link className="button primary" href={`/driver/bookings/${booking.id}/tracking`}>
+                    الخريطة والتتبع
+                  </Link>
                 </div>
 
                 {run.status === "BOARDING" && booking.serviceRunPassengerStatus === "WAITING" ? (
