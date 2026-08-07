@@ -16,6 +16,11 @@ export type PendingBookingForm = {
   flightTicketFileName: string;
   pickupAddress: string;
   dropoffAddress: string;
+  useCustomMapLocations: boolean;
+  pickupLatitude: number | null;
+  pickupLongitude: number | null;
+  dropoffLatitude: number | null;
+  dropoffLongitude: number | null;
   passengerName: string;
   passengerPhone: string;
   notes: string;
