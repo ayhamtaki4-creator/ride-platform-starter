@@ -17,7 +17,7 @@ export class RoutesController {
   async list() {
     const [routes, templates] = await Promise.all([
       this.routes.publicList(),
-      this.templates.publicList()
+      this.templates.publicList().catch(() => [])
     ]);
     const byRoute = new Map(templates.map((template) => [template.routeId, template]));
     return routes.map((route) => this.withSavedEndpoints(route, byRoute.get(route.id)));
