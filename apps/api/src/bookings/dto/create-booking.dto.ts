@@ -1,9 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BookingDirection, BookingType, VehicleClass } from '@prisma/client';
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -107,6 +109,42 @@ export class CreateBookingDto {
   @MinLength(3)
   @MaxLength(180)
   dropoffAddress!: string;
+
+  @ApiPropertyOptional({
+    default: false,
+    description: 'عند تفعيله تُحترم إحداثيات الانطلاق والوصول التي اختارها المسافر على الخريطة.'
+  })
+  @IsOptional()
+  @IsBoolean()
+  useCustomMapLocations = false;
+
+  @ApiPropertyOptional({ example: 33.5138 })
+  @ValidateIf((dto: CreateBookingDto) => dto.useCustomMapLocations === true)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  pickupLatitude?: number;
+
+  @ApiPropertyOptional({ example: 36.2765 })
+  @ValidateIf((dto: CreateBookingDto) => dto.useCustomMapLocations === true)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  pickupLongitude?: number;
+
+  @ApiPropertyOptional({ example: 33.8209 })
+  @ValidateIf((dto: CreateBookingDto) => dto.useCustomMapLocations === true)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  dropoffLatitude?: number;
+
+  @ApiPropertyOptional({ example: 35.4884 })
+  @ValidateIf((dto: CreateBookingDto) => dto.useCustomMapLocations === true)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  dropoffLongitude?: number;
 
   @ApiProperty({ example: 'عمر حداد' })
   @IsString()
