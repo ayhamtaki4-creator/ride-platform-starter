@@ -6,6 +6,20 @@ type RealtimeSocket = {
 } | null | undefined;
 
 const activeWatches = new Map<string, number>();
+const AUTO_TRACK_PREFIX = "ride_driver_auto_track:";
+
+function trackingKey(tripId: string) {
+  return `${AUTO_TRACK_PREFIX}${tripId}`;
+}
+
+export function shouldDriverAutoTrack(tripId: string) {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(trackingKey(tripId)) === "1";
+}
+
+export function requestDriverAutoTracking(tripId: string) {
+  if (typeof window !== "undefined") localStorage.setItem(trackingKey(tripId), "1");
+}
 
 export function startDriverLiveLocation(
   tripId: string,
@@ -17,6 +31,7 @@ export function startDriverLiveLocation(
     onError?.("هذا الجهاز لا يدعم تحديد الموقع.");
     return false;
   }
+  requestDriverAutoTracking(tripId);
   if (activeWatches.has(tripId)) {
     onStarted?.();
     return true;
@@ -58,11 +73,15 @@ export function startDriverLiveLocation(
   return true;
 }
 
-export function stopDriverLiveLocation(tripId: string) {
+export function stopDriverLiveLocation(tripId: string, clearAutoTracking = false) {
   const watchId = activeWatches.get(tripId);
-  if (watchId == null || typeof navigator === "undefined") return;
-  navigator.geolocation.clearWatch(watchId);
-  activeWatches.delete(tripId);
+  if (watchId != null && typeof navigator !== "undefined") {
+    navigator.geolocation.clearWatch(watchId);
+    activeWatches.delete(tripId);
+  }
+  if (clearAutoTracking && typeof window !== "undefined") {
+    localStorage.removeItem(trackingKey(tripId));
+  }
 }
 
 export function isDriverLiveLocationActive(tripId: string) {
