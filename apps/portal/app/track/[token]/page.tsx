@@ -2,14 +2,16 @@
 
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { io } from "socket.io-client";
 import { TrackingMapClient } from "@/components/tracking-map-client";
-import { apiFetch } from "@/lib/api";
-import type { TripTrackingPayload } from "@/lib/tracking";
+import { apiFetch, getRealtimeUrl } from "@/lib/api";
+import type { TripLiveLocation, TripTrackingPayload } from "@/lib/tracking";
 
 export default function PublicTrackingPage() {
   const params = useParams<{ token: string }>();
   const [data, setData] = useState<TripTrackingPayload | null>(null);
   const [error, setError] = useState("");
+  const [isLive, setIsLive] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -23,9 +25,42 @@ export default function PublicTrackingPage() {
 
   useEffect(() => {
     void load();
-    const timer = window.setInterval(() => void load(), 5000);
+    const timer = window.setInterval(() => void load(), 15000);
     return () => window.clearInterval(timer);
   }, [load]);
+
+  useEffect(() => {
+    if (!params.token) return;
+    const socket = io(getRealtimeUrl(), {
+      auth: { trackingToken: params.token },
+      transports: ["websocket", "polling"],
+      reconnection: true,
+    });
+
+    const onReady = () => setIsLive(true);
+    const onDisconnect = () => setIsLive(false);
+    const onAuthError = () => setIsLive(false);
+    const onLocation = (location: TripLiveLocation) => {
+      setData((current) =>
+        current && location.tripId === current.trip.id
+          ? { ...current, liveLocation: location }
+          : current,
+      );
+    };
+
+    socket.on("tracking.ready", onReady);
+    socket.on("disconnect", onDisconnect);
+    socket.on("realtime.auth.error", onAuthError);
+    socket.on("trip.location.updated", onLocation);
+
+    return () => {
+      socket.off("tracking.ready", onReady);
+      socket.off("disconnect", onDisconnect);
+      socket.off("realtime.auth.error", onAuthError);
+      socket.off("trip.location.updated", onLocation);
+      socket.disconnect();
+    };
+  }, [params.token]);
 
   return (
     <main className="public-tracking-page" dir="rtl">
@@ -35,7 +70,12 @@ export default function PublicTrackingPage() {
           <h1>متابعة الرحلة</h1>
           <p>رابط متابعة آمن يعرض مسار السيارة وموقعها الحالي فقط.</p>
         </div>
-        <span className="status">{data?.trip.status ?? "جارٍ الاتصال"}</span>
+        <div>
+          <span className="status">{data?.trip.status ?? "جارٍ الاتصال"}</span>
+          <div className={`connection-badge ${isLive ? "is-online" : "is-offline"}`}>
+            {isLive ? "تتبع مباشر" : "تحديث دوري"}
+          </div>
+        </div>
       </section>
 
       {error ? <div className="notice error">{error}</div> : null}
