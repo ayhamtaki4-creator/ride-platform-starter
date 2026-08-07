@@ -6,10 +6,16 @@ import { TrackingMapClient } from "./tracking-map-client";
 import { apiFetch } from "@/lib/api";
 import { searchPlace, type GeocodingResult } from "@/lib/geocoding";
 import { buildRoadRoute } from "@/lib/routing";
-import type { TrackingShare, TripRoutePlan, TripTrackingPayload } from "@/lib/tracking";
+import type {
+  TrackingShare,
+  TripRoutePlan,
+  TripTrackingPayload,
+  TrackingTrip,
+} from "@/lib/tracking";
 
 type Mode = "rider" | "driver" | "admin";
 type DraftWaypoint = { latitude: number; longitude: number; label?: string };
+type DraftEndpoint = { address: string; latitude: number; longitude: number };
 
 export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode }) {
   const { socket, isRealtimeConnected } = useAuth();
@@ -18,6 +24,8 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
   const [message, setMessage] = useState("");
   const [working, setWorking] = useState(false);
   const [draftWaypoints, setDraftWaypoints] = useState<DraftWaypoint[]>([]);
+  const [draftOrigin, setDraftOrigin] = useState<DraftEndpoint | null>(null);
+  const [draftDestination, setDraftDestination] = useState<DraftEndpoint | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResult, setSearchResult] = useState<GeocodingResult | null>(null);
@@ -36,6 +44,16 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
             label: point.label,
           })),
         );
+        setDraftOrigin({
+          address: result.trip.pickupAddress,
+          latitude: result.trip.pickupLatitude,
+          longitude: result.trip.pickupLongitude,
+        });
+        setDraftDestination({
+          address: result.trip.dropoffAddress,
+          latitude: result.trip.dropoffLatitude,
+          longitude: result.trip.dropoffLongitude,
+        });
       }
       setError("");
     } catch (caught) {
@@ -97,11 +115,6 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
     })();
   }, [data, mode, tripId]);
 
-  const previewPlan = useMemo(() => {
-    if (!data?.routePlan) return null;
-    return { ...data.routePlan, waypoints: draftWaypoints };
-  }, [data?.routePlan, draftWaypoints]);
-
   const canEditRoute = Boolean(
     data &&
     mode !== "driver" &&
@@ -117,27 +130,85 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
     ].includes(data.trip.status),
   );
 
+  const previewTrip = useMemo<TrackingTrip | null>(() => {
+    if (!data) return null;
+    return {
+      ...data.trip,
+      ...(draftOrigin
+        ? {
+            pickupAddress: draftOrigin.address,
+            pickupLatitude: draftOrigin.latitude,
+            pickupLongitude: draftOrigin.longitude,
+          }
+        : {}),
+      ...(draftDestination
+        ? {
+            dropoffAddress: draftDestination.address,
+            dropoffLatitude: draftDestination.latitude,
+            dropoffLongitude: draftDestination.longitude,
+          }
+        : {}),
+    };
+  }, [data, draftDestination, draftOrigin]);
+
+  const previewPlan = useMemo(() => {
+    if (!data?.routePlan) return null;
+    return { ...data.routePlan, waypoints: draftWaypoints };
+  }, [data?.routePlan, draftWaypoints]);
+
+  function markDirty() {
+    draftDirty.current = true;
+  }
+
   function addWaypoint(point: DraftWaypoint) {
     if (!canEditRoute) return;
-    draftDirty.current = true;
+    markDirty();
     setDraftWaypoints((current) => [...current, point]);
   }
 
+  function setSearchAsOrigin() {
+    if (!canEditRoute || !searchResult) return;
+    markDirty();
+    setDraftOrigin({
+      address: searchResult.label,
+      latitude: searchResult.latitude,
+      longitude: searchResult.longitude,
+    });
+    setMessage("تم تعيين الموقع كنقطة انطلاق. اضغط حفظ لتثبيت التعديل.");
+  }
+
+  function setSearchAsDestination() {
+    if (!canEditRoute || !searchResult) return;
+    markDirty();
+    setDraftDestination({
+      address: searchResult.label,
+      latitude: searchResult.latitude,
+      longitude: searchResult.longitude,
+    });
+    setMessage("تم تعيين الموقع كنقطة وصول. اضغط حفظ لتثبيت التعديل.");
+  }
+
   async function saveRoute() {
-    if (!data || !canEditRoute) return;
+    if (!data || !canEditRoute || !draftOrigin || !draftDestination) return;
     setWorking(true);
     setMessage("");
     setError("");
     try {
       const points = [
-        { latitude: data.trip.pickupLatitude, longitude: data.trip.pickupLongitude },
+        { latitude: draftOrigin.latitude, longitude: draftOrigin.longitude },
         ...draftWaypoints,
-        { latitude: data.trip.dropoffLatitude, longitude: data.trip.dropoffLongitude },
+        { latitude: draftDestination.latitude, longitude: draftDestination.longitude },
       ];
       const routed = await buildRoadRoute(points);
-      const saved = await apiFetch<TripRoutePlan>(`/tracking/trips/${tripId}/route-plan`, {
+      await apiFetch(`/tracking/trips/${tripId}/endpoints`, {
         method: "PATCH",
         body: JSON.stringify({
+          originAddress: draftOrigin.address,
+          originLatitude: draftOrigin.latitude,
+          originLongitude: draftOrigin.longitude,
+          destinationAddress: draftDestination.address,
+          destinationLatitude: draftDestination.latitude,
+          destinationLongitude: draftDestination.longitude,
           geometry: routed.geometry,
           waypoints: draftWaypoints,
           distanceKm: routed.distanceKm,
@@ -145,8 +216,12 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
         }),
       });
       draftDirty.current = false;
-      setData((current) => current ? { ...current, routePlan: saved } : current);
-      setMessage(mode === "rider" ? "تم حفظ تعديلك على مسار الرحلة." : "تم حفظ المسار واعتماده لهذا الحجز.");
+      setMessage(
+        mode === "rider"
+          ? "تم حفظ نقطة البداية والنهاية والمسار المعدّل لهذا الحجز."
+          : "تم حفظ نقاط ومسار هذا الحجز.",
+      );
+      await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "تعذر حفظ المسار.");
     } finally {
@@ -181,7 +256,7 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
     try {
       const result = await searchPlace(searchQuery);
       setSearchResult(result);
-      setMessage("تم العثور على الموقع وإظهاره على الخريطة.");
+      setMessage("تم العثور على الموقع. اختر بداية أو نهاية أو نقطة مرور.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "تعذر البحث عن الموقع.");
     } finally {
@@ -189,16 +264,18 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
     }
   }
 
-  if (!data) return <section className="panel"><div className="empty-state">{error || "جارٍ تحميل الخريطة..."}</div></section>;
+  if (!data || !previewTrip) {
+    return <section className="panel"><div className="empty-state">{error || "جارٍ تحميل الخريطة..."}</div></section>;
+  }
 
   const routeSubtitle = mode === "admin"
     ? data.routePlan?.lockedAt
       ? "المسار مقفل لأن الرحلة بدأت أو انتهت."
-      : "يتم حفظ الطريق الفعلي تلقائيًا. يمكنك البحث أو النقر على الخريطة لإضافة نقاط مرور ثم حفظ التعديل."
+      : "يمكنك تغيير البداية والنهاية أو إضافة نقاط مرور لهذا الحجز قبل بدء الرحلة."
     : mode === "rider"
       ? data.routePlan?.lockedAt
         ? "تم قفل المسار بعد بدء الرحلة."
-        : "يمكنك تعديل مسارك قبل بدء الرحلة بالبحث أو بإضافة نقاط مرور على الخريطة."
+        : "يمكنك تعديل نقطة البداية أو النهاية أو الطريق قبل بدء الرحلة."
       : isRealtimeConnected
         ? "الموقع يتحدث مباشرة عند إرسال GPS من جهاز السائق."
         : "الاتصال المباشر غير متاح؛ يتم التحديث دوريًا.";
@@ -217,6 +294,12 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
         </div>
       </div>
 
+      <div className="tracking-summary-grid">
+        <div><small>نقطة الانطلاق</small><strong>{previewTrip.pickupAddress}</strong></div>
+        <div><small>نقطة الوصول</small><strong>{previewTrip.dropoffAddress}</strong></div>
+        <div><small>حالة التعديل</small><strong>{draftDirty.current ? "تعديلات غير محفوظة" : "محفوظ"}</strong></div>
+      </div>
+
       {mode !== "driver" ? (
         <div className="tracking-search-block">
           <form className="actions" onSubmit={(event) => void handleSearch(event)}>
@@ -230,21 +313,33 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
             <button className="button" type="submit" disabled={searching}>
               {searching ? "جارٍ البحث..." : "بحث على الخريطة"}
             </button>
-            {searchResult && canEditRoute ? (
-              <button
-                className="button primary"
-                type="button"
-                onClick={() => addWaypoint({
-                  latitude: searchResult.latitude,
-                  longitude: searchResult.longitude,
-                  label: searchResult.label,
-                })}
-              >
-                إضافة نتيجة البحث للمسار
-              </button>
-            ) : null}
           </form>
-          {searchResult ? <small className="subtitle">{searchResult.label}</small> : null}
+          {searchResult ? (
+            <div>
+              <small className="subtitle">{searchResult.label}</small>
+              {canEditRoute ? (
+                <div className="actions">
+                  <button className="button primary" type="button" onClick={setSearchAsOrigin}>
+                    تعيين كنقطة انطلاق
+                  </button>
+                  <button className="button primary" type="button" onClick={setSearchAsDestination}>
+                    تعيين كنقطة وصول
+                  </button>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => addWaypoint({
+                      latitude: searchResult.latitude,
+                      longitude: searchResult.longitude,
+                      label: searchResult.label,
+                    })}
+                  >
+                    إضافة كنقطة مرور
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -252,7 +347,7 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
       {message ? <div className="notice success">{message}</div> : null}
 
       <TrackingMapClient
-        trip={data.trip}
+        trip={previewTrip}
         routePlan={previewPlan ?? data.routePlan}
         liveLocation={data.liveLocation}
         editable={canEditRoute}
@@ -269,14 +364,14 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
       {canEditRoute ? (
         <div className="actions">
           <button className="button primary" type="button" disabled={working} onClick={() => void saveRoute()}>
-            {working ? "جارٍ الحفظ..." : mode === "rider" ? "حفظ تعديلي على المسار" : "حفظ المسار واعتماده"}
+            {working ? "جارٍ الحفظ..." : mode === "rider" ? "حفظ البداية والنهاية والمسار" : "حفظ مسار الحجز"}
           </button>
           <button
             className="button"
             type="button"
             disabled={working || draftWaypoints.length === 0}
             onClick={() => {
-              draftDirty.current = true;
+              markDirty();
               setDraftWaypoints((current) => current.slice(0, -1));
             }}
           >
@@ -287,7 +382,7 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
             type="button"
             disabled={working || draftWaypoints.length === 0}
             onClick={() => {
-              draftDirty.current = true;
+              markDirty();
               setDraftWaypoints([]);
             }}
           >
