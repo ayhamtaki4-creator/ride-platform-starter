@@ -2,6 +2,7 @@
 
 import { ROUTE_TYPE_LABELS, ServiceRoute, VehicleClassConfig } from "@/lib/admin-operations";
 import { apiFetch, apiUpload } from "@/lib/api";
+import { reverseGeocode } from "@/lib/geocoding";
 import {
   clearPendingBooking,
   createPendingBookingId,
@@ -25,6 +26,7 @@ import {
 } from "@/lib/types";
 import { format, parse } from "date-fns";
 import { ar } from "date-fns/locale";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { FormEvent, forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import DatePicker from "react-datepicker";
@@ -32,6 +34,8 @@ import { useAuth } from "./auth-provider";
 import { Icon } from "./ui/icon";
 import { InternationalPhoneInput } from "./ui/international-phone-input";
 import { useToast } from "./ui/toast-provider";
+
+const BookingLocationMap = dynamic(() => import("./booking-location-map"), { ssr: false });
 
 const tomorrowDate = new Date();
 tomorrowDate.setDate(tomorrowDate.getDate() + 1);
@@ -101,6 +105,12 @@ function parseTimeValue(value: string) {
   return Number.isNaN(time.getTime()) ? null : time;
 }
 
+function numericCoordinate(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function preferredBookingType(route: ServiceRoute, current?: BookingType): BookingType {
   if (current && route.bookingTypes.includes(current)) return current;
   if (route.bookingTypes.includes("PRIVATE_CAR")) return "PRIVATE_CAR";
@@ -138,6 +148,11 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     flightTicketFileName: "",
     pickupAddress: "",
     dropoffAddress: "",
+    useCustomMapLocations: false,
+    pickupLatitude: null,
+    pickupLongitude: null,
+    dropoffLatitude: null,
+    dropoffLongitude: null,
     passengerName: "",
     passengerPhone: "",
     notes: "",
@@ -149,6 +164,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   const [ticketExtraction, setTicketExtraction] = useState<FlightTicketExtraction | null>(null);
   const [ticketWorking, setTicketWorking] = useState(false);
   const [working, setWorking] = useState(false);
+  const [mapWorking, setMapWorking] = useState(false);
+  const [mapSelectionMode, setMapSelectionMode] = useState<"pickup" | "dropoff">("pickup");
   const [error, setError] = useState("");
   const resumeStarted = useRef(false);
 
@@ -167,6 +184,27 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   const isTicketUploadEnabled = Boolean(
     selectedRoute?.requiresFlightDetails && selectedRoute.flightTicketUploadEnabled !== false,
   );
+
+  const pickupMapPoint =
+    form.useCustomMapLocations &&
+    form.pickupLatitude !== null &&
+    form.pickupLongitude !== null
+      ? {
+          latitude: form.pickupLatitude,
+          longitude: form.pickupLongitude,
+          label: form.pickupAddress,
+        }
+      : null;
+  const dropoffMapPoint =
+    form.useCustomMapLocations &&
+    form.dropoffLatitude !== null &&
+    form.dropoffLongitude !== null
+      ? {
+          latitude: form.dropoffLatitude,
+          longitude: form.dropoffLongitude,
+          label: form.dropoffAddress,
+        }
+      : null;
 
   function tierPrice(vehicleClass: VehicleClass) {
     const rule = selectedRoute?.pricingRules.find(
@@ -255,11 +293,17 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       vehicleClass: firstPricedVehicleClass(route, bookingType),
       pickupAddress: route.origin.nameAr,
       dropoffAddress: route.destination.nameAr,
+      useCustomMapLocations: false,
+      pickupLatitude: null,
+      pickupLongitude: null,
+      dropoffLatitude: null,
+      dropoffLongitude: null,
       flightArrivalTime: route.requiresFlightDetails ? current.flightArrivalTime : "",
       flightNumber: route.requiresFlightDetails ? current.flightNumber : "",
       flightTicketMediaId: ticketUploadEnabled ? current.flightTicketMediaId : "",
       flightTicketFileName: ticketUploadEnabled ? current.flightTicketFileName : "",
     }));
+    setMapSelectionMode("pickup");
     if (!ticketUploadEnabled) {
       setTicketExtraction(null);
       void deletePendingTicket(draftId).catch(() => undefined);
@@ -282,6 +326,90 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     setForm((current) => ({ ...current, [key]: value }));
     if (["routeId", "bookingType", "vehicleClass"].includes(key)) setQuote(null);
     setError("");
+  }
+
+  function toggleMapLocations(enabled: boolean) {
+    if (!selectedRoute) {
+      setError("اختر مسار الرحلة أولًا.");
+      return;
+    }
+
+    if (!enabled) {
+      setForm((current) => ({
+        ...current,
+        useCustomMapLocations: false,
+        pickupLatitude: null,
+        pickupLongitude: null,
+        dropoffLatitude: null,
+        dropoffLongitude: null,
+        pickupAddress: selectedRoute.origin.nameAr,
+        dropoffAddress: selectedRoute.destination.nameAr,
+      }));
+      setMapSelectionMode("pickup");
+      setError("");
+      return;
+    }
+
+    const pickupLatitude = numericCoordinate(selectedRoute.origin.latitude);
+    const pickupLongitude = numericCoordinate(selectedRoute.origin.longitude);
+    const dropoffLatitude = numericCoordinate(selectedRoute.destination.latitude);
+    const dropoffLongitude = numericCoordinate(selectedRoute.destination.longitude);
+    if (
+      pickupLatitude === null ||
+      pickupLongitude === null ||
+      dropoffLatitude === null ||
+      dropoffLongitude === null
+    ) {
+      setError("لا توجد إحداثيات صالحة لهذا المسار. اطلب من الإدارة ضبط قالب المسار أولًا.");
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      useCustomMapLocations: true,
+      pickupLatitude: current.pickupLatitude ?? pickupLatitude,
+      pickupLongitude: current.pickupLongitude ?? pickupLongitude,
+      dropoffLatitude: current.dropoffLatitude ?? dropoffLatitude,
+      dropoffLongitude: current.dropoffLongitude ?? dropoffLongitude,
+      pickupAddress: current.pickupAddress || selectedRoute.origin.nameAr,
+      dropoffAddress: current.dropoffAddress || selectedRoute.destination.nameAr,
+    }));
+    setMapSelectionMode("pickup");
+    setError("");
+  }
+
+  async function selectMapLocation(point: { latitude: number; longitude: number }) {
+    if (!form.useCustomMapLocations) return;
+    const mode = mapSelectionMode;
+    setMapWorking(true);
+    setError("");
+
+    let label = `موقع محدد على الخريطة (${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)})`;
+    try {
+      const resolved = await reverseGeocode(point.latitude, point.longitude);
+      label = resolved.label;
+    } catch {
+      showToast("تم حفظ النقطة، لكن تعذر جلب اسم العنوان تلقائيًا. يمكنك تعديله يدويًا.", "info");
+    }
+
+    setForm((current) =>
+      mode === "pickup"
+        ? {
+            ...current,
+            pickupLatitude: point.latitude,
+            pickupLongitude: point.longitude,
+            pickupAddress: label,
+          }
+        : {
+            ...current,
+            dropoffLatitude: point.latitude,
+            dropoffLongitude: point.longitude,
+            dropoffAddress: label,
+          },
+    );
+    showToast(mode === "pickup" ? "تم تحديد نقطة الانطلاق." : "تم تحديد نقطة الوصول.", "success");
+    if (mode === "pickup") setMapSelectionMode("dropoff");
+    setMapWorking(false);
   }
 
   function validateStep() {
@@ -312,6 +440,19 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     }
     if (step === 3 && (!form.pickupAddress.trim() || !form.dropoffAddress.trim())) {
       setError("أدخل عنوان الالتقاط والوصول.");
+      return false;
+    }
+    if (
+      step === 3 &&
+      form.useCustomMapLocations &&
+      [
+        form.pickupLatitude,
+        form.pickupLongitude,
+        form.dropoffLatitude,
+        form.dropoffLongitude,
+      ].some((value) => value === null || !Number.isFinite(value))
+    ) {
+      setError("حدد نقطتي الانطلاق والوصول على الخريطة قبل المتابعة.");
       return false;
     }
     return true;
@@ -435,7 +576,15 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     setWorking(true);
     setError("");
     try {
-      const { flightTicketFileName: _fileName, ...payload } = candidate;
+      const {
+        flightTicketFileName: _fileName,
+        useCustomMapLocations,
+        pickupLatitude,
+        pickupLongitude,
+        dropoffLatitude,
+        dropoffLongitude,
+        ...payload
+      } = candidate;
       const booking = await apiFetch<Trip>("/bookings", {
         method: "POST",
         body: JSON.stringify({
@@ -445,9 +594,50 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
           vehicleClass: candidate.bookingType === "PRIVATE_CAR" ? candidate.vehicleClass : "SMALL",
         }),
       });
+
+      let mapLocationsSaved = true;
+      if (
+        useCustomMapLocations &&
+        pickupLatitude !== null &&
+        pickupLongitude !== null &&
+        dropoffLatitude !== null &&
+        dropoffLongitude !== null
+      ) {
+        try {
+          await apiFetch(`/tracking/trips/${booking.id}/endpoints`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              originAddress: candidate.pickupAddress.trim(),
+              originLatitude: pickupLatitude,
+              originLongitude: pickupLongitude,
+              destinationAddress: candidate.dropoffAddress.trim(),
+              destinationLatitude: dropoffLatitude,
+              destinationLongitude: dropoffLongitude,
+              geometry: {
+                type: "LineString",
+                coordinates: [
+                  [pickupLongitude, pickupLatitude],
+                  [dropoffLongitude, dropoffLatitude],
+                ],
+              },
+              waypoints: [],
+            }),
+          });
+        } catch {
+          mapLocationsSaved = false;
+        }
+      }
+
       clearPendingBooking();
       await deletePendingTicket(requestId).catch(() => undefined);
-      showToast(`تم إرسال الحجز ${booking.bookingReference ?? ""}.`, "success");
+      if (!mapLocationsSaved) {
+        showToast(
+          `تم إنشاء الحجز ${booking.bookingReference ?? ""}، لكن تعذر حفظ نقاط الخريطة. يمكنك تعديلها لاحقًا من صفحة التتبع.`,
+          "error",
+        );
+      } else {
+        showToast(`تم إرسال الحجز ${booking.bookingReference ?? ""}.`, "success");
+      }
       onCreated?.(booking);
       router.replace(`/rider/bookings/${booking.id}`);
       return booking;
@@ -857,6 +1047,75 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                   required
                 />
               </label>
+
+              <label
+                className="full-width notice"
+                style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={form.useCustomMapLocations}
+                  onChange={(event) => toggleMapLocations(event.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2, flex: "0 0 auto" }}
+                />
+                <span style={{ display: "grid", gap: 4 }}>
+                  <strong>تحديد مكان الانطلاق أو الوصول عبر الخريطة</strong>
+                  <small>
+                    خيار اختياري. عند عدم تفعيله تُستخدم نقاط المسار التي حددتها الإدارة تلقائيًا.
+                  </small>
+                </span>
+              </label>
+
+              {form.useCustomMapLocations ? (
+                <div className="full-width" style={{ display: "grid", gap: 14 }}>
+                  <div className="section-heading" style={{ marginBottom: 0 }}>
+                    <div>
+                      <strong>حدد النقطة المطلوبة ثم اضغط على الخريطة</strong>
+                      <small>
+                        بعد اختيار الانطلاق ننتقل تلقائيًا إلى وضع تحديد الوصول. يمكنك العودة لأي نقطة وتعديلها.
+                      </small>
+                    </div>
+                    <div className="actions">
+                      <button
+                        className={`button ${mapSelectionMode === "pickup" ? "primary" : ""}`}
+                        type="button"
+                        onClick={() => setMapSelectionMode("pickup")}
+                      >
+                        <Icon name="map-pin" size={17} /> تحديد الانطلاق
+                      </button>
+                      <button
+                        className={`button ${mapSelectionMode === "dropoff" ? "primary" : ""}`}
+                        type="button"
+                        onClick={() => setMapSelectionMode("dropoff")}
+                      >
+                        <Icon name="map-pin" size={17} /> تحديد الوصول
+                      </button>
+                    </div>
+                  </div>
+
+                  <BookingLocationMap
+                    pickup={pickupMapPoint}
+                    dropoff={dropoffMapPoint}
+                    activeMode={mapSelectionMode}
+                    fitKey={`${selectedRoute?.id ?? "route"}:booking-location-picker`}
+                    onSelect={(point) => void selectMapLocation(point)}
+                  />
+
+                  {mapWorking ? (
+                    <div className="notice">جارٍ قراءة اسم المكان المحدد...</div>
+                  ) : (
+                    <div className="booking-meta">
+                      <span>
+                        A · {pickupMapPoint ? "تم تحديد نقطة الانطلاق" : "حدد نقطة الانطلاق"}
+                      </span>
+                      <span>
+                        B · {dropoffMapPoint ? "تم تحديد نقطة الوصول" : "حدد نقطة الوصول"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
               <label>
                 <span className="label">عنوان الالتقاط</span>
                 <input
@@ -939,6 +1198,12 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                 <span>الوصول</span>
                 <strong>{form.dropoffAddress}</strong>
               </div>
+              {form.useCustomMapLocations ? (
+                <div>
+                  <span>تحديد المواقع</span>
+                  <strong>تم تحديد الانطلاق والوصول عبر الخريطة</strong>
+                </div>
+              ) : null}
             </div>
             <div className="quote-card">
               <span>السعر التقديري</span>
@@ -965,17 +1230,17 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
           <button
             className="button primary"
             type="button"
-            disabled={working || ticketWorking}
+            disabled={working || ticketWorking || mapWorking}
             onClick={() => void nextStep()}
           >
             التالي
           </button>
         ) : isPassenger ? (
-          <button className="button primary" type="submit" disabled={working || ticketWorking}>
+          <button className="button primary" type="submit" disabled={working || ticketWorking || mapWorking}>
             {working ? "جارٍ الإرسال..." : "إرسال الحجز"}
           </button>
         ) : (
-          <button className="button primary" type="button" onClick={continueToLogin}>
+          <button className="button primary" type="button" onClick={continueToLogin} disabled={mapWorking}>
             تسجيل الدخول وإكمال الحجز
           </button>
         )}
