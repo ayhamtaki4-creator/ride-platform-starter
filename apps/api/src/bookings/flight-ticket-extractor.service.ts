@@ -34,7 +34,8 @@ export class FlightTicketExtractorService {
 
   async extract(
     file: UploadedMediaFile,
-    routeContext?: string
+    routeContext?: string,
+    flightTimeMode: 'ARRIVAL' | 'DEPARTURE' = 'ARRIVAL'
   ): Promise<FlightTicketExtraction> {
     const apiKey =
       this.config.get<string>('GEMINI_API_KEY') || this.config.get<string>('OPENAI_API_KEY');
@@ -48,20 +49,23 @@ export class FlightTicketExtractorService {
     const rawModel =
       this.config.get<string>('GEMINI_TICKET_MODEL') || 'gemini-flash-latest';
     const model = rawModel.replace(/^"|"$/g, '').trim();
-
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const routeHint = routeContext?.trim()
       ? `The selected ground-transfer route is: ${routeContext.trim()}.`
       : '';
-
     const currentYear = new Date().getFullYear();
+    const timingInstruction =
+      flightTimeMode === 'DEPARTURE'
+        ? 'Extract the DEPARTURE/TAKEOFF date and local departure time for the selected flight segment. Store that selected departure date/time in the JSON keys arrivalDate and arrivalTime for backward API compatibility. Do NOT substitute the arrival time.'
+        : 'Extract the ARRIVAL date and local arrival time for the selected flight segment. Store them in arrivalDate and arrivalTime.';
 
     const instructions = [
       'Extract only clearly visible flight-ticket data.',
-      'Focus on the arrival segment into Beirut (BEY) or Amman (AMM) when present.',
+      timingInstruction,
+      'Use the selected ground-transfer route to identify the relevant airport/flight segment when possible.',
       `IMPORTANT FOR DATES: Convert any date format on the ticket (e.g. "15 OCT", "15/10/2026", "OCT 15") into exact ISO format YYYY-MM-DD. If year is missing on ticket, assume ${currentYear}.`,
-      'Return arrivalTime as HH:mm in 24-hour local airport time format.',
+      'Return arrivalTime as HH:mm in 24-hour local airport time format (the key name remains arrivalTime for API compatibility even in departure mode).',
       'Normalize flightNumber without unnecessary spaces, for example ME265.',
       'Use empty strings for values that are not clearly visible and do not guess.',
       routeHint,
@@ -104,15 +108,12 @@ export class FlightTicketExtractorService {
     try {
       const response = await fetch(geminiUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(30000)
       });
 
       const body = await response.json().catch(() => null);
-
       if (!response.ok) {
         const message =
           (body && (body.error?.message || body.error)) || `Gemini HTTP ${response.status}`;
@@ -120,24 +121,17 @@ export class FlightTicketExtractorService {
       }
 
       const rawText = body?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      if (!rawText) {
-        throw new Error('لم يرجع نموذج الاستخراج أي بيانات.');
-      }
+      if (!rawText) throw new Error('لم يرجع نموذج الاستخراج أي بيانات.');
 
       const parsed = JSON.parse(rawText) as RawExtraction;
-
       if (!parsed?.isFlightTicket) {
         return this.manualRequired('الملف المرفوع لا يبدو كتذكرة طيران واضحة.');
       }
 
-      // المعالجة الذكية للتاريخ
       const arrivalDate = this.normalizeDate(parsed.arrivalDate);
-      
       const arrivalTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(parsed.arrivalTime?.trim())
         ? parsed.arrivalTime.trim()
         : null;
-        
       const flightNumber = this.clean(parsed.flightNumber);
       const confidence = Math.max(0, Math.min(1, Number(parsed.confidence) || 0));
       const hasCoreFields = Boolean(arrivalDate && arrivalTime && flightNumber);
@@ -167,26 +161,15 @@ export class FlightTicketExtractorService {
     }
   }
 
-  /**
-   * دالة ذكية لتحويل صيغ التواريخ المختلفة إلى YYYY-MM-DD
-   */
   private normalizeDate(rawDate?: string): string | null {
     if (!rawDate || !rawDate.trim()) return null;
-
     const cleaned = rawDate.trim();
-
-    // 1. إذا كان متوافقاً أصلاً مع YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) {
-      return cleaned;
-    }
-
-    // 2. المحاولة عبر تحويل النص لتاريخ قياسي JS Date
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) return cleaned;
     const parsedTimestamp = Date.parse(cleaned);
     if (!isNaN(parsedTimestamp)) {
       const d = new Date(parsedTimestamp);
       return d.toISOString().split('T')[0];
     }
-
     return null;
   }
 
