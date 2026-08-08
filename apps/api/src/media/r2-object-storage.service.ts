@@ -118,6 +118,9 @@ export class R2ObjectStorageService {
       `AWS4-HMAC-SHA256 Credential=${this.accessKeyId}/${scope}, ` +
       `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
+    const requestBody = body
+      ? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength)
+      : undefined;
     const response = await fetch(`https://${host}${canonicalUri}`, {
       method,
       headers: {
@@ -126,7 +129,7 @@ export class R2ObjectStorageService {
         'x-amz-date': amzDate,
         ...(mimeType ? { 'Content-Type': mimeType } : {}),
       },
-      ...(body ? { body } : {}),
+      ...(requestBody ? { body: requestBody } : {}),
       signal: AbortSignal.timeout(30_000),
     });
 
