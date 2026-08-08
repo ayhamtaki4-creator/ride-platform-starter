@@ -12,12 +12,18 @@ export function getRealtimeUrl() {
 }
 
 export class ApiError extends Error {
+  readonly retryAfterSeconds?: number;
+  readonly requestId?: string;
+
   constructor(
     message: string,
-    public readonly status: number
+    public readonly status: number,
+    metadata: { retryAfterSeconds?: number; requestId?: string | null } = {}
   ) {
     super(message);
     this.name = "ApiError";
+    this.retryAfterSeconds = metadata.retryAfterSeconds;
+    this.requestId = metadata.requestId || undefined;
   }
 }
 
@@ -159,7 +165,11 @@ export async function apiFetch<T>(
       }
     }
 
-    throw new ApiError(message, response.status);
+    const retryAfterSeconds = readRetryAfterSeconds(response, body);
+    throw new ApiError(message, response.status, {
+      retryAfterSeconds,
+      requestId: response.headers.get("X-Request-Id"),
+    });
   }
 
   return body as T;
@@ -185,6 +195,23 @@ export async function fetchProtectedBlob(pathOrUrl: string, retry = true): Promi
     const refreshedToken = await refreshAccessToken();
     if (refreshedToken) return fetchProtectedBlob(pathOrUrl, false);
   }
-  if (!response.ok) throw new ApiError("تعذر فتح الملف.", response.status);
+  if (!response.ok) {
+    throw new ApiError("تعذر فتح الملف.", response.status, {
+      retryAfterSeconds: readRetryAfterSeconds(response, null),
+      requestId: response.headers.get("X-Request-Id"),
+    });
+  }
   return response.blob();
+}
+
+function readRetryAfterSeconds(response: Response, body: unknown) {
+  const headerValue = Number.parseInt(response.headers.get("Retry-After") ?? "", 10);
+  if (Number.isInteger(headerValue) && headerValue > 0) return headerValue;
+
+  if (body && typeof body === "object" && "retryAfterSeconds" in body) {
+    const raw = (body as { retryAfterSeconds?: unknown }).retryAfterSeconds;
+    const numeric = typeof raw === "number" ? raw : Number(raw);
+    if (Number.isFinite(numeric) && numeric > 0) return Math.ceil(numeric);
+  }
+  return undefined;
 }
