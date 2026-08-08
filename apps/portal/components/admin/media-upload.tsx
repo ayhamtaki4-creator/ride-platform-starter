@@ -3,7 +3,13 @@
 import { ChangeEvent, useRef, useState } from "react";
 import { apiFetch, apiUpload } from "@/lib/api";
 import { MediaAsset, MediaPurpose, MediaVisibility } from "@/lib/admin-operations";
-import { MediaBrandingConfig, protectFleetImage } from "@/lib/image-protection";
+import {
+  createFleetImageVariant,
+  MediaBrandingConfig,
+  protectFleetImage,
+} from "@/lib/image-protection";
+
+type VariantKind = "ORIGINAL" | "DISPLAY" | "THUMBNAIL";
 
 export function MediaUpload({
   purpose,
@@ -33,6 +39,16 @@ export function MediaUpload({
   const [phase, setPhase] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+
+  async function uploadFile(file: File, variantKind: VariantKind, variantOfId?: string) {
+    const formData = new FormData();
+    formData.set("file", file);
+    formData.set("purpose", purpose);
+    formData.set("variantKind", variantKind);
+    if (variantOfId) formData.set("variantOfId", variantOfId);
+    if (visibility) formData.set("visibility", visibility);
+    return apiUpload<MediaAsset>("/admin/media/upload", formData);
+  }
 
   async function handleChange(event: ChangeEvent<HTMLInputElement>) {
     const selectedFiles = Array.from(event.target.files ?? []);
@@ -74,12 +90,36 @@ export function MediaUpload({
           }
         }
 
-        setPhase(`جارٍ رفع الملف${progress}...`);
-        const formData = new FormData();
-        formData.set("file", file);
-        formData.set("purpose", purpose);
-        if (visibility) formData.set("visibility", visibility);
-        uploaded.push(await apiUpload<MediaAsset>("/admin/media/upload", formData));
+        setPhase(`جارٍ رفع الملف الأصلي${progress}...`);
+        const original = await uploadFile(file, "ORIGINAL");
+
+        if (purpose === "VEHICLE_IMAGE" && file.type.startsWith("image/")) {
+          try {
+            setPhase(`جارٍ تجهيز نسخة العرض${progress}...`);
+            const display = await createFleetImageVariant(file, {
+              maxDimension: 1600,
+              quality: 0.86,
+              suffix: "display",
+            });
+            setPhase(`جارٍ رفع نسخة العرض${progress}...`);
+            await uploadFile(display, "DISPLAY", original.id);
+
+            setPhase(`جارٍ تجهيز الصورة المصغرة${progress}...`);
+            const thumbnail = await createFleetImageVariant(file, {
+              maxDimension: 480,
+              quality: 0.78,
+              suffix: "thumbnail",
+            });
+            setPhase(`جارٍ رفع الصورة المصغرة${progress}...`);
+            await uploadFile(thumbnail, "THUMBNAIL", original.id);
+            messages.push(`${selectedFile.name}: تم حفظ الأصل مع نسخة عرض ونسخة مصغرة للموبايل.`);
+          } catch (variantError) {
+            await apiFetch(`/admin/media/${original.id}`, { method: "DELETE" }).catch(() => undefined);
+            throw variantError;
+          }
+        }
+
+        uploaded.push(original);
       }
 
       if (onUploadedMany) await onUploadedMany(uploaded);
