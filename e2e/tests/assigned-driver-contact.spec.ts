@@ -43,15 +43,17 @@ test.describe("Assigned driver contact", () => {
     const booking = (await createResponse.json()) as { id: string };
 
     const prisma = new PrismaClient();
-    let expectedPhone = "";
+    const expectedPhone = `+963944${String(Date.now()).slice(-6)}`;
     try {
       const driver = await prisma.driverProfile.findFirst({
-        where: { user: { phone: { not: null } } },
-        include: { user: { select: { id: true, phone: true } } },
+        include: { user: { select: { id: true } } },
       });
-      expect(driver?.user.phone, "Seed data must contain a driver phone").toBeTruthy();
-      expectedPhone = driver!.user.phone!;
+      expect(driver, "Seed data must contain a driver").toBeTruthy();
 
+      await prisma.user.update({
+        where: { id: driver!.user.id },
+        data: { phone: expectedPhone },
+      });
       await prisma.trip.update({
         where: { id: booking.id },
         data: {
