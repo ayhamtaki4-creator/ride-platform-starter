@@ -118,7 +118,11 @@ export class MediaService implements OnModuleInit {
     }
 
     const variantKind: MediaVariantKind = dto.variantKind ?? 'ORIGINAL';
-    let variantParent: { id: string; visibility: MediaVisibility } | null = null;
+    let variantParent: {
+      id: string;
+      visibility: MediaVisibility;
+      metadata: Prisma.JsonValue | null;
+    } | null = null;
     if (dto.variantOfId) {
       if (dto.purpose !== MediaPurpose.VEHICLE_IMAGE || variantKind === 'ORIGINAL') {
         throw new BadRequestException('نسخ الصور المصغرة والمتوسطة مدعومة لصور المركبات فقط.');
@@ -396,7 +400,12 @@ export class MediaService implements OnModuleInit {
   }
 
   async publicVariantAssetId(id: string, variant?: string) {
-    if (variant !== 'display' && variant !== 'thumbnail') return id;
+    const requestedKind = variant === 'thumbnail'
+      ? 'THUMBNAIL'
+      : variant === 'display' || variant == null
+        ? 'DISPLAY'
+        : null;
+    if (!requestedKind) return id;
     const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
       SELECT "id"
       FROM "MediaAsset"
@@ -404,7 +413,7 @@ export class MediaService implements OnModuleInit {
         AND "status"::text = 'APPROVED'
         AND "visibility"::text = 'PUBLIC'
         AND "metadata"->>'variantOfId' = ${id}
-        AND "metadata"->>'variantKind' = ${variant === 'display' ? 'DISPLAY' : 'THUMBNAIL'}
+        AND "metadata"->>'variantKind' = ${requestedKind}
       ORDER BY "createdAt" DESC
       LIMIT 1
     `;
@@ -412,8 +421,7 @@ export class MediaService implements OnModuleInit {
   }
 
   async preferredPublicUrl(id: string) {
-    const displayId = await this.publicVariantAssetId(id, 'display');
-    return this.publicUrl(displayId);
+    return this.publicUrl(await this.publicVariantAssetId(id, 'display'));
   }
 
   async adminFile(id: string) {
