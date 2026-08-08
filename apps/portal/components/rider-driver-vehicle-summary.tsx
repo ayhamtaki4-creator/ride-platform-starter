@@ -1,18 +1,30 @@
 "use client";
 
-import { useState } from "react";
-import { Icon } from "./ui/icon";
-import type { Trip } from "@/lib/types";
+import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
 import { normalizePublicMediaUrl } from "@/lib/public-media-url";
+import type { Trip } from "@/lib/types";
 import { whatsappUrl } from "@/lib/whatsapp";
+import { Icon } from "./ui/icon";
+
+type DriverContactResponse = {
+  assigned: boolean;
+  driver: {
+    id: string;
+    displayName: string;
+    phone: string | null;
+  } | null;
+};
 
 export function RiderDriverVehicleSummary({ booking }: { booking: Trip }) {
   const profile = booking.driverPublicProfile;
   const vehicle = profile?.vehicle ?? booking.serviceRun?.vehicle ?? null;
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [driverPhone, setDriverPhone] = useState<string | null>(profile?.phone ?? null);
+  const [contactLoading, setContactLoading] = useState(false);
   const avatarUrl = normalizePublicMediaUrl(profile?.avatarUrl);
   const whatsapp = whatsappUrl(
-    profile?.phone,
+    driverPhone,
     `مرحباً، بخصوص الحجز ${booking.bookingReference ?? ""}`,
   );
   const initials = profile?.displayName
@@ -21,6 +33,26 @@ export function RiderDriverVehicleSummary({ booking }: { booking: Trip }) {
     .slice(0, 2)
     .map((part) => part.slice(0, 1))
     .join("") || "س";
+
+  useEffect(() => {
+    setDriverPhone(profile?.phone ?? null);
+    if (!profile || profile.phone) return;
+
+    let active = true;
+    setContactLoading(true);
+    void apiFetch<DriverContactResponse>(`/bookings/${booking.id}/driver-contact`)
+      .then((result) => {
+        if (active) setDriverPhone(result.driver?.phone ?? null);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setContactLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [booking.id, profile]);
 
   return (
     <section className="panel rider-driver-panel rider-detail-panel" aria-label="السائق والمركبة">
@@ -71,8 +103,10 @@ export function RiderDriverVehicleSummary({ booking }: { booking: Trip }) {
             <a className="button primary" href={whatsapp} target="_blank" rel="noopener noreferrer">
               <Icon name="phone" size={18} /> مراسلة السائق عبر واتساب
             </a>
+          ) : contactLoading ? (
+            <div className="notice">جارٍ تجهيز وسيلة التواصل مع السائق...</div>
           ) : (
-            <div className="notice">سيظهر زر WhatsApp بعد قبول السائق للمهمة وإتاحة رقم التواصل.</div>
+            <div className="notice">تم تعيين السائق، لكن لا يوجد رقم WhatsApp صالح مسجل له حاليًا.</div>
           )}
         </>
       ) : (
