@@ -16,6 +16,7 @@
     "test:routes": "powershell -ExecutionPolicy Bypass -File \".\\scripts\\test-dynamic-routes-fleet-flow.ps1\"",
     "test:compliance": "powershell -ExecutionPolicy Bypass -File \".\\scripts\\test-fleet-compliance-flow.ps1\"",
     "test:e2e": "playwright test",
+    "test:e2e:mobile": "playwright test e2e/tests/mobile-shell.spec.ts --project=chromium",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report"
