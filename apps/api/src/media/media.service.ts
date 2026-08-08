@@ -11,6 +11,7 @@ import { createHash, randomUUID } from 'crypto';
 import { createReadStream } from 'fs';
 import { mkdir, unlink, writeFile } from 'fs/promises';
 import { basename, resolve } from 'path';
+import { Readable } from 'stream';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadMediaDto } from './dto/upload-media.dto';
@@ -60,9 +61,7 @@ export class MediaService implements OnModuleInit {
   }
 
   async onModuleInit() {
-    if (!this.r2.enabled) {
-      await mkdir(this.root, { recursive: true });
-    }
+    await mkdir(this.root, { recursive: true });
   }
 
   publicUrl(id: string) {
@@ -338,7 +337,7 @@ export class MediaService implements OnModuleInit {
     if (this.r2.isR2Path(asset.storagePath)) {
       const buffer = await this.r2.get(asset.storagePath);
       return {
-        stream: buffer,
+        stream: Readable.from(buffer),
         mimeType: asset.mimeType,
         originalName: asset.originalName,
         sizeBytes: buffer.length
