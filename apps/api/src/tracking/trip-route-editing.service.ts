@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -33,6 +34,21 @@ type RouteInput = {
   waypoints?: unknown;
   distanceKm?: number;
   durationMinutes?: number;
+};
+
+type EditAccess = {
+  dispatch: boolean;
+  passengerOwner: boolean;
+  trip: {
+    id: string;
+    routeId: string | null;
+    pickupAddress: string;
+    pickupLatitude: number;
+    pickupLongitude: number;
+    dropoffAddress: string;
+    dropoffLatitude: number;
+    dropoffLongitude: number;
+  };
 };
 
 @Injectable()
@@ -74,6 +90,36 @@ export class TripRouteEditingService {
     const originLongitude = this.coordinate(input.originLongitude, 180, 'خط طول الانطلاق');
     const destinationLatitude = this.coordinate(input.destinationLatitude, 90, 'خط عرض الوصول');
     const destinationLongitude = this.coordinate(input.destinationLongitude, 180, 'خط طول الوصول');
+
+    if (access.passengerOwner && !access.dispatch) {
+      const policy = await this.endpointPolicy(access.trip.routeId);
+      if (
+        !policy.passengerCanEditPickup &&
+        this.endpointChanged(
+          access.trip.pickupAddress,
+          access.trip.pickupLatitude,
+          access.trip.pickupLongitude,
+          originAddress,
+          originLatitude,
+          originLongitude
+        )
+      ) {
+        throw new ForbiddenException('نقطة الانطلاق ثابتة حسب إعدادات الإدارة لهذا المسار.');
+      }
+      if (
+        !policy.passengerCanEditDropoff &&
+        this.endpointChanged(
+          access.trip.dropoffAddress,
+          access.trip.dropoffLatitude,
+          access.trip.dropoffLongitude,
+          destinationAddress,
+          destinationLatitude,
+          destinationLongitude
+        )
+      ) {
+        throw new ForbiddenException('نقطة الوصول ثابتة حسب إعدادات الإدارة لهذا المسار.');
+      }
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.trip.update({
@@ -137,13 +183,20 @@ export class TripRouteEditingService {
     };
   }
 
-  private async assertEditAccess(user: AuthUser, tripId: string) {
+  private async assertEditAccess(user: AuthUser, tripId: string): Promise<EditAccess> {
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
       select: {
         id: true,
         passengerId: true,
-        status: true
+        routeId: true,
+        status: true,
+        pickupAddress: true,
+        pickupLatitude: true,
+        pickupLongitude: true,
+        dropoffAddress: true,
+        dropoffLatitude: true,
+        dropoffLongitude: true
       }
     });
     if (!trip) throw new NotFoundException('الحجز غير موجود.');
@@ -160,7 +213,54 @@ export class TripRouteEditingService {
       throw new ForbiddenException('تم قفل المسار بعد بدء الرحلة ولا يمكن تعديله.');
     }
 
-    return { dispatch, passengerOwner };
+    return { dispatch, passengerOwner, trip };
+  }
+
+  private async endpointPolicy(routeId: string | null) {
+    if (!routeId) {
+      return { passengerCanEditPickup: false, passengerCanEditDropoff: false };
+    }
+
+    const route = await this.prisma.serviceRoute.findUnique({
+      where: { id: routeId },
+      include: { origin: true, destination: true }
+    });
+    if (!route) {
+      return { passengerCanEditPickup: false, passengerCanEditDropoff: false };
+    }
+
+    const rows = await this.prisma.$queryRaw<Array<{
+      passengerCanEditPickup: boolean;
+      passengerCanEditDropoff: boolean;
+    }>>(Prisma.sql`
+      SELECT "passengerCanEditPickup", "passengerCanEditDropoff"
+      FROM "RouteBookingPolicy"
+      WHERE "routeId" = ${routeId}::uuid
+      LIMIT 1
+    `).catch(() => [] as Array<{
+      passengerCanEditPickup: boolean;
+      passengerCanEditDropoff: boolean;
+    }>);
+
+    return rows[0] ?? {
+      passengerCanEditPickup: route.origin.type !== 'AIRPORT',
+      passengerCanEditDropoff: route.destination.type !== 'AIRPORT'
+    };
+  }
+
+  private endpointChanged(
+    currentAddress: string,
+    currentLatitude: number,
+    currentLongitude: number,
+    nextAddress: string,
+    nextLatitude: number,
+    nextLongitude: number
+  ) {
+    return (
+      currentAddress.trim() !== nextAddress.trim() ||
+      Math.abs(currentLatitude - nextLatitude) > 0.000001 ||
+      Math.abs(currentLongitude - nextLongitude) > 0.000001
+    );
   }
 
   private validateRouteInput(input: RouteInput) {
@@ -173,7 +273,7 @@ export class TripRouteEditingService {
   }
 
   private async persistRoutePlan(
-    client: PrismaService | Parameters<Parameters<PrismaService['$transaction']>[0]>[0],
+    client: PrismaService | Prisma.TransactionClient,
     user: AuthUser,
     tripId: string,
     route: {
