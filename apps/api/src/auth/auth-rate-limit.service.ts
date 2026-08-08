@@ -79,6 +79,16 @@ export class AuthRateLimitService implements OnModuleDestroy {
     );
   }
 
+  async assertMapsAllowed(ipAddress: string | undefined) {
+    if (!this.mapsEnabled()) return;
+    await this.consume(
+      'maps-ip',
+      this.normalizeIp(ipAddress),
+      this.positiveInt('MAPS_IP_MAX', 120),
+      this.positiveInt('MAPS_WINDOW_SECONDS', 60)
+    );
+  }
+
   async onModuleDestroy() {
     if (!this.redis?.isOpen) return;
     try {
@@ -230,6 +240,12 @@ export class AuthRateLimitService implements OnModuleDestroy {
   private enabled() {
     const raw = this.config.get<string>('AUTH_RATE_LIMIT_ENABLED')?.trim().toLowerCase();
     if (!raw) return true;
+    return !['0', 'false', 'no', 'off'].includes(raw);
+  }
+
+  private mapsEnabled() {
+    const raw = this.config.get<string>('MAPS_RATE_LIMIT_ENABLED')?.trim().toLowerCase();
+    if (!raw) return this.enabled();
     return !['0', 'false', 'no', 'off'].includes(raw);
   }
 }

@@ -8,6 +8,7 @@ import { ComplianceModule } from './compliance/compliance.module';
 import { DriversModule } from './drivers/drivers.module';
 import { HealthController } from './health.controller';
 import { MediaModule } from './media/media.module';
+import { MapsModule } from './maps/maps.module';
 import { PermissionsGuard } from './iam/permissions.guard';
 import { PricingModule } from './pricing/pricing.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -25,6 +26,7 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     MediaModule,
+    MapsModule,
     ComplianceModule,
     AuthModule,
     TelegramModule,

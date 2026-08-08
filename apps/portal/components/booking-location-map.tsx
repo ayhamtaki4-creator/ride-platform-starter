@@ -4,7 +4,7 @@ import L, { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
-import { searchPlace } from "@/lib/geocoding";
+import { getDrivingRoute, searchPlace, type DrivingRoute } from "@/lib/geocoding";
 
 export type BookingMapPoint = {
   latitude: number;
@@ -89,6 +89,8 @@ export default function BookingLocationMap({
   const [locating, setLocating] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [searchPoint, setSearchPoint] = useState<BookingMapPoint | null>(null);
+  const [routePreview, setRoutePreview] = useState<DrivingRoute | null>(null);
+  const [routing, setRouting] = useState(false);
 
   useEffect(() => setMounted(true), []);
   useEffect(() => {
@@ -97,6 +99,41 @@ export default function BookingLocationMap({
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previous; };
   }, [open]);
+
+  useEffect(() => {
+    if (!pickup || !dropoff) {
+      setRoutePreview(null);
+      setRouting(false);
+      return;
+    }
+
+    let active = true;
+    setRouting(true);
+    void getDrivingRoute(
+      pickup.latitude,
+      pickup.longitude,
+      dropoff.latitude,
+      dropoff.longitude,
+    )
+      .then((route) => {
+        if (active) setRoutePreview(route);
+      })
+      .catch(() => {
+        if (active) setRoutePreview(null);
+      })
+      .finally(() => {
+        if (active) setRouting(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    pickup?.latitude,
+    pickup?.longitude,
+    dropoff?.latitude,
+    dropoff?.longitude,
+  ]);
 
   async function search() {
     const normalized = query.trim();
@@ -174,6 +211,15 @@ export default function BookingLocationMap({
   if (pickup) points.push([pickup.latitude, pickup.longitude]);
   if (dropoff) points.push([dropoff.latitude, dropoff.longitude]);
 
+  const routedPositions: [number, number][] = (routePreview?.geometry.coordinates ?? [])
+    .filter(
+      (coordinate) =>
+        coordinate.length >= 2 &&
+        Number.isFinite(coordinate[0]) &&
+        Number.isFinite(coordinate[1]),
+    )
+    .map(([longitude, latitude]) => [latitude, longitude]);
+
   if (!mounted) return null;
   if (!open) {
     return (
@@ -246,13 +292,32 @@ export default function BookingLocationMap({
             ) : null}
             {searchPoint ? <Marker position={[searchPoint.latitude, searchPoint.longitude]} /> : null}
             {pickup && dropoff ? (
-              <Polyline positions={[[pickup.latitude, pickup.longitude], [dropoff.latitude, dropoff.longitude]]} pathOptions={{ weight: 4, opacity: 0.7, dashArray: "8 8" }} />
+              <Polyline
+                positions={
+                  routedPositions.length >= 2
+                    ? routedPositions
+                    : [[pickup.latitude, pickup.longitude], [dropoff.latitude, dropoff.longitude]]
+                }
+                pathOptions={
+                  routedPositions.length >= 2
+                    ? { weight: 5, opacity: 0.82 }
+                    : { weight: 4, opacity: 0.7, dashArray: "8 8" }
+                }
+              />
             ) : null}
           </MapContainer>
         </div>
 
         <footer className="booking-map-modal-footer">
-          <span>{activeMode === "pickup" ? "اضغط على مكان الانطلاق الدقيق" : "اضغط على مكان الوصول الدقيق"}</span>
+          <span>
+            {routing
+              ? "جارٍ حساب مسار القيادة..."
+              : routePreview
+                ? `المسار التقريبي بالسيارة: ${routePreview.distanceKm} كم · ${routePreview.durationMinutes} دقيقة`
+                : activeMode === "pickup"
+                  ? "اضغط على مكان الانطلاق الدقيق"
+                  : "اضغط على مكان الوصول الدقيق"}
+          </span>
           <button className="button" type="button" onClick={() => setOpen(false)}>تم</button>
         </footer>
       </section>
