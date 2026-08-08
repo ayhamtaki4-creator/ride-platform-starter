@@ -143,6 +143,10 @@ const bookingInclude = {
 } satisfies Prisma.TripInclude;
 
 type BookingWithRelations = Prisma.TripGetPayload<{ include: typeof bookingInclude }>;
+type RouteBookingPolicyRow = {
+  passengerCanEditPickup: boolean;
+  passengerCanEditDropoff: boolean;
+};
 
 @Injectable()
 export class BookingsService {
@@ -192,6 +196,11 @@ export class BookingsService {
     if (dto.bookingType === 'PRIVATE_CAR' && dto.passengerCount > passengerCapacity) {
       throw new BadRequestException(
         `سعة الفئة المختارة هي ${passengerCapacity} أشخاص. اختر فئة أكبر.`
+      );
+    }
+    if (dto.bookingType === 'PRIVATE_CAR' && dto.luggageCount > luggageCapacity) {
+      throw new BadRequestException(
+        `سعة الفئة المختارة هي ${luggageCapacity} حقائب. اختر فئة أكبر.`
       );
     }
 
@@ -277,14 +286,75 @@ export class BookingsService {
         'ملف تذكرة الطيران غير موجود أو لا يخص هذا الحساب.'
       );
     }
+
     const legacyDefaults = dto.direction ? LEGACY_ROUTE_DEFAULTS[dto.direction] : null;
-    const pickupLatitude = Number(route?.origin.latitude ?? legacyDefaults?.pickupLatitude ?? 0);
-    const pickupLongitude = Number(route?.origin.longitude ?? legacyDefaults?.pickupLongitude ?? 0);
-    const dropoffLatitude = Number(route?.destination.latitude ?? legacyDefaults?.dropoffLatitude ?? 0);
-    const dropoffLongitude = Number(route?.destination.longitude ?? legacyDefaults?.dropoffLongitude ?? 0);
+    let pickupLatitude = Number(route?.origin.latitude ?? legacyDefaults?.pickupLatitude ?? 0);
+    let pickupLongitude = Number(route?.origin.longitude ?? legacyDefaults?.pickupLongitude ?? 0);
+    let dropoffLatitude = Number(route?.destination.latitude ?? legacyDefaults?.dropoffLatitude ?? 0);
+    let dropoffLongitude = Number(route?.destination.longitude ?? legacyDefaults?.dropoffLongitude ?? 0);
+    let pickupAddress = dto.pickupAddress.trim();
+    let dropoffAddress = dto.dropoffAddress.trim();
+
+    if (route) {
+      const policies = await this.prisma.$queryRaw<RouteBookingPolicyRow[]>(Prisma.sql`
+        SELECT "passengerCanEditPickup", "passengerCanEditDropoff"
+        FROM "RouteBookingPolicy"
+        WHERE "routeId" = ${route.id}::uuid
+        LIMIT 1
+      `);
+      const policy = policies[0] ?? {
+        passengerCanEditPickup: route.origin.type !== 'AIRPORT',
+        passengerCanEditDropoff: route.destination.type !== 'AIRPORT'
+      };
+
+      const pickupLatitudeProvided = dto.pickupLatitude !== undefined;
+      const pickupLongitudeProvided = dto.pickupLongitude !== undefined;
+      const dropoffLatitudeProvided = dto.dropoffLatitude !== undefined;
+      const dropoffLongitudeProvided = dto.dropoffLongitude !== undefined;
+
+      if (pickupLatitudeProvided !== pickupLongitudeProvided) {
+        throw new BadRequestException('يجب إرسال إحداثيي نقطة الانطلاق معًا.');
+      }
+      if (dropoffLatitudeProvided !== dropoffLongitudeProvided) {
+        throw new BadRequestException('يجب إرسال إحداثيي نقطة الوصول معًا.');
+      }
+
+      if (!policy.passengerCanEditPickup) {
+        if (
+          pickupLatitudeProvided ||
+          pickupLongitudeProvided ||
+          pickupAddress !== route.origin.nameAr
+        ) {
+          throw new BadRequestException('نقطة الانطلاق ثابتة حسب إعدادات هذا المسار.');
+        }
+        pickupAddress = route.origin.nameAr;
+      } else if (pickupLatitudeProvided && pickupLongitudeProvided) {
+        pickupLatitude = dto.pickupLatitude!;
+        pickupLongitude = dto.pickupLongitude!;
+      }
+
+      if (!policy.passengerCanEditDropoff) {
+        if (
+          dropoffLatitudeProvided ||
+          dropoffLongitudeProvided ||
+          dropoffAddress !== route.destination.nameAr
+        ) {
+          throw new BadRequestException('نقطة الوصول ثابتة حسب إعدادات هذا المسار.');
+        }
+        dropoffAddress = route.destination.nameAr;
+      } else if (dropoffLatitudeProvided && dropoffLongitudeProvided) {
+        dropoffLatitude = dto.dropoffLatitude!;
+        dropoffLongitude = dto.dropoffLongitude!;
+      }
+    }
+
+    this.assertCoordinate(pickupLatitude, 90, 'خط عرض نقطة الانطلاق');
+    this.assertCoordinate(pickupLongitude, 180, 'خط طول نقطة الانطلاق');
+    this.assertCoordinate(dropoffLatitude, 90, 'خط عرض نقطة الوصول');
+    this.assertCoordinate(dropoffLongitude, 180, 'خط طول نقطة الوصول');
+
     const estimatedDistanceKm = Number(route?.distanceKm ?? legacyDefaults?.distanceKm ?? 0);
     const estimatedDurationMinutes = route?.estimatedMinutes ?? legacyDefaults?.durationMinutes ?? 0;
-
     const bookingReference = await this.generateReference();
 
     let booking: BookingWithRelations;
@@ -312,10 +382,10 @@ export class BookingsService {
           contactName: dto.passengerName.trim(),
           contactPhone: dto.passengerPhone.trim(),
           notes: dto.notes?.trim() || null,
-          pickupAddress: dto.pickupAddress.trim(),
+          pickupAddress,
           pickupLatitude,
           pickupLongitude,
-          dropoffAddress: dto.dropoffAddress.trim(),
+          dropoffAddress,
           dropoffLatitude,
           dropoffLongitude,
           estimatedDistanceKm,
@@ -370,7 +440,9 @@ export class BookingsService {
           vehicleClass: quote.vehicleClass,
           travelDate: dto.travelDate,
           passengerCount: dto.passengerCount,
-          luggageCount: dto.luggageCount
+          luggageCount: dto.luggageCount,
+          customPickup: dto.pickupLatitude !== undefined,
+          customDropoff: dto.dropoffLatitude !== undefined
         }
       }
     });
@@ -498,6 +570,12 @@ export class BookingsService {
           }
         : null
     };
+  }
+
+  private assertCoordinate(value: number, limit: number, label: string) {
+    if (!Number.isFinite(value) || Math.abs(value) > limit) {
+      throw new BadRequestException(`${label} غير صالح.`);
+    }
   }
 
   private maskPlate(value: string) {
