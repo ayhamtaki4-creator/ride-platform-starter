@@ -1,14 +1,23 @@
-import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Ip, Query } from '@nestjs/common';
+import { AuthRateLimitService } from '../auth/auth-rate-limit.service';
 import { Public } from '../iam/public.decorator';
 import { MapsService } from './maps.service';
 
 @Public()
 @Controller('maps')
 export class MapsController {
-  constructor(private readonly maps: MapsService) {}
+  constructor(
+    private readonly maps: MapsService,
+    private readonly rateLimit: AuthRateLimitService
+  ) {}
 
   @Get('geocode/search')
-  search(@Query('query') rawQuery?: string, @Query('limit') rawLimit?: string) {
+  async search(
+    @Ip() ipAddress?: string,
+    @Query('query') rawQuery?: string,
+    @Query('limit') rawLimit?: string
+  ) {
+    await this.rateLimit.assertMapsAllowed(ipAddress);
     const query = rawQuery?.trim() ?? '';
     if (query.length < 2 || query.length > 160) {
       throw new BadRequestException('اكتب اسم موقع بين محرفين و160 محرفًا.');
@@ -23,10 +32,12 @@ export class MapsController {
   }
 
   @Get('geocode/reverse')
-  reverse(
+  async reverse(
+    @Ip() ipAddress?: string,
     @Query('latitude') rawLatitude?: string,
     @Query('longitude') rawLongitude?: string
   ) {
+    await this.rateLimit.assertMapsAllowed(ipAddress);
     const { latitude, longitude } = this.coordinates(
       rawLatitude,
       rawLongitude
@@ -35,12 +46,14 @@ export class MapsController {
   }
 
   @Get('route')
-  route(
+  async route(
+    @Ip() ipAddress?: string,
     @Query('pickupLatitude') rawPickupLatitude?: string,
     @Query('pickupLongitude') rawPickupLongitude?: string,
     @Query('dropoffLatitude') rawDropoffLatitude?: string,
     @Query('dropoffLongitude') rawDropoffLongitude?: string
   ) {
+    await this.rateLimit.assertMapsAllowed(ipAddress);
     const pickup = this.coordinates(rawPickupLatitude, rawPickupLongitude);
     const dropoff = this.coordinates(rawDropoffLatitude, rawDropoffLongitude);
     return this.maps.route(
