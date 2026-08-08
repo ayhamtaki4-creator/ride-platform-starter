@@ -211,9 +211,14 @@ export default function BookingLocationMap({
   if (pickup) points.push([pickup.latitude, pickup.longitude]);
   if (dropoff) points.push([dropoff.latitude, dropoff.longitude]);
 
-  const routedPositions: LatLngExpression[] = (routePreview?.geometry.coordinates ?? [])
-    .map(([longitude, latitude]) => [latitude, longitude] as LatLngExpression)
-    .filter(([latitude, longitude]) => Number.isFinite(latitude) && Number.isFinite(longitude));
+  const routedPositions: [number, number][] = (routePreview?.geometry.coordinates ?? [])
+    .filter(
+      (coordinate) =>
+        coordinate.length >= 2 &&
+        Number.isFinite(coordinate[0]) &&
+        Number.isFinite(coordinate[1]),
+    )
+    .map(([longitude, latitude]) => [latitude, longitude]);
 
   if (!mounted) return null;
   if (!open) {
