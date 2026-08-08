@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Header,
   ServiceUnavailableException
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -23,6 +24,7 @@ export class HealthController {
 
   @Public()
   @Get()
+  @Header('Cache-Control', 'no-store')
   check() {
     return {
       status: 'ok',
@@ -34,6 +36,7 @@ export class HealthController {
 
   @Public()
   @Get('ready')
+  @Header('Cache-Control', 'no-store')
   async readiness() {
     const startedAt = Date.now();
     const database = await this.checkDatabase();
