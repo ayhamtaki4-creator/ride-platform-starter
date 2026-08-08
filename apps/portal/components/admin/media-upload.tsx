@@ -11,16 +11,22 @@ export function MediaUpload({
   label = "رفع ملف",
   accept = ".jpg,.jpeg,.png,.webp,.pdf",
   onUploaded,
+  onUploadedMany,
   disabled,
   plateNumber,
+  blurPlate = false,
+  multiple = false,
 }: {
   purpose: MediaPurpose;
   visibility?: MediaVisibility;
   label?: string;
   accept?: string;
-  onUploaded: (asset: MediaAsset) => void | Promise<void>;
+  onUploaded?: (asset: MediaAsset) => void | Promise<void>;
+  onUploadedMany?: (assets: MediaAsset[]) => void | Promise<void>;
   disabled?: boolean;
   plateNumber?: string;
+  blurPlate?: boolean;
+  multiple?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [working, setWorking] = useState(false);
@@ -29,34 +35,61 @@ export function MediaUpload({
   const [info, setInfo] = useState("");
 
   async function handleChange(event: ChangeEvent<HTMLInputElement>) {
-    const selectedFile = event.target.files?.[0];
-    if (!selectedFile) return;
+    const selectedFiles = Array.from(event.target.files ?? []);
+    if (!selectedFiles.length) return;
+
     setWorking(true);
     setError("");
     setInfo("");
+
     try {
-      let file = selectedFile;
-      if (["DRIVER_AVATAR", "VEHICLE_IMAGE"].includes(purpose) && selectedFile.type.startsWith("image/")) {
-        setPhase(purpose === "VEHICLE_IMAGE" ? "جارٍ حماية الصورة وقراءة اللوحة..." : "جارٍ إضافة شعار المنصة...");
-        const config = await apiFetch<MediaBrandingConfig>("/admin/media-branding");
-        const protectedResult = await protectFleetImage(selectedFile, config, {
-          plateNumber,
-          blurPlate: purpose === "VEHICLE_IMAGE",
-        });
-        file = protectedResult.file;
-        if (protectedResult.warning) setInfo(protectedResult.warning);
-        else if (purpose === "VEHICLE_IMAGE" && plateNumber && protectedResult.plateBlurred) {
-          setInfo("تم العثور على رقم اللوحة وتغبيشه قبل الرفع.");
-        }
+      const uploaded: MediaAsset[] = [];
+      const messages: string[] = [];
+      let config: MediaBrandingConfig | null = null;
+      const protectsImage = ["DRIVER_AVATAR", "VEHICLE_IMAGE"].includes(purpose);
+
+      if (protectsImage) {
+        config = await apiFetch<MediaBrandingConfig>("/admin/media-branding");
       }
 
-      setPhase("جارٍ رفع الملف...");
-      const formData = new FormData();
-      formData.set("file", file);
-      formData.set("purpose", purpose);
-      if (visibility) formData.set("visibility", visibility);
-      const asset = await apiUpload<MediaAsset>("/admin/media/upload", formData);
-      await onUploaded(asset);
+      for (let index = 0; index < selectedFiles.length; index += 1) {
+        const selectedFile = selectedFiles[index];
+        let file = selectedFile;
+        const progress = selectedFiles.length > 1 ? ` (${index + 1}/${selectedFiles.length})` : "";
+
+        if (protectsImage && selectedFile.type.startsWith("image/") && config) {
+          setPhase(
+            purpose === "VEHICLE_IMAGE" && blurPlate
+              ? `جارٍ إضافة الشعار ومحاولة تغبيش اللوحة${progress}...`
+              : `جارٍ إضافة شعار المنصة${progress}...`,
+          );
+          const protectedResult = await protectFleetImage(selectedFile, config, {
+            plateNumber,
+            blurPlate: purpose === "VEHICLE_IMAGE" && blurPlate,
+          });
+          file = protectedResult.file;
+          if (protectedResult.warning) messages.push(`${selectedFile.name}: ${protectedResult.warning}`);
+          else if (purpose === "VEHICLE_IMAGE" && blurPlate && plateNumber && protectedResult.plateBlurred) {
+            messages.push(`${selectedFile.name}: تم العثور على رقم اللوحة وتغبيشه.`);
+          }
+        }
+
+        setPhase(`جارٍ رفع الملف${progress}...`);
+        const formData = new FormData();
+        formData.set("file", file);
+        formData.set("purpose", purpose);
+        if (visibility) formData.set("visibility", visibility);
+        uploaded.push(await apiUpload<MediaAsset>("/admin/media/upload", formData));
+      }
+
+      if (onUploadedMany) await onUploadedMany(uploaded);
+      else if (onUploaded) {
+        for (const asset of uploaded) await onUploaded(asset);
+      }
+
+      if (messages.length) setInfo(messages.join(" "));
+      else if (uploaded.length > 1) setInfo(`تم رفع ${uploaded.length} صور بنجاح.`);
+
       if (inputRef.current) inputRef.current.value = "";
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "تعذر رفع الملف.");
@@ -73,6 +106,7 @@ export function MediaUpload({
         className="sr-only"
         type="file"
         accept={accept}
+        multiple={multiple}
         onChange={handleChange}
         disabled={disabled || working}
       />

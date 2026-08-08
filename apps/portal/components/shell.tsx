@@ -7,6 +7,7 @@ import { useAuth } from "./auth-provider";
 import { NotificationCenter } from "./notification-center";
 import { Icon, IconName } from "./ui/icon";
 import { homeForRoles } from "@/lib/types";
+import { convertTelephoneLinksToWhatsApp } from "@/lib/whatsapp-link";
 
 type NavItem = { href: string; label: string; icon: IconName };
 
@@ -66,6 +67,19 @@ export function Shell({ children }: { children: ReactNode }) {
   }, [isAdmin, isDriver, isPassenger]);
 
   useEffect(() => setDrawerOpen(false), [pathname]);
+
+  useEffect(() => {
+    convertTelephoneLinksToWhatsApp(document);
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of Array.from(mutation.addedNodes)) {
+          if (node instanceof Element) convertTelephoneLinksToWhatsApp(node);
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [pathname]);
 
   function handleLogout() {
     logout();
