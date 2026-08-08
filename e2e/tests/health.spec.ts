@@ -9,6 +9,9 @@ test.describe("API health", () => {
     expect(response.headers()["x-content-type-options"]).toBe("nosniff");
     expect(response.headers()["x-frame-options"]).toBe("DENY");
     expect(response.headers()["cache-control"]).toContain("no-store");
+    expect(response.headers()["x-request-id"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
 
     const body = (await response.json()) as {
       status?: string;
@@ -36,5 +39,34 @@ test.describe("API health", () => {
     expect(body.status).toBe("ok");
     expect(body.checks?.database).toMatchObject({ status: "ok", required: true });
     expect(body.checks?.redis?.status).toBe("ok");
+  });
+
+  test("safe incoming request IDs are echoed and exposed through CORS", async ({ request }) => {
+    const requestId = "e2e-request-20260808";
+    const response = await request.get(`${apiBaseURL}/health`, {
+      headers: {
+        "X-Request-Id": requestId,
+        Origin: "http://127.0.0.1:3000",
+      },
+    });
+
+    expect(response.status()).toBe(200);
+    expect(response.headers()["x-request-id"]).toBe(requestId);
+    expect(response.headers()["access-control-expose-headers"]?.toLowerCase()).toContain(
+      "x-request-id",
+    );
+  });
+
+  test("unsafe incoming request IDs are replaced", async ({ request }) => {
+    const response = await request.get(`${apiBaseURL}/health`, {
+      headers: { "X-Request-Id": "unsafe request id with spaces !" },
+    });
+
+    expect(response.status()).toBe(200);
+    const requestId = response.headers()["x-request-id"];
+    expect(requestId).not.toBe("unsafe request id with spaces !");
+    expect(requestId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
   });
 });
