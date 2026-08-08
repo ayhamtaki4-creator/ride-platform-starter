@@ -21,6 +21,7 @@ import { CurrentUser } from '../iam/current-user.decorator';
 import { Permissions } from '../iam/permissions.decorator';
 import { Public } from '../iam/public.decorator';
 import { UploadedMediaFile } from '../media/media.service';
+import { BookingDriverContactService } from './booking-driver-contact.service';
 import { BookingsService } from './bookings.service';
 import { BookingQuoteDto } from './dto/booking-quote.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
@@ -32,7 +33,8 @@ export class BookingsController {
   constructor(
     private readonly bookingsService: BookingsService,
     private readonly flightTickets: FlightTicketsService,
-    private readonly rateLimit: AuthRateLimitService
+    private readonly rateLimit: AuthRateLimitService,
+    private readonly driverContact: BookingDriverContactService
   ) {}
 
   @Public()
@@ -87,6 +89,16 @@ export class BookingsController {
     @Body('routeId') routeId?: string
   ) {
     return this.flightTickets.uploadAndExtract(user, file, routeId);
+  }
+
+  @ApiBearerAuth()
+  @Permissions('booking:read:own')
+  @Get(':id/driver-contact')
+  driverContactForPassenger(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string
+  ) {
+    return this.driverContact.getForPassenger(user, id);
   }
 
   @ApiBearerAuth()
