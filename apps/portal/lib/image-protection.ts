@@ -55,6 +55,13 @@ function normalizePlate(value: string) {
     .replace(/[^0-9A-Z\u0600-\u06FF]/g, "");
 }
 
+function looksLikePlateCandidate(value: string) {
+  const normalized = normalizePlate(value);
+  if (normalized.length < 4 || normalized.length > 14) return false;
+  const digits = (normalized.match(/[0-9]/g) ?? []).length;
+  return digits >= 3;
+}
+
 async function loadTesseract(): Promise<TesseractApi> {
   if (window.Tesseract) return window.Tesseract;
 
@@ -80,26 +87,38 @@ async function loadTesseract(): Promise<TesseractApi> {
   return window.Tesseract;
 }
 
-function collectPlateBoxes(blocks: OcrBlock[] | null | undefined, plateNumber: string) {
-  const target = normalizePlate(plateNumber);
-  if (target.length < 2) return [] as BoundingBox[];
-
+function collectPlateBoxes(
+  blocks: OcrBlock[] | null | undefined,
+  plateNumber?: string,
+) {
+  const target = normalizePlate(plateNumber ?? "");
   const matches: BoundingBox[] = [];
+
   for (const block of blocks ?? []) {
     for (const paragraph of block.paragraphs ?? []) {
       for (const line of paragraph.lines ?? []) {
-        const lineText = normalizePlate(line.text ?? (line.words ?? []).map((word) => word.text ?? "").join(""));
-        if (line.bbox && lineText && (lineText.includes(target) || (target.includes(lineText) && lineText.length >= Math.max(3, target.length - 2)))) {
+        const rawLineText = line.text ?? (line.words ?? []).map((word) => word.text ?? "").join("");
+        const lineText = normalizePlate(rawLineText);
+        const exactLineMatch = Boolean(
+          target && lineText &&
+          (lineText.includes(target) || (target.includes(lineText) && lineText.length >= Math.max(3, target.length - 2)))
+        );
+        const genericLineMatch = !target && line.bbox && looksLikePlateCandidate(rawLineText);
+        if (line.bbox && (exactLineMatch || genericLineMatch)) {
           matches.push(line.bbox);
           continue;
         }
 
         for (const word of line.words ?? []) {
-          const wordText = normalizePlate(word.text ?? "");
-          if (!word.bbox || wordText.length < 2) continue;
-          if (wordText === target || (target.includes(wordText) && wordText.length >= Math.max(3, target.length - 2))) {
-            matches.push(word.bbox);
-          }
+          if (!word.bbox) continue;
+          const rawWord = word.text ?? "";
+          const wordText = normalizePlate(rawWord);
+          const exactWordMatch = Boolean(
+            target && wordText.length >= 2 &&
+            (wordText === target || (target.includes(wordText) && wordText.length >= Math.max(3, target.length - 2)))
+          );
+          const genericWordMatch = !target && looksLikePlateCandidate(rawWord);
+          if (exactWordMatch || genericWordMatch) matches.push(word.bbox);
         }
       }
     }
@@ -108,7 +127,7 @@ function collectPlateBoxes(blocks: OcrBlock[] | null | undefined, plateNumber: s
   return matches;
 }
 
-async function detectPlateBoxes(file: File, plateNumber: string): Promise<BoundingBox[]> {
+async function detectPlateBoxes(file: File, plateNumber?: string): Promise<BoundingBox[]> {
   const tesseract = await loadTesseract();
   const worker = await tesseract.createWorker(["eng", "ara"]);
   try {
@@ -226,12 +245,12 @@ export async function protectFleetImage(
 
   let plateBlurred = false;
   let warning: string | undefined;
-  if (options.blurPlate && config.plateBlurEnabled && options.plateNumber?.trim()) {
+  if (options.blurPlate && config.plateBlurEnabled) {
     try {
       const boxes = await detectPlateBoxes(file, options.plateNumber);
       for (const box of boxes) blurBox(context, source as CanvasImageSource, box, width, height);
       plateBlurred = boxes.length > 0;
-      if (!plateBlurred) warning = "لم يتم العثور على رقم اللوحة بوضوح في الصورة؛ راجع الصورة بعد الرفع.";
+      if (!plateBlurred) warning = "لم يتم العثور على لوحة سيارة واضحة في الصورة؛ راجع الصورة بعد الرفع.";
     } catch {
       warning = "تعذر تشغيل قراءة اللوحة تلقائيًا؛ تم رفع الصورة مع الشعار فقط.";
     }
