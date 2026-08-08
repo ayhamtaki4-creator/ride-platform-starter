@@ -565,54 +565,16 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
           clientRequestId: requestId,
           flightTicketMediaId: candidate.flightTicketMediaId || undefined,
           vehicleClass: candidate.bookingType === "PRIVATE_CAR" ? candidate.vehicleClass : "SMALL",
+          pickupLatitude: useCustomMapLocations && canEditPickup ? pickupLatitude ?? undefined : undefined,
+          pickupLongitude: useCustomMapLocations && canEditPickup ? pickupLongitude ?? undefined : undefined,
+          dropoffLatitude: useCustomMapLocations && canEditDropoff ? dropoffLatitude ?? undefined : undefined,
+          dropoffLongitude: useCustomMapLocations && canEditDropoff ? dropoffLongitude ?? undefined : undefined,
         }),
       });
 
-      let mapLocationsSaved = true;
-      if (useCustomMapLocations) {
-        const finalPickupLatitude = canEditPickup ? pickupLatitude : booking.pickupLatitude;
-        const finalPickupLongitude = canEditPickup ? pickupLongitude : booking.pickupLongitude;
-        const finalDropoffLatitude = canEditDropoff ? dropoffLatitude : booking.dropoffLatitude;
-        const finalDropoffLongitude = canEditDropoff ? dropoffLongitude : booking.dropoffLongitude;
-        const finalPickupAddress = canEditPickup ? candidate.pickupAddress.trim() : booking.pickupAddress;
-        const finalDropoffAddress = canEditDropoff ? candidate.dropoffAddress.trim() : booking.dropoffAddress;
-
-        if (
-          finalPickupLatitude != null && finalPickupLongitude != null && finalDropoffLatitude != null && finalDropoffLongitude != null
-        ) {
-          try {
-            await apiFetch(`/tracking/trips/${booking.id}/endpoints`, {
-              method: "PATCH",
-              body: JSON.stringify({
-                originAddress: finalPickupAddress,
-                originLatitude: finalPickupLatitude,
-                originLongitude: finalPickupLongitude,
-                destinationAddress: finalDropoffAddress,
-                destinationLatitude: finalDropoffLatitude,
-                destinationLongitude: finalDropoffLongitude,
-                geometry: {
-                  type: "LineString",
-                  coordinates: [
-                    [finalPickupLongitude, finalPickupLatitude],
-                    [finalDropoffLongitude, finalDropoffLatitude],
-                  ],
-                },
-                waypoints: [],
-              }),
-            });
-          } catch {
-            mapLocationsSaved = false;
-          }
-        }
-      }
-
       clearPendingBooking();
       await deletePendingTicket(requestId).catch(() => undefined);
-      if (!mapLocationsSaved) {
-        showToast(`تم إنشاء الحجز ${booking.bookingReference ?? ""}، لكن تعذر حفظ نقطة الخريطة.`, "error");
-      } else {
-        showToast(`تم إرسال الحجز ${booking.bookingReference ?? ""}.`, "success");
-      }
+      showToast(`تم إرسال الحجز ${booking.bookingReference ?? ""}.`, "success");
       onCreated?.(booking);
       router.replace(`/rider/bookings/${booking.id}`);
       return booking;
