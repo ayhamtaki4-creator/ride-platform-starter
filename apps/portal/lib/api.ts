@@ -1,6 +1,8 @@
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 
+const REFRESH_COOKIE_SESSION_HINT = "ride_refresh_cookie_session";
+
 export function getRealtimeUrl() {
   try {
     return `${new URL(API_URL).origin}/realtime`;
@@ -21,16 +23,26 @@ export class ApiError extends Error {
 
 type RefreshResponse = {
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string;
 };
 
 let refreshPromise: Promise<string | null> | null = null;
+
+export function markRefreshCookieSession(enabled: boolean) {
+  if (typeof window === "undefined") return;
+  if (enabled) {
+    localStorage.setItem(REFRESH_COOKIE_SESSION_HINT, "1");
+  } else {
+    localStorage.removeItem(REFRESH_COOKIE_SESSION_HINT);
+  }
+}
 
 export function clearStoredAuth() {
   if (typeof window === "undefined") return;
   localStorage.removeItem("ride_access_token");
   localStorage.removeItem("ride_refresh_token");
   localStorage.removeItem("ride_user");
+  localStorage.removeItem(REFRESH_COOKIE_SESSION_HINT);
 }
 
 export async function refreshAccessToken() {
@@ -38,22 +50,33 @@ export async function refreshAccessToken() {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
-    const refreshToken = localStorage.getItem("ride_refresh_token");
-    if (!refreshToken) return null;
+    const legacyRefreshToken = localStorage.getItem("ride_refresh_token");
+    const hasCookieSessionHint =
+      localStorage.getItem(REFRESH_COOKIE_SESSION_HINT) === "1";
+    if (!legacyRefreshToken && !hasCookieSessionHint) return null;
 
     try {
       const response = await fetch(`${API_URL}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
+        body: JSON.stringify(
+          legacyRefreshToken ? { refreshToken: legacyRefreshToken } : {}
+        ),
+        credentials: "include",
         cache: "no-store",
       });
       if (!response.ok) return null;
       const body = (await response.json()) as RefreshResponse;
-      if (!body.accessToken || !body.refreshToken) return null;
+      if (!body.accessToken) return null;
 
       localStorage.setItem("ride_access_token", body.accessToken);
-      localStorage.setItem("ride_refresh_token", body.refreshToken);
+      if (body.refreshToken) {
+        localStorage.setItem("ride_refresh_token", body.refreshToken);
+        markRefreshCookieSession(false);
+      } else {
+        localStorage.removeItem("ride_refresh_token");
+        markRefreshCookieSession(true);
+      }
       window.dispatchEvent(new Event("ride-auth-refreshed"));
       return body.accessToken;
     } catch {
@@ -101,6 +124,7 @@ export async function apiFetch<T>(
   const response = await fetch(`${API_URL}${path}`, {
     ...requestOptions,
     headers,
+    credentials: requestOptions.credentials ?? "include",
     cache: "no-store",
   });
 
@@ -154,6 +178,7 @@ export async function fetchProtectedBlob(pathOrUrl: string, retry = true): Promi
   const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${API_URL}${pathOrUrl}`;
   const response = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: "include",
     cache: "no-store",
   });
   if (response.status === 401 && retry) {

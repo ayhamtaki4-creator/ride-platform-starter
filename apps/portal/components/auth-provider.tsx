@@ -10,8 +10,19 @@ import {
   useState,
 } from "react";
 import { io, Socket } from "socket.io-client";
-import { ApiError, apiFetch, clearStoredAuth, getRealtimeUrl } from "@/lib/api";
+import {
+  ApiError,
+  apiFetch,
+  clearStoredAuth,
+  getRealtimeUrl,
+  markRefreshCookieSession,
+  refreshAccessToken,
+} from "@/lib/api";
 import { AuthUser, LoginResponse } from "@/lib/types";
+
+type SessionResponse = Omit<LoginResponse, "refreshToken"> & {
+  refreshToken?: string;
+};
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -46,11 +57,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshUser = useCallback(async () => {
-    const token = localStorage.getItem("ride_access_token");
+    let token = localStorage.getItem("ride_access_token");
 
-    const refreshToken = localStorage.getItem("ride_refresh_token");
+    if (!token) {
+      token = await refreshAccessToken();
+    }
 
-    if (!token && !refreshToken) {
+    if (!token) {
       setUser(null);
       setIsLoading(false);
       return;
@@ -137,21 +150,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [authVersion, refreshUser, user?.id]);
 
+  const storeSession = useCallback((response: SessionResponse) => {
+    localStorage.setItem("ride_access_token", response.accessToken);
+    if (response.refreshToken) {
+      localStorage.setItem("ride_refresh_token", response.refreshToken);
+      markRefreshCookieSession(false);
+    } else {
+      localStorage.removeItem("ride_refresh_token");
+      markRefreshCookieSession(true);
+    }
+    localStorage.setItem("ride_user", JSON.stringify(response.user));
+    setUser(response.user);
+    setAuthVersion((current) => current + 1);
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
-    const response = await apiFetch<LoginResponse>("/auth/login", {
+    const response = await apiFetch<SessionResponse>("/auth/login", {
       method: "POST",
       skipAuth: true,
       body: JSON.stringify({ email, password }),
     });
 
-    localStorage.setItem("ride_access_token", response.accessToken);
-    localStorage.setItem("ride_refresh_token", response.refreshToken);
-    localStorage.setItem("ride_user", JSON.stringify(response.user));
-    setUser(response.user);
-    setAuthVersion((current) => current + 1);
-
+    storeSession(response);
     return response.user;
-  }, []);
+  }, [storeSession]);
 
   const register = useCallback(async (input: {
     firstName: string;
@@ -161,29 +183,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string;
     whatsappOptIn: boolean;
   }) => {
-    const response = await apiFetch<LoginResponse>("/auth/register", {
+    const response = await apiFetch<SessionResponse>("/auth/register", {
       method: "POST",
       skipAuth: true,
       body: JSON.stringify(input),
     });
 
-    localStorage.setItem("ride_access_token", response.accessToken);
-    localStorage.setItem("ride_refresh_token", response.refreshToken);
-    localStorage.setItem("ride_user", JSON.stringify(response.user));
-    setUser(response.user);
-    setAuthVersion((current) => current + 1);
+    storeSession(response);
     return response.user;
-  }, []);
+  }, [storeSession]);
 
   const logout = useCallback(() => {
     const refreshToken = localStorage.getItem("ride_refresh_token");
-    if (refreshToken) {
-      void apiFetch("/auth/logout", {
-        method: "POST",
-        skipAuth: true,
-        body: JSON.stringify({ refreshToken }),
-      }).catch(() => undefined);
-    }
+    void apiFetch("/auth/logout", {
+      method: "POST",
+      skipAuth: true,
+      body: JSON.stringify(refreshToken ? { refreshToken } : {}),
+    }).catch(() => undefined);
     clearSession();
   }, [clearSession]);
 
