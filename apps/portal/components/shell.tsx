@@ -19,6 +19,7 @@ const adminItems: NavItem[] = [
   { href: "/admin/route-templates", label: "قوالب المسارات", icon: "route" },
   { href: "/admin/route-policies", label: "سياسات الحجز والطيران", icon: "route" },
   { href: "/admin/drivers", label: "السائقون والمركبات", icon: "drivers" },
+  { href: "/admin/media-branding", label: "حماية الصور والشعار", icon: "shield" },
   { href: "/admin/compliance", label: "الامتثال والملفات", icon: "shield" },
   { href: "/admin/users", label: "الحسابات", icon: "users" },
   { href: "/admin/pricing", label: "الأسعار", icon: "pricing" },
