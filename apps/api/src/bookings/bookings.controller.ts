@@ -22,6 +22,7 @@ import { Permissions } from '../iam/permissions.decorator';
 import { Public } from '../iam/public.decorator';
 import { UploadedMediaFile } from '../media/media.service';
 import { BookingDriverContactService } from './booking-driver-contact.service';
+import { BookingRoutePlanService } from './booking-route-plan.service';
 import { BookingsService } from './bookings.service';
 import { BookingQuoteDto } from './dto/booking-quote.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
@@ -34,7 +35,8 @@ export class BookingsController {
     private readonly bookingsService: BookingsService,
     private readonly flightTickets: FlightTicketsService,
     private readonly rateLimit: AuthRateLimitService,
-    private readonly driverContact: BookingDriverContactService
+    private readonly driverContact: BookingDriverContactService,
+    private readonly routePlans: BookingRoutePlanService
   ) {}
 
   @Public()
@@ -46,8 +48,10 @@ export class BookingsController {
   @ApiBearerAuth()
   @Permissions('booking:create')
   @Post()
-  create(@CurrentUser() user: AuthUser, @Body() dto: CreateBookingDto) {
-    return this.bookingsService.create(user, dto);
+  async create(@CurrentUser() user: AuthUser, @Body() dto: CreateBookingDto) {
+    const booking = await this.bookingsService.create(user, dto);
+    void this.routePlans.syncPendingBooking(booking.id);
+    return booking;
   }
 
   @ApiBearerAuth()
