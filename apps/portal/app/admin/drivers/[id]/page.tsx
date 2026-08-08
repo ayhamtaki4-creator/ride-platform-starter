@@ -111,11 +111,56 @@ export default function AdminDriverDetailPage() {
     await load();
   }
 
-  async function attachVehicleImage(vehicleId: string, asset: MediaAsset, isPrimary = true) {
-    await apiFetch(`/admin/media/${asset.id}/approve`, { method: "POST" });
-    await apiFetch(`/admin/drivers/${driverId}/vehicles/${vehicleId}/media-images`, { method: "POST", body: JSON.stringify({ mediaAssetId: asset.id, isPrimary, sortOrder: 0 }) });
-    setMessage("تم رفع واعتماد صورة المركبة.");
-    await load();
+  async function deleteAvatar() {
+    const mediaId = driver?.avatarMedia?.id;
+    if (!mediaId) {
+      setError("هذه الصورة قديمة وغير مرتبطة بملف وسائط قابل للحذف. ارفع صورة جديدة أولًا إن أردت استبدالها.");
+      return;
+    }
+    if (!window.confirm("هل تريد حذف صورة السائق نهائيًا؟")) return;
+    await runAction("delete-avatar", () => apiFetch(`/admin/media/${mediaId}`, { method: "DELETE" }), "تم حذف صورة السائق.");
+  }
+
+  async function attachVehicleImages(vehicleId: string, assets: MediaAsset[]) {
+    const vehicle = driver?.vehicles.find((item) => item.id === vehicleId);
+    const approvedCount = vehicle?.images.filter((image) => image.isApproved).length ?? 0;
+    setWorking(`vehicle-images-${vehicleId}`);
+    setError("");
+    setMessage("");
+    try {
+      for (let index = 0; index < assets.length; index += 1) {
+        const asset = assets[index];
+        await apiFetch(`/admin/media/${asset.id}/approve`, { method: "POST" });
+        await apiFetch(`/admin/drivers/${driverId}/vehicles/${vehicleId}/media-images`, {
+          method: "POST",
+          body: JSON.stringify({
+            mediaAssetId: asset.id,
+            isPrimary: approvedCount === 0 && index === 0,
+            sortOrder: approvedCount + index,
+          }),
+        });
+      }
+      setMessage(assets.length > 1 ? `تم رفع واعتماد ${assets.length} صور للمركبة.` : "تم رفع واعتماد صورة المركبة.");
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "تعذر إرفاق صور المركبة.");
+    } finally {
+      setWorking("");
+    }
+  }
+
+  async function deleteVehicleImage(vehicleId: string, image: DriverVehicle["images"][number]) {
+    const mediaId = image.mediaAsset?.id;
+    if (!mediaId) {
+      setError("هذه صورة قديمة غير مرتبطة بملف وسائط قابل للحذف من التخزين.");
+      return;
+    }
+    if (!window.confirm("هل تريد حذف هذه الصورة نهائيًا من المركبة والتخزين؟")) return;
+    await runAction(
+      `delete-image-${image.id}`,
+      () => apiFetch(`/admin/media/${mediaId}`, { method: "DELETE" }),
+      "تم حذف صورة المركبة.",
+    );
   }
 
   async function createDriverDocument(event: FormEvent) {
@@ -183,7 +228,10 @@ export default function AdminDriverDetailPage() {
             {driver.avatarUrl ? <img className="driver-avatar-xl" src={driver.avatarUrl} alt="صورة السائق" /> : <div className="driver-avatar-xl placeholder">{driver.user.firstName.slice(0, 1)}{driver.user.lastName.slice(0, 1)}</div>}
             <div><div className="eyebrow">{driver.baseRegion?.nameAr ?? "بلا مركز"}</div><h2>{driver.user.firstName} {driver.user.lastName}</h2><p className="subtitle">{driver.user.email} · {driver.user.phone ?? "لا يوجد هاتف"}</p><div className="tag-list"><StatusPill status={driver.status} /><StatusPill status={driver.availability} /></div></div>
           </div>
-          <MediaUpload purpose="DRIVER_AVATAR" visibility="PUBLIC" accept=".jpg,.jpeg,.png,.webp" label="رفع صورة السائق" onUploaded={attachAvatar} />
+          <div className="actions">
+            <MediaUpload purpose="DRIVER_AVATAR" visibility="PUBLIC" accept=".jpg,.jpeg,.png,.webp" label="رفع صورة السائق" onUploaded={attachAvatar} />
+            {driver.avatarUrl ? <button className="button danger" disabled={working === "delete-avatar"} type="button" onClick={() => void deleteAvatar()}>حذف صورة السائق</button> : null}
+          </div>
         </section>
 
         <section className="two-column-layout">
@@ -198,8 +246,48 @@ export default function AdminDriverDetailPage() {
         {driver.vehicles.map((vehicle) => (
           <article className="panel vehicle-detail-card" key={vehicle.id}>
             <div className="section-heading"><div><div className="eyebrow">{vehicle.baseRegion?.nameAr ?? "بلا مركز"}</div><h2>{vehicle.make} {vehicle.model} — {vehicle.year}</h2><p className="subtitle">{vehicle.color} · {vehicle.plateNumber} · {vehicle.seatCapacity} مقاعد</p></div><StatusPill status={vehicle.isActive ? "ACTIVE" : "SUSPENDED"} label={vehicle.isActive ? "فعالة" : "متوقفة"} /></div>
-            <div className="vehicle-gallery">{vehicle.images.filter((img) => img.isApproved).map((image) => <img key={image.id} src={image.url} alt={`${vehicle.make} ${vehicle.model}`} />)}{vehicle.images.filter((img) => img.isApproved).length === 0 ? <div className="vehicle-image-placeholder">لا توجد صور معتمدة</div> : null}</div>
-            <div className="actions"><MediaUpload purpose="VEHICLE_IMAGE" visibility="PUBLIC" accept=".jpg,.jpeg,.png,.webp" label="رفع صورة رئيسية" onUploaded={(asset) => attachVehicleImage(vehicle.id, asset, true)} /><MediaUpload purpose="VEHICLE_IMAGE" visibility="PUBLIC" accept=".jpg,.jpeg,.png,.webp" label="إضافة صورة للمعرض" onUploaded={(asset) => attachVehicleImage(vehicle.id, asset, false)} /></div>
+            <div className="vehicle-gallery">
+              {vehicle.images.filter((img) => img.isApproved).map((image) => (
+                <div key={image.id} style={{ position: "relative" }}>
+                  <img src={image.url} alt={`${vehicle.make} ${vehicle.model}`} />
+                  <button
+                    className="button danger compact-button"
+                    style={{ position: "absolute", left: 8, bottom: 8 }}
+                    disabled={working === `delete-image-${image.id}`}
+                    type="button"
+                    onClick={() => void deleteVehicleImage(vehicle.id, image)}
+                  >
+                    حذف
+                  </button>
+                </div>
+              ))}
+              {vehicle.images.filter((img) => img.isApproved).length === 0 ? <div className="vehicle-image-placeholder">لا توجد صور معتمدة</div> : null}
+            </div>
+            <div className="actions" style={{ alignItems: "flex-start" }}>
+              <MediaUpload
+                purpose="VEHICLE_IMAGE"
+                visibility="PUBLIC"
+                accept=".jpg,.jpeg,.png,.webp"
+                label="رفع صور مع تغبيش اللوحة"
+                multiple
+                blurPlate
+                plateNumber={vehicle.plateNumber}
+                disabled={working === `vehicle-images-${vehicle.id}`}
+                onUploadedMany={(assets) => attachVehicleImages(vehicle.id, assets)}
+              />
+              <MediaUpload
+                purpose="VEHICLE_IMAGE"
+                visibility="PUBLIC"
+                accept=".jpg,.jpeg,.png,.webp"
+                label="رفع صور بدون تغبيش"
+                multiple
+                blurPlate={false}
+                plateNumber={vehicle.plateNumber}
+                disabled={working === `vehicle-images-${vehicle.id}`}
+                onUploadedMany={(assets) => attachVehicleImages(vehicle.id, assets)}
+              />
+            </div>
+            <p className="subtitle">كلا الخيارين يضيفان شعار المنصة أعلى يسار الصورة. خيار التغبيش لا يغيّر أي جزء من الصورة إذا لم يطابق OCR رقم اللوحة المحفوظ بدقة.</p>
             <div className="two-column-layout compact-layout">
               <div><h3>صلاحيات المركبة</h3><div className="checkbox-list">{countries.map((region) => <label className="checkbox-row" key={region.id}><input type="checkbox" checked={(vehicleRegionCodes[vehicle.id] ?? []).includes(region.code)} onChange={(e) => setVehicleRegionCodes((current) => ({ ...current, [vehicle.id]: toggleCodes(current[vehicle.id] ?? [], region.code, e.target.checked) }))} />{region.nameAr}</label>)}</div><button className="button primary" disabled={working === `vehicle-regions-${vehicle.id}`} type="button" onClick={() => void saveVehicleRegions(vehicle.id)}>حفظ صلاحيات المركبة</button></div>
               <div><h3>رفع وثيقة للمركبة</h3><form className="stack-form" onSubmit={(event) => void createVehicleDocument(event, vehicle.id)}><DocumentFormFields form={vehicleDocForms[vehicle.id] ?? emptyDoc} setForm={(next) => setVehicleDocForms((current) => ({ ...current, [vehicle.id]: typeof next === "function" ? next(current[vehicle.id] ?? emptyDoc) : next }))} countries={countries} /><MediaUpload purpose="VEHICLE_DOCUMENT" visibility="PRIVATE" label={vehicleDocAssets[vehicle.id] ? `تم الرفع: ${vehicleDocAssets[vehicle.id]?.originalName}` : "اختيار ملف الوثيقة"} onUploaded={(asset) => setVehicleDocAssets((current) => ({ ...current, [vehicle.id]: asset }))} /><button className="button primary" disabled={working === `vehicle-document-${vehicle.id}`} type="submit">إضافة الوثيقة</button></form></div>
