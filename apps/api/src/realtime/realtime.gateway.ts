@@ -12,6 +12,7 @@ import { createHash } from 'crypto';
 import { Namespace, Server, Socket } from 'socket.io';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
+import { LocationIngressThrottleService } from '../tracking/location-ingress-throttle.service';
 import { RealtimeEventsService } from './realtime-events.service';
 
 type TokenPayload = {
@@ -39,7 +40,8 @@ export class RealtimeGateway
   constructor(
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
-    private readonly events: RealtimeEventsService
+    private readonly events: RealtimeEventsService,
+    private readonly locationThrottle: LocationIngressThrottleService
   ) {}
 
   afterInit(server: Server | Namespace) {
@@ -218,6 +220,18 @@ export class RealtimeGateway
       throw new WsException('إحداثيات الموقع غير صحيحة.');
     }
 
+    const throttleDecision = this.locationThrottle.check(user.sub, tripId);
+    if (throttleDecision.throttled) {
+      client.emit('trip.location.accepted', {
+        tripId,
+        driverId: user.sub,
+        recordedAt: payload.recordedAt ?? new Date().toISOString(),
+        throttled: true,
+        retryAfterMs: throttleDecision.retryAfterMs
+      });
+      return;
+    }
+
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
       select: { passengerId: true, driverId: true, status: true }
@@ -261,6 +275,8 @@ export class RealtimeGateway
         "updatedAt" = CURRENT_TIMESTAMP
     `;
 
+    this.locationThrottle.markAccepted(user.sub, tripId);
+
     const event = {
       tripId,
       driverId: user.sub,
@@ -269,7 +285,9 @@ export class RealtimeGateway
       accuracy: finiteOrNull(payload.accuracy),
       heading: finiteOrNull(payload.heading),
       speed: finiteOrNull(payload.speed),
-      recordedAt: recordedAt.toISOString()
+      recordedAt: recordedAt.toISOString(),
+      throttled: false,
+      retryAfterMs: 0
     };
 
     this.server.to(`trip:${tripId}`).emit('trip.location.updated', event);
