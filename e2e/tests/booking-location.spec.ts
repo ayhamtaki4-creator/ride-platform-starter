@@ -6,8 +6,8 @@ import { apiBaseURL } from "../helpers/accounts";
 type Route = {
   id: string;
   code: string;
-  origin: { nameAr: string };
-  destination: { nameAr: string };
+  origin: { nameAr: string; latitude?: string | number | null; longitude?: string | number | null };
+  destination: { nameAr: string; latitude?: string | number | null; longitude?: string | number | null };
 };
 
 type Booking = {
@@ -149,5 +149,42 @@ test.describe("Passenger-selected booking locations", () => {
       },
     });
     expect(forbiddenAirportChange.status()).toBe(403);
+  });
+
+  test("forces Beirut Airport as pickup instead of rejecting stale client location", async ({ request }) => {
+    const riderToken = await apiLogin(request, "rider");
+    const routesResponse = await request.get(`${apiBaseURL}/routes`);
+    expect(routesResponse.ok()).toBeTruthy();
+    const routes = (await routesResponse.json()) as Route[];
+    const route = routes.find((item) => item.code === "BEY-AIRPORT-DAM");
+    expect(route, "Seeded Beirut Airport → Damascus route is required").toBeTruthy();
+
+    const createResponse = await request.post(`${apiBaseURL}/bookings`, {
+      headers: bearer(riderToken),
+      data: {
+        clientRequestId: randomUUID(),
+        routeId: route!.id,
+        bookingType: "PRIVATE_CAR",
+        vehicleClass: "SMALL",
+        travelDate: futureDate(3),
+        flightArrivalTime: "13:45",
+        flightNumber: "E2E-BEY-1",
+        passengerCount: 1,
+        luggageCount: 1,
+        pickupAddress: "عنوان قديم محفوظ في مسودة الحجز",
+        pickupLatitude: 33.9,
+        pickupLongitude: 35.6,
+        dropoffAddress: route!.destination.nameAr,
+        passengerName: "مسافر اختبار مطار بيروت",
+        passengerPhone: "+963944000002",
+      },
+    });
+
+    expect(createResponse.status(), await createResponse.text()).toBe(201);
+    const created = (await createResponse.json()) as Booking;
+    expect(created.pickupAddress).toBe(route!.origin.nameAr);
+    expect(created.pickupLatitude).toBeCloseTo(Number(route!.origin.latitude), 6);
+    expect(created.pickupLongitude).toBeCloseTo(Number(route!.origin.longitude), 6);
+    expect(created.dropoffAddress).toBe(route!.destination.nameAr);
   });
 });
