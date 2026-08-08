@@ -55,13 +55,6 @@ function normalizePlate(value: string) {
     .replace(/[^0-9A-Z\u0600-\u06FF]/g, "");
 }
 
-function looksLikePlateCandidate(value: string) {
-  const normalized = normalizePlate(value);
-  if (normalized.length < 4 || normalized.length > 14) return false;
-  const digits = (normalized.match(/[0-9]/g) ?? []).length;
-  return digits >= 3;
-}
-
 async function loadTesseract(): Promise<TesseractApi> {
   if (window.Tesseract) return window.Tesseract;
 
@@ -92,42 +85,33 @@ function collectPlateBoxes(
   plateNumber?: string,
 ) {
   const target = normalizePlate(plateNumber ?? "");
-  const matches: BoundingBox[] = [];
+  if (target.length < 3) return [] as BoundingBox[];
 
+  const matches: BoundingBox[] = [];
   for (const block of blocks ?? []) {
     for (const paragraph of block.paragraphs ?? []) {
       for (const line of paragraph.lines ?? []) {
         const rawLineText = line.text ?? (line.words ?? []).map((word) => word.text ?? "").join("");
         const lineText = normalizePlate(rawLineText);
-        const exactLineMatch = Boolean(
-          target && lineText &&
-          (lineText.includes(target) || (target.includes(lineText) && lineText.length >= Math.max(3, target.length - 2)))
-        );
-        const genericLineMatch = !target && line.bbox && looksLikePlateCandidate(rawLineText);
-        if (line.bbox && (exactLineMatch || genericLineMatch)) {
+        if (line.bbox && lineText && (lineText === target || lineText.includes(target))) {
           matches.push(line.bbox);
           continue;
         }
 
         for (const word of line.words ?? []) {
           if (!word.bbox) continue;
-          const rawWord = word.text ?? "";
-          const wordText = normalizePlate(rawWord);
-          const exactWordMatch = Boolean(
-            target && wordText.length >= 2 &&
-            (wordText === target || (target.includes(wordText) && wordText.length >= Math.max(3, target.length - 2)))
-          );
-          const genericWordMatch = !target && looksLikePlateCandidate(rawWord);
-          if (exactWordMatch || genericWordMatch) matches.push(word.bbox);
+          const wordText = normalizePlate(word.text ?? "");
+          if (wordText === target) matches.push(word.bbox);
         }
       }
     }
   }
-
   return matches;
 }
 
 async function detectPlateBoxes(file: File, plateNumber?: string): Promise<BoundingBox[]> {
+  const target = normalizePlate(plateNumber ?? "");
+  if (target.length < 3) return [];
   const tesseract = await loadTesseract();
   const worker = await tesseract.createWorker(["eng", "ara"]);
   try {
@@ -163,7 +147,7 @@ function blurBox(
 ) {
   const width = Math.max(1, box.x1 - box.x0);
   const height = Math.max(1, box.y1 - box.y0);
-  const padding = Math.max(6, Math.round(Math.max(width, height) * 0.12));
+  const padding = Math.max(3, Math.round(Math.max(width, height) * 0.06));
   const sx = Math.max(0, Math.floor(box.x0 - padding));
   const sy = Math.max(0, Math.floor(box.y0 - padding));
   const sw = Math.min(canvasWidth - sx, Math.ceil(width + padding * 2));
@@ -176,7 +160,7 @@ function blurBox(
   if (!tempContext) return;
   tempContext.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
   context.save();
-  context.filter = `blur(${Math.max(12, Math.round(Math.min(sw, sh) * 0.22))}px)`;
+  context.filter = `blur(${Math.max(10, Math.round(Math.min(sw, sh) * 0.18))}px)`;
   context.drawImage(temp, sx, sy, sw, sh);
   context.restore();
 }
@@ -203,7 +187,7 @@ async function drawWatermark(
   context.drawImage(
     logo as CanvasImageSource,
     padding,
-    Math.max(padding, canvas.height - targetHeight - padding),
+    padding,
     targetWidth,
     targetHeight,
   );
@@ -246,13 +230,17 @@ export async function protectFleetImage(
   let plateBlurred = false;
   let warning: string | undefined;
   if (options.blurPlate && config.plateBlurEnabled) {
-    try {
-      const boxes = await detectPlateBoxes(file, options.plateNumber);
-      for (const box of boxes) blurBox(context, source as CanvasImageSource, box, width, height);
-      plateBlurred = boxes.length > 0;
-      if (!plateBlurred) warning = "لم يتم العثور على لوحة سيارة واضحة في الصورة؛ راجع الصورة بعد الرفع.";
-    } catch {
-      warning = "تعذر تشغيل قراءة اللوحة تلقائيًا؛ تم رفع الصورة مع الشعار فقط.";
+    if (!options.plateNumber?.trim()) {
+      warning = "لا يوجد رقم لوحة محفوظ للمركبة، لذلك لم يتم تطبيق التغبيش. تم تطبيق الشعار فقط.";
+    } else {
+      try {
+        const boxes = await detectPlateBoxes(file, options.plateNumber);
+        for (const box of boxes) blurBox(context, source as CanvasImageSource, box, width, height);
+        plateBlurred = boxes.length > 0;
+        if (!plateBlurred) warning = "لم يطابق OCR رقم اللوحة المحفوظ بدقة؛ لم يتم تغبيش أي جزء من السيارة. تم تطبيق الشعار فقط.";
+      } catch {
+        warning = "تعذر تشغيل قراءة اللوحة تلقائيًا؛ لم يتم تغبيش الصورة وتم تطبيق الشعار فقط.";
+      }
     }
   }
 
