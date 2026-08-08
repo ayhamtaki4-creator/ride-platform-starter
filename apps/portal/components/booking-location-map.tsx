@@ -86,6 +86,7 @@ export default function BookingLocationMap({
   const [mounted, setMounted] = useState(false);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [searchPoint, setSearchPoint] = useState<BookingMapPoint | null>(null);
 
@@ -124,6 +125,43 @@ export default function BookingLocationMap({
     await onSelect({ latitude: searchPoint.latitude, longitude: searchPoint.longitude });
     setSearchPoint(null);
     setQuery("");
+  }
+
+  function useCurrentLocation() {
+    if (activeMode !== "pickup" || locating) return;
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setSearchError("المتصفح لا يدعم تحديد الموقع الحالي.");
+      return;
+    }
+
+    setLocating(true);
+    setSearchError("");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const point = {
+          latitude: Number(position.coords.latitude.toFixed(6)),
+          longitude: Number(position.coords.longitude.toFixed(6)),
+          label: "موقعي الحالي",
+        };
+        setSearchPoint(point);
+        void Promise.resolve(onSelect({ latitude: point.latitude, longitude: point.longitude }))
+          .catch((caught) => {
+            setSearchError(caught instanceof Error ? caught.message : "تعذر تعيين موقعك الحالي.");
+          })
+          .finally(() => setLocating(false));
+      },
+      (geoError) => {
+        const message =
+          geoError.code === geoError.PERMISSION_DENIED
+            ? "اسمح للموقع باستخدام خدمة تحديد الموقع ثم أعد المحاولة."
+            : geoError.code === geoError.TIMEOUT
+              ? "انتهت مهلة تحديد الموقع. أعد المحاولة في مكان بإشارة GPS أفضل."
+              : "تعذر تحديد موقعك الحالي.";
+        setSearchError(message);
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 12_000, maximumAge: 30_000 },
+    );
   }
 
   const fallback: LatLngExpression = [33.5138, 36.2765];
@@ -170,6 +208,11 @@ export default function BookingLocationMap({
             autoComplete="off"
           />
           <button className="button primary" disabled={searching || !query.trim()} type="button" onClick={() => void search()}>{searching ? "جارٍ البحث..." : "بحث"}</button>
+          {activeMode === "pickup" ? (
+            <button className="button" disabled={locating} type="button" onClick={useCurrentLocation}>
+              {locating ? "جارٍ تحديد موقعي..." : "تحديد موقعي"}
+            </button>
+          ) : null}
         </div>
         {searchError ? <div className="notice error compact-notice">{searchError}</div> : null}
         {searchPoint ? (
