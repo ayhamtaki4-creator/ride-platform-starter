@@ -31,7 +31,18 @@ async function bootstrap() {
 
   const httpServer = app.getHttpAdapter().getInstance() as {
     disable(name: string): void;
+    set(name: string, value: unknown): void;
   };
+  const configuredTrustProxyHops = Number.parseInt(
+    config.get<string>('TRUST_PROXY_HOPS') ?? '',
+    10
+  );
+  const trustProxyHops = Number.isInteger(configuredTrustProxyHops)
+    ? Math.max(0, configuredTrustProxyHops)
+    : isProduction
+      ? 1
+      : 0;
+  httpServer.set('trust proxy', trustProxyHops > 0 ? trustProxyHops : false);
   httpServer.disable('x-powered-by');
 
   app.use((_request: Request, response: Response, next: NextFunction) => {
