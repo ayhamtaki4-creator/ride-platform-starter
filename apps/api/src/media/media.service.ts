@@ -3,7 +3,8 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-  OnModuleInit
+  OnModuleInit,
+  ServiceUnavailableException
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MediaPurpose, MediaVisibility, Prisma } from '@prisma/client';
@@ -43,6 +44,7 @@ export class MediaService implements OnModuleInit {
   private readonly root: string;
   private readonly maxBytes: number;
   private readonly publicApiUrl: string;
+  private readonly requireR2: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -58,6 +60,11 @@ export class MediaService implements OnModuleInit {
       this.config.get<string>('RENDER_EXTERNAL_URL') ??
       `http://localhost:${this.config.get<number>('PORT', 4000)}`
     ).replace(/\/$/, '');
+
+    const configuredRequireR2 = this.config.get<string>('MEDIA_REQUIRE_R2')?.trim().toLowerCase();
+    this.requireR2 = configuredRequireR2
+      ? ['1', 'true', 'yes', 'on'].includes(configuredRequireR2)
+      : this.config.get<string>('NODE_ENV') === 'production';
   }
 
   async onModuleInit() {
@@ -91,6 +98,11 @@ export class MediaService implements OnModuleInit {
     }
     if (DOCUMENT_PURPOSES.includes(dto.purpose) && ![...Object.keys(MIME_EXTENSIONS)].includes(file.mimetype)) {
       throw new BadRequestException('صيغة الوثيقة غير مدعومة.');
+    }
+    if (this.requireR2 && !this.r2.enabled) {
+      throw new ServiceUnavailableException(
+        'تخزين الوسائط السحابي غير مهيأ. تم إيقاف الرفع لحماية الملفات من التخزين المؤقت.'
+      );
     }
 
     const visibility = DOCUMENT_PURPOSES.includes(dto.purpose)
