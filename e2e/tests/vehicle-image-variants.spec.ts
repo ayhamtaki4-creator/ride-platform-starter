@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { APIRequestContext, expect, test } from "@playwright/test";
 import { apiBaseURL } from "../helpers/accounts";
 import { apiLogin, bearer } from "../helpers/auth";
 
@@ -9,7 +9,7 @@ function fakePng(payloadSize: number, byte: number) {
 }
 
 async function upload(
-  request: Parameters<typeof test>[0] extends never ? never : any,
+  request: APIRequestContext,
   token: string,
   name: string,
   buffer: Buffer,
