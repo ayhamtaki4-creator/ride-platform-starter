@@ -21,10 +21,7 @@ type Booking = {
 };
 
 type TrackingPayload = {
-  trip: Booking & {
-    estimatedDistanceKm?: number | null;
-    estimatedDurationMinutes?: number | null;
-  };
+  trip: Booking;
   routePlan: {
     geometry: { type: string; coordinates: number[][] };
     distanceKm?: number | null;
@@ -147,8 +144,8 @@ test.describe("Managed route plan persistence", () => {
       dropoff,
     );
     expect(firstPlan.routePlan?.geometry.coordinates[1]).toEqual([35.85, 33.67]);
-    expect(firstPlan.trip.estimatedDistanceKm).toBe(123.4);
-    expect(firstPlan.trip.estimatedDurationMinutes).toBe(150);
+    expect(firstPlan.routePlan?.distanceKm).toBe(123.4);
+    expect(firstPlan.routePlan?.durationMinutes).toBe(150);
 
     const refreshedResponse = await request.post(`${apiBaseURL}/bookings`, {
       headers: bearer(riderToken),
@@ -180,7 +177,7 @@ test.describe("Managed route plan persistence", () => {
     expect(coordinates[1]).toEqual([35.85, 33.67]);
     expect(coordinates.at(-1)![0]).toBeCloseTo(dropoff.longitude, 6);
     expect(coordinates.at(-1)![1]).toBeCloseTo(dropoff.latitude, 6);
-    expect(secondPlan.trip.estimatedDistanceKm).toBe(123.4);
-    expect(secondPlan.trip.estimatedDurationMinutes).toBe(150);
+    expect(secondPlan.routePlan?.distanceKm).toBe(123.4);
+    expect(secondPlan.routePlan?.durationMinutes).toBe(150);
   });
 });
