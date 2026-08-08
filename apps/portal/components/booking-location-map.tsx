@@ -1,7 +1,7 @@
 "use client";
 
 import L, { LatLngBoundsExpression, LatLngExpression } from "leaflet";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { searchPlace } from "@/lib/geocoding";
@@ -34,7 +34,6 @@ const pickupIcon = icon("A", "ride-marker-pickup");
 const dropoffIcon = icon("B", "ride-marker-dropoff");
 
 function PickerEvents({
-  activeMode,
   onSelect,
 }: {
   activeMode: "pickup" | "dropoff";
@@ -98,18 +97,26 @@ export default function BookingLocationMap({
     return () => { document.body.style.overflow = previous; };
   }, [open]);
 
-  async function search(event: FormEvent) {
-    event.preventDefault();
+  async function search() {
+    const normalized = query.trim();
+    if (!normalized || searching) return;
     setSearching(true);
     setSearchError("");
     try {
-      const result = await searchPlace(query);
+      const result = await searchPlace(normalized);
       setSearchPoint(result);
     } catch (caught) {
       setSearchError(caught instanceof Error ? caught.message : "تعذر البحث عن الموقع.");
     } finally {
       setSearching(false);
     }
+  }
+
+  function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    event.stopPropagation();
+    void search();
   }
 
   async function chooseSearchResult() {
@@ -143,8 +150,8 @@ export default function BookingLocationMap({
   }
 
   return createPortal(
-    <div className="booking-map-modal-backdrop" role="presentation">
-      <section className="booking-map-modal" role="dialog" aria-modal="true" aria-label="تحديد موقع الرحلة على الخريطة">
+    <div className="booking-map-modal-backdrop" role="presentation" onClick={(event) => event.stopPropagation()}>
+      <section className="booking-map-modal" role="dialog" aria-modal="true" aria-label="تحديد موقع الرحلة على الخريطة" onClick={(event) => event.stopPropagation()}>
         <header className="booking-map-modal-header">
           <div>
             <strong>{activeMode === "pickup" ? "حدد نقطة الانطلاق" : "حدد نقطة الوصول"}</strong>
@@ -153,16 +160,17 @@ export default function BookingLocationMap({
           <button className="booking-map-modal-close" type="button" aria-label="إغلاق الخريطة" onClick={() => setOpen(false)}>×</button>
         </header>
 
-        <form className="booking-map-search" onSubmit={search}>
+        <div className="booking-map-search" role="search">
           <input
             className="input"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={handleSearchKeyDown}
             placeholder="ابحث عن حي، شارع، فندق أو مطار..."
             autoComplete="off"
           />
-          <button className="button primary" disabled={searching} type="submit">{searching ? "جارٍ البحث..." : "بحث"}</button>
-        </form>
+          <button className="button primary" disabled={searching || !query.trim()} type="button" onClick={() => void search()}>{searching ? "جارٍ البحث..." : "بحث"}</button>
+        </div>
         {searchError ? <div className="notice error compact-notice">{searchError}</div> : null}
         {searchPoint ? (
           <div className="booking-map-search-result">
