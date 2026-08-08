@@ -50,6 +50,57 @@ export class R2ObjectStorageService {
     await this.request('DELETE', key);
   }
 
+  signedGetUrl(storagePath: string, expiresSeconds = 900) {
+    if (!this.enabled) {
+      throw new Error('Cloudflare R2 is not configured.');
+    }
+
+    const { bucket, key } = this.parseStoragePath(storagePath);
+    if (bucket !== this.bucket) {
+      throw new Error('R2 bucket mismatch for stored media object.');
+    }
+
+    const expires = Math.min(3600, Math.max(60, Math.round(expiresSeconds)));
+    const now = new Date();
+    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+    const dateStamp = amzDate.slice(0, 8);
+    const host = `${this.accountId}.r2.cloudflarestorage.com`;
+    const canonicalUri = this.canonicalUri(bucket, key);
+    const scope = `${dateStamp}/auto/s3/aws4_request`;
+
+    const queryEntries: Array<[string, string]> = [
+      ['X-Amz-Algorithm', 'AWS4-HMAC-SHA256'],
+      ['X-Amz-Credential', `${this.accessKeyId}/${scope}`],
+      ['X-Amz-Date', amzDate],
+      ['X-Amz-Expires', String(expires)],
+      ['X-Amz-SignedHeaders', 'host']
+    ];
+    const canonicalQuery = queryEntries
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([keyName, value]) => `${this.awsEncode(keyName)}=${this.awsEncode(value)}`)
+      .join('&');
+
+    const canonicalRequest = [
+      'GET',
+      canonicalUri,
+      canonicalQuery,
+      `host:${host}\n`,
+      'host',
+      'UNSIGNED-PAYLOAD'
+    ].join('\n');
+    const stringToSign = [
+      'AWS4-HMAC-SHA256',
+      amzDate,
+      scope,
+      createHash('sha256').update(canonicalRequest).digest('hex')
+    ].join('\n');
+    const signature = createHmac('sha256', this.signingKey(dateStamp))
+      .update(stringToSign)
+      .digest('hex');
+
+    return `https://${host}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
+  }
+
   isR2Path(storagePath: string) {
     return storagePath.startsWith('r2://');
   }
@@ -69,8 +120,28 @@ export class R2ObjectStorageService {
     }
     return {
       bucket: withoutScheme.slice(0, slash),
-      key: withoutScheme.slice(slash + 1),
+      key: withoutScheme.slice(slash + 1)
     };
+  }
+
+  private canonicalUri(bucket: string, key: string) {
+    return `/${encodeURIComponent(bucket)}/${key
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/')}`;
+  }
+
+  private awsEncode(value: string) {
+    return encodeURIComponent(value).replace(/[!'()*]/g, (character) =>
+      `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+    );
+  }
+
+  private signingKey(dateStamp: string) {
+    const dateKey = createHmac('sha256', `AWS4${this.secretAccessKey}`).update(dateStamp).digest();
+    const regionKey = createHmac('sha256', dateKey).update('auto').digest();
+    const serviceKey = createHmac('sha256', regionKey).update('s3').digest();
+    return createHmac('sha256', serviceKey).update('aws4_request').digest();
   }
 
   private async request(method: 'PUT' | 'GET' | 'DELETE', key: string, body?: Buffer, mimeType?: string) {
@@ -82,10 +153,7 @@ export class R2ObjectStorageService {
     const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
     const dateStamp = amzDate.slice(0, 8);
     const host = `${this.accountId}.r2.cloudflarestorage.com`;
-    const canonicalUri = `/${encodeURIComponent(this.bucket)}/${key
-      .split('/')
-      .map((segment) => encodeURIComponent(segment))
-      .join('/')}`;
+    const canonicalUri = this.canonicalUri(this.bucket, key);
     const payloadHash = createHash('sha256').update(body ?? Buffer.alloc(0)).digest('hex');
     const canonicalHeaders =
       `host:${host}\n` +
@@ -98,7 +166,7 @@ export class R2ObjectStorageService {
       '',
       canonicalHeaders,
       signedHeaders,
-      payloadHash,
+      payloadHash
     ].join('\n');
 
     const scope = `${dateStamp}/auto/s3/aws4_request`;
@@ -106,14 +174,12 @@ export class R2ObjectStorageService {
       'AWS4-HMAC-SHA256',
       amzDate,
       scope,
-      createHash('sha256').update(canonicalRequest).digest('hex'),
+      createHash('sha256').update(canonicalRequest).digest('hex')
     ].join('\n');
 
-    const dateKey = createHmac('sha256', `AWS4${this.secretAccessKey}`).update(dateStamp).digest();
-    const regionKey = createHmac('sha256', dateKey).update('auto').digest();
-    const serviceKey = createHmac('sha256', regionKey).update('s3').digest();
-    const signingKey = createHmac('sha256', serviceKey).update('aws4_request').digest();
-    const signature = createHmac('sha256', signingKey).update(stringToSign).digest('hex');
+    const signature = createHmac('sha256', this.signingKey(dateStamp))
+      .update(stringToSign)
+      .digest('hex');
     const authorization =
       `AWS4-HMAC-SHA256 Credential=${this.accessKeyId}/${scope}, ` +
       `SignedHeaders=${signedHeaders}, Signature=${signature}`;
@@ -131,10 +197,10 @@ export class R2ObjectStorageService {
         Authorization: authorization,
         'x-amz-content-sha256': payloadHash,
         'x-amz-date': amzDate,
-        ...(mimeType ? { 'Content-Type': mimeType } : {}),
+        ...(mimeType ? { 'Content-Type': mimeType } : {})
       },
       ...(requestBody ? { body: requestBody } : {}),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(30_000)
     });
 
     if (!response.ok) {
