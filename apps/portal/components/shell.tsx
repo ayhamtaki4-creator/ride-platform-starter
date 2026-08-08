@@ -27,6 +27,13 @@ const adminItems: NavItem[] = [
   { href: "/admin/whatsapp", label: "رسائل WhatsApp", icon: "bell" },
 ];
 
+const publicMobileItems: NavItem[] = [
+  { href: "/#booking", label: "احجز رحلتك", icon: "bookings" },
+  { href: "/#how-it-works", label: "كيف تعمل المنصة", icon: "route" },
+  { href: "/#services", label: "خدماتنا", icon: "car" },
+  { href: "/#faq", label: "الأسئلة الشائعة", icon: "shield" },
+];
+
 function isActivePath(pathname: string, href: string) {
   if (["/admin", "/rider", "/driver"].includes(href)) return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -37,6 +44,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, logout, isRealtimeConnected } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [publicMenuOpen, setPublicMenuOpen] = useState(false);
 
   const isPublic = pathname === "/" || pathname === "/login" || pathname.startsWith("/register");
   const isAdmin = Boolean(user?.roles.some((role) => ["SUPER_ADMIN", "ADMIN", "OPERATIONS_MANAGER"].includes(role)));
@@ -66,7 +74,31 @@ export function Shell({ children }: { children: ReactNode }) {
     return items;
   }, [isAdmin, isDriver, isPassenger]);
 
-  useEffect(() => setDrawerOpen(false), [pathname]);
+  const mobileNavItems = useMemo<NavItem[]>(() => {
+    if (isAdmin) return [];
+    if (isDriver) {
+      return [
+        { href: "/driver", label: "الرئيسية", icon: "dashboard" },
+        { href: "/driver/bookings", label: "المهام", icon: "briefcase" },
+        { href: "/driver/runs", label: "الرحلات", icon: "route" },
+        { href: "/driver/profile", label: "حسابي", icon: "user" },
+      ];
+    }
+    if (isPassenger) {
+      return [
+        { href: "/rider", label: "الرئيسية", icon: "dashboard" },
+        { href: "/rider/bookings", label: "حجوزاتي", icon: "bookings" },
+        { href: "/#booking", label: "حجز جديد", icon: "car" },
+        { href: "/rider/profile", label: "حسابي", icon: "user" },
+      ];
+    }
+    return [];
+  }, [isAdmin, isDriver, isPassenger]);
+
+  useEffect(() => {
+    setDrawerOpen(false);
+    setPublicMenuOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     convertTelephoneLinksToWhatsApp(document);
@@ -101,6 +133,16 @@ export function Shell({ children }: { children: ReactNode }) {
               <Link href="/#services">خدماتنا</Link>
               <Link href="/#faq">الأسئلة الشائعة</Link>
             </nav>
+            <button
+              className="public-mobile-menu-button"
+              type="button"
+              aria-label={publicMenuOpen ? "إغلاق قائمة الموقع" : "فتح قائمة الموقع"}
+              aria-expanded={publicMenuOpen}
+              aria-controls="public-mobile-navigation"
+              onClick={() => setPublicMenuOpen((open) => !open)}
+            >
+              <Icon name={publicMenuOpen ? "close" : "menu"} size={22} />
+            </button>
             <div className="public-header-actions">
               {user ? (
                 <Link className="button primary compact-button" href={homeForRoles(user.roles)}>لوحة التحكم</Link>
@@ -108,6 +150,16 @@ export function Shell({ children }: { children: ReactNode }) {
                 <Link className="button primary compact-button" href="/login"><Icon name="login" size={18} /> تسجيل الدخول</Link>
               )}
             </div>
+            {publicMenuOpen ? (
+              <nav id="public-mobile-navigation" className="public-mobile-nav" aria-label="قائمة الموقع للهاتف">
+                {publicMobileItems.map((item) => (
+                  <Link href={item.href} key={item.href} onClick={() => setPublicMenuOpen(false)}>
+                    <span><Icon name={item.icon} size={19} /></span>
+                    {item.label}
+                  </Link>
+                ))}
+              </nav>
+            ) : null}
           </div>
         </header>
         <main className="public-main">{children}</main>
@@ -130,7 +182,7 @@ export function Shell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="shell app-shell">
+    <div className={`shell app-shell ${mobileNavItems.length ? "has-mobile-bottom-nav" : ""}`}>
       <button className="mobile-menu-button" type="button" aria-label="فتح القائمة" onClick={() => setDrawerOpen(true)}>
         <Icon name="menu" size={23} />
       </button>
@@ -176,6 +228,19 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
         {children}
       </main>
+      {mobileNavItems.length ? (
+        <nav className="mobile-bottom-nav" aria-label="التنقل السريع للهاتف">
+          {mobileNavItems.map((item) => {
+            const active = !item.href.includes("#") && isActivePath(pathname, item.href);
+            return (
+              <Link className={active ? "is-active" : ""} href={item.href} key={item.href} aria-current={active ? "page" : undefined}>
+                <span><Icon name={item.icon} size={20} /></span>
+                <small>{item.label}</small>
+              </Link>
+            );
+          })}
+        </nav>
+      ) : null}
     </div>
   );
 }
