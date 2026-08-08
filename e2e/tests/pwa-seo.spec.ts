@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+const expectedSiteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 test.describe("PWA and SEO foundation", () => {
   test("serves an installable Arabic manifest and offline shell", async ({ request }) => {
     const manifestResponse = await request.get("/manifest.webmanifest");
@@ -31,17 +33,18 @@ test.describe("PWA and SEO foundation", () => {
     expect(await offline.text()).toContain("لا يوجد اتصال بالإنترنت");
   });
 
-  test("keeps private dashboards out of robots and exposes the public sitemap", async ({ request }) => {
+  test("keeps private dashboards and share links out of robots", async ({ request }) => {
     const robots = await request.get("/robots.txt");
     expect(robots.status()).toBe(200);
     const robotsText = await robots.text();
     expect(robotsText).toContain("Disallow: /admin/");
     expect(robotsText).toContain("Disallow: /driver/");
     expect(robotsText).toContain("Disallow: /rider/");
-    expect(robotsText).toContain("Sitemap: https://alnokhbaeducation.com/sitemap.xml");
+    expect(robotsText).toContain("Disallow: /track/");
+    expect(robotsText).toContain(`Sitemap: ${expectedSiteUrl}/sitemap.xml`);
 
     const sitemap = await request.get("/sitemap.xml");
     expect(sitemap.status()).toBe(200);
-    expect(await sitemap.text()).toContain("https://alnokhbaeducation.com");
+    expect(await sitemap.text()).toContain(expectedSiteUrl);
   });
 });
