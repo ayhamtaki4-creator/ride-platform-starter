@@ -13,6 +13,7 @@ test.describe("Vehicle primary image", () => {
     let driverId = "";
     let previousPrimaryImageUrl: string | null = null;
     let previousPrimaryImageMediaId: string | null = null;
+    let previousPrimaryImageIds: string[] = [];
 
     try {
       const vehicle = await prisma.vehicle.findFirst({
@@ -24,6 +25,12 @@ test.describe("Vehicle primary image", () => {
       driverId = vehicle!.driverProfile.userId;
       previousPrimaryImageUrl = vehicle!.primaryImageUrl;
       previousPrimaryImageMediaId = vehicle!.primaryImageMediaId;
+      previousPrimaryImageIds = (
+        await prisma.vehicleImage.findMany({
+          where: { vehicleId, isPrimary: true },
+          select: { id: true },
+        })
+      ).map((image) => image.id);
 
       const marker = Date.now();
       const first = await prisma.vehicleImage.create({
@@ -71,6 +78,18 @@ test.describe("Vehicle primary image", () => {
       expect(images.find((image) => image.id === firstImageId)?.isPrimary).toBe(false);
       expect(images.find((image) => image.id === secondImageId)?.isPrimary).toBe(true);
     } finally {
+      if (vehicleId) {
+        await prisma.vehicleImage.updateMany({
+          where: { vehicleId },
+          data: { isPrimary: false },
+        }).catch(() => undefined);
+        if (previousPrimaryImageIds.length) {
+          await prisma.vehicleImage.updateMany({
+            where: { id: { in: previousPrimaryImageIds } },
+            data: { isPrimary: true },
+          }).catch(() => undefined);
+        }
+      }
       if (firstImageId || secondImageId) {
         await prisma.vehicleImage.deleteMany({
           where: { id: { in: [firstImageId, secondImageId].filter(Boolean) } },
