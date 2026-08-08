@@ -2,6 +2,11 @@ import http from "node:http";
 
 const host = "127.0.0.1";
 const port = Number(process.env.MAPS_STUB_PORT ?? 4199);
+const counters = {
+  forward: 0,
+  reverse: 0,
+  directions: 0,
+};
 
 function json(response, status, body) {
   response.writeHead(status, { "Content-Type": "application/json" });
@@ -16,7 +21,13 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  if (url.pathname === "/stats") {
+    json(response, 200, { ...counters });
+    return;
+  }
+
   if (url.pathname === "/geocode/forward") {
+    counters.forward += 1;
     json(response, 200, {
       features: [
         {
@@ -38,6 +49,7 @@ const server = http.createServer((request, response) => {
   }
 
   if (url.pathname === "/geocode/reverse") {
+    counters.reverse += 1;
     const latitude = Number(url.searchParams.get("latitude"));
     const longitude = Number(url.searchParams.get("longitude"));
     json(response, 200, {
@@ -60,6 +72,7 @@ const server = http.createServer((request, response) => {
   }
 
   if (url.pathname.startsWith("/directions/")) {
+    counters.directions += 1;
     const encoded = decodeURIComponent(url.pathname.slice("/directions/".length));
     const [pickup, dropoff] = encoded.split(";");
     const [pickupLongitude, pickupLatitude] = pickup.split(",").map(Number);
