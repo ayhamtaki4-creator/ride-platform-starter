@@ -8,6 +8,7 @@ test.describe("API health", () => {
     expect(response.headers()["x-powered-by"]).toBeUndefined();
     expect(response.headers()["x-content-type-options"]).toBe("nosniff");
     expect(response.headers()["x-frame-options"]).toBe("DENY");
+    expect(response.headers()["cache-control"]).toContain("no-store");
 
     const body = (await response.json()) as {
       status?: string;
@@ -22,6 +23,7 @@ test.describe("API health", () => {
   test("readiness verifies PostgreSQL and Redis", async ({ request }) => {
     const response = await request.get(`${apiBaseURL}/health/ready`);
     expect(response.status()).toBe(200);
+    expect(response.headers()["cache-control"]).toContain("no-store");
 
     const body = (await response.json()) as {
       status?: string;
