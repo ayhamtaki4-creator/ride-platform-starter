@@ -194,17 +194,46 @@ async function drawWatermark(
   context.restore();
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string) {
+function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string, quality = 0.96) {
   const supportedMime = ["image/jpeg", "image/png", "image/webp"].includes(mimeType)
     ? mimeType
     : "image/jpeg";
-  const quality = supportedMime === "image/png" ? undefined : 0.96;
+  const outputQuality = supportedMime === "image/png" ? undefined : quality;
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => blob ? resolve(blob) : reject(new Error("تعذر تجهيز الصورة للحفظ.")),
       supportedMime,
-      quality,
+      outputQuality,
     );
+  });
+}
+
+export async function createFleetImageVariant(
+  file: File,
+  options: { maxDimension: number; quality: number; suffix: string },
+) {
+  const source = await imageBitmapFromBlob(file);
+  const sourceWidth = "width" in source ? Number(source.width) : 0;
+  const sourceHeight = "height" in source ? Number(source.height) : 0;
+  if (!sourceWidth || !sourceHeight) return file;
+
+  const maxDimension = Math.max(160, Math.round(options.maxDimension));
+  const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return file;
+  context.drawImage(source as CanvasImageSource, 0, 0, width, height);
+
+  const outputMime = "image/webp";
+  const blob = await canvasToBlob(canvas, outputMime, Math.min(0.95, Math.max(0.55, options.quality)));
+  const baseName = file.name.replace(/\.[^.]+$/, "") || "vehicle-image";
+  return new File([blob], `${baseName}-${options.suffix}.webp`, {
+    type: outputMime,
+    lastModified: Date.now(),
   });
 }
 
