@@ -276,8 +276,7 @@ export class RealtimeGateway
     this.server.to(`public-trip:${tripId}`).emit('trip.location.updated', event);
     this.server.to(`user:${trip.passengerId}`).emit('trip.location.updated', event);
     this.server.to('role:dispatch').emit('trip.location.updated', event);
-
-    return { event: 'trip.location.accepted', data: event };
+    client.emit('trip.location.accepted', event);
   }
 
   private extractToken(client: AuthenticatedSocket) {
