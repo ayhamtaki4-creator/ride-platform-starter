@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="طريق الشام">
+  <rect width="512" height="512" fill="#0b7a53"/>
+  <circle cx="256" cy="256" r="190" fill="#0b7a53"/>
+  <path d="M180 410c25-91 31-159 18-204-7-26-4-49 9-68 14-20 35-31 62-33 34-2 61 12 78 41 16 28 18 59 5 93-12 33-35 61-69 85-29 21-50 49-63 86h-40Z" fill="#f6f8f7"/>
+  <path d="M251 396c16-51 39-88 68-111 26-21 43-44 52-69" fill="none" stroke="#f1c76d" stroke-width="22" stroke-linecap="round" stroke-dasharray="22 28"/>
+  <circle cx="274" cy="174" r="38" fill="#f1c76d"/>
+  <circle cx="274" cy="174" r="16" fill="#0b7a53"/>
+</svg>
