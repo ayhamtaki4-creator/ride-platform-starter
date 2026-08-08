@@ -15,6 +15,7 @@ import {
   apiFetch,
   clearStoredAuth,
   getRealtimeUrl,
+  markRefreshCookieSession,
   refreshAccessToken,
 } from "@/lib/api";
 import { AuthUser, LoginResponse } from "@/lib/types";
@@ -153,8 +154,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("ride_access_token", response.accessToken);
     if (response.refreshToken) {
       localStorage.setItem("ride_refresh_token", response.refreshToken);
+      markRefreshCookieSession(false);
     } else {
       localStorage.removeItem("ride_refresh_token");
+      markRefreshCookieSession(true);
     }
     localStorage.setItem("ride_user", JSON.stringify(response.user));
     setUser(response.user);
