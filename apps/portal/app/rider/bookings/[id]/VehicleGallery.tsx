@@ -6,6 +6,7 @@ type UnknownRecord = Record<string, unknown>;
 
 type GalleryImage = {
   url: string;
+  thumbnailUrl: string;
   isPrimary: boolean;
   order: number;
 };
@@ -47,13 +48,26 @@ function normalizeImageUrl(rawUrl: string) {
   }
 }
 
+function thumbnailUrlFor(displayUrl: string) {
+  if (!displayUrl.includes("/api/media/public/")) return displayUrl;
+  try {
+    const parsed = new URL(displayUrl);
+    parsed.searchParams.set("variant", "thumbnail");
+    return parsed.toString();
+  } catch {
+    const separator = displayUrl.includes("?") ? "&" : "?";
+    return `${displayUrl}${separator}variant=thumbnail`;
+  }
+}
+
 function collectVehicleImages(vehicle: unknown): GalleryImage[] {
   if (!isRecord(vehicle)) return [];
 
   const collected: GalleryImage[] = [];
   const add = (value: unknown, isPrimary = false, order = collected.length) => {
     if (typeof value !== "string" || !looksLikeUrl(value)) return;
-    collected.push({ url: normalizeImageUrl(value.trim()), isPrimary, order });
+    const url = normalizeImageUrl(value.trim());
+    collected.push({ url, thumbnailUrl: thumbnailUrlFor(url), isPrimary, order });
   };
 
   add(vehicle.primaryImageUrl, true, -1);
@@ -89,6 +103,7 @@ function collectVehicleImages(vehicle: unknown): GalleryImage[] {
     }
     byUrl.set(image.url, {
       url: image.url,
+      thumbnailUrl: image.thumbnailUrl,
       isPrimary: current.isPrimary || image.isPrimary,
       order: Math.min(current.order, image.order),
     });
@@ -150,6 +165,15 @@ export function VehicleGallery({ vehicle }: { vehicle: unknown }) {
     setFailedUrls((current) => new Set([...current, url]));
   }
 
+  function fallbackFromThumbnail(event: React.SyntheticEvent<HTMLImageElement>, image: GalleryImage) {
+    const element = event.currentTarget;
+    if (element.src !== image.url) {
+      element.src = image.url;
+      return;
+    }
+    fail(image.url);
+  }
+
   if (!allImages.length) {
     return (
       <section className="panel rider-detail-panel" aria-label="صور المركبة">
@@ -184,13 +208,13 @@ export function VehicleGallery({ vehicle }: { vehicle: unknown }) {
                 style={{ position: "relative", padding: 0, border: 0, borderRadius: 16, overflow: "hidden", cursor: "pointer", background: "rgba(127,127,127,.1)" }}
               >
                 <img
-                  src={image.url}
+                  src={image.thumbnailUrl}
                   alt={`صورة المركبة رقم ${index + 1}`}
                   loading={index === 0 ? "eager" : "lazy"}
                   fetchPriority={index === 0 ? "high" : "low"}
                   decoding="async"
                   draggable={false}
-                  onError={() => fail(image.url)}
+                  onError={(event) => fallbackFromThumbnail(event, image)}
                   style={{ width: "100%", height: 220, objectFit: "cover", display: "block" }}
                 />
                 {image.isPrimary ? (

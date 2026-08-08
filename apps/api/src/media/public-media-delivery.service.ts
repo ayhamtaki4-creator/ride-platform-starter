@@ -11,15 +11,17 @@ export class PublicMediaDeliveryService {
     private readonly r2: R2ObjectStorageService
   ) {}
 
-  async resolve(id: string) {
+  async resolve(id: string, variant?: string) {
+    const resolvedId = await this.media.publicVariantAssetId(id, variant);
     const asset = await this.prisma.mediaAsset.findFirst({
       where: {
-        id,
+        id: resolvedId,
         status: 'APPROVED',
         visibility: 'PUBLIC',
         deletedAt: null
       },
       select: {
+        id: true,
         storagePath: true
       }
     });
@@ -37,7 +39,7 @@ export class PublicMediaDeliveryService {
 
     return {
       kind: 'stream' as const,
-      file: await this.media.publicFile(id)
+      file: await this.media.publicFile(asset.id)
     };
   }
 }

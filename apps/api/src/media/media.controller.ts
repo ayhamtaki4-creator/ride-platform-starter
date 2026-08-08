@@ -39,8 +39,12 @@ export class MediaController {
 
   @Public()
   @Get('media/public/:id')
-  async publicFile(@Param('id') id: string, @Res() response: Response) {
-    const delivery = await this.publicDelivery.resolve(id);
+  async publicFile(
+    @Param('id') id: string,
+    @Query('variant') variant: string | undefined,
+    @Res() response: Response
+  ) {
+    const delivery = await this.publicDelivery.resolve(id, variant);
 
     if (delivery.kind === 'redirect') {
       response.set({
@@ -91,7 +95,9 @@ export class MediaController {
             'OTHER'
           ]
         },
-        visibility: { type: 'string', enum: ['PUBLIC', 'PRIVATE'] }
+        visibility: { type: 'string', enum: ['PUBLIC', 'PRIVATE'] },
+        variantKind: { type: 'string', enum: ['ORIGINAL', 'DISPLAY', 'THUMBNAIL'] },
+        variantOfId: { type: 'string', format: 'uuid' }
       }
     }
   })
