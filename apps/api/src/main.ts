@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
+import { createHttpObservabilityMiddleware } from './common/http-observability';
 import { RedisIoAdapter } from './realtime/redis-io.adapter';
 
 async function bootstrap() {
@@ -45,6 +46,21 @@ async function bootstrap() {
   httpServer.set('trust proxy', trustProxyHops > 0 ? trustProxyHops : false);
   httpServer.disable('x-powered-by');
 
+  const requestLoggingSetting = config
+    .get<string>('HTTP_REQUEST_LOG_ENABLED')
+    ?.trim()
+    .toLowerCase();
+  const requestLoggingEnabled = requestLoggingSetting
+    ? ['1', 'true', 'yes', 'on'].includes(requestLoggingSetting)
+    : isProduction;
+
+  app.use(
+    createHttpObservabilityMiddleware({
+      loggingEnabled: requestLoggingEnabled,
+      serviceName: 'ride-platform-api'
+    })
+  );
+
   app.use((_request: Request, response: Response, next: NextFunction) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('X-Frame-Options', 'DENY');
@@ -65,7 +81,8 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   app.enableCors({
     origin: webOrigins,
-    credentials: true
+    credentials: true,
+    exposedHeaders: ['X-Request-Id']
   });
   app.useGlobalPipes(
     new ValidationPipe({
