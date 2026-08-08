@@ -118,9 +118,13 @@ export class R2ObjectStorageService {
       `AWS4-HMAC-SHA256 Credential=${this.accessKeyId}/${scope}, ` +
       `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
-    const requestBody = body
-      ? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength)
-      : undefined;
+    let requestBody: Blob | undefined;
+    if (body) {
+      const bytes = new Uint8Array(body.byteLength);
+      bytes.set(body);
+      requestBody = new Blob([bytes]);
+    }
+
     const response = await fetch(`https://${host}${canonicalUri}`, {
       method,
       headers: {
