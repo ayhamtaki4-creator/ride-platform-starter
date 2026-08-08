@@ -1,17 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ServiceRunStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-
-const ACTIVE_RUN_STATUSES: ServiceRunStatus[] = [
-  'DRAFT',
-  'PLANNED',
-  'SCHEDULED',
-  'DRIVER_PENDING',
-  'DRIVER_ACCEPTED',
-  'BOARDING',
-  'IN_PROGRESS',
-  'DRIVER_REPLACEMENT_REQUIRED'
-];
 
 type EligibleDriverRow = {
   driverId: string;
@@ -42,12 +30,13 @@ export class DriverSchedulePolicyService {
       where: {
         driverId: { in: rows.map((row) => row.driverId) },
         travelDate: { gte, lt },
-        status: { in: ACTIVE_RUN_STATUSES }
+        status: { not: 'CANCELLED' }
       },
       orderBy: { createdAt: 'asc' },
       select: {
         driverId: true,
         runReference: true,
+        status: true,
         route: { select: { originId: true, destinationId: true } }
       }
     });
