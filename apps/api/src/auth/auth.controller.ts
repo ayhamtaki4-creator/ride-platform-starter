@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '../iam/auth-user.type';
 import { CurrentUser } from '../iam/current-user.decorator';
 import { Public } from '../iam/public.decorator';
+import { AuthRateLimitService } from './auth-rate-limit.service';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -12,35 +13,43 @@ import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly rateLimit: AuthRateLimitService
+  ) {}
 
   @Public()
   @Post('register')
-  register(
+  async register(
     @Body() dto: RegisterDto,
     @Headers('user-agent') userAgent?: string,
     @Ip() ipAddress?: string
   ) {
+    await this.rateLimit.assertRegistrationAllowed(ipAddress);
     return this.authService.registerPassenger(dto, { userAgent, ipAddress });
   }
 
   @Public()
   @Post('login')
-  login(
+  async login(
     @Body() dto: LoginDto,
     @Headers('user-agent') userAgent?: string,
     @Ip() ipAddress?: string
   ) {
-    return this.authService.login(dto, { userAgent, ipAddress });
+    await this.rateLimit.assertLoginAllowed(ipAddress, dto.email);
+    const session = await this.authService.login(dto, { userAgent, ipAddress });
+    await this.rateLimit.clearLoginIdentity(dto.email);
+    return session;
   }
 
   @Public()
   @Post('refresh')
-  refresh(
+  async refresh(
     @Body() dto: RefreshTokenDto,
     @Headers('user-agent') userAgent?: string,
     @Ip() ipAddress?: string
   ) {
+    await this.rateLimit.assertRefreshAllowed(ipAddress);
     return this.authService.refresh(dto.refreshToken, { userAgent, ipAddress });
   }
 
