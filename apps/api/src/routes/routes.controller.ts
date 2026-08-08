@@ -20,15 +20,34 @@ export class RoutesController {
       this.templates.publicList().catch(() => [])
     ]);
     const byRoute = new Map(templates.map((template) => [template.routeId, template]));
-    return routes.map((route) => this.withSavedEndpoints(route, byRoute.get(route.id)));
+    return routes
+      .map((route) => this.privateCarOnly(route))
+      .filter((route) => route.bookable)
+      .map((route) => this.withSavedEndpoints(route, byRoute.get(route.id)));
   }
 
   @Public()
   @Get(':id')
   async detail(@Param('id') id: string) {
-    const route = await this.routes.publicDetail(id);
+    const route = this.privateCarOnly(await this.routes.publicDetail(id));
     const template = await this.templates.publicGet(id).catch(() => null);
     return this.withSavedEndpoints(route, template);
+  }
+
+  private privateCarOnly<TRoute extends {
+    pricingRules: Array<{ bookingType: string }>;
+    bookingTypes: string[];
+    bookable: boolean;
+  }>(route: TRoute) {
+    const pricingRules = route.pricingRules.filter(
+      (rule) => rule.bookingType === 'PRIVATE_CAR'
+    );
+    return {
+      ...route,
+      pricingRules,
+      bookingTypes: pricingRules.length > 0 ? ['PRIVATE_CAR'] : [],
+      bookable: pricingRules.length > 0
+    };
   }
 
   private withSavedEndpoints<TRoute extends {
