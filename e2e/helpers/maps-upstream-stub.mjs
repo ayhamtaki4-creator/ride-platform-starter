@@ -7,10 +7,15 @@ const counters = {
   reverse: 0,
   directions: 0,
 };
+const requestCounts = Object.create(null);
 
 function json(response, status, body) {
   response.writeHead(status, { "Content-Type": "application/json" });
   response.end(JSON.stringify(body));
+}
+
+function bump(key) {
+  requestCounts[key] = (requestCounts[key] ?? 0) + 1;
 }
 
 const server = http.createServer((request, response) => {
@@ -22,12 +27,13 @@ const server = http.createServer((request, response) => {
   }
 
   if (url.pathname === "/stats") {
-    json(response, 200, { ...counters });
+    json(response, 200, { ...counters, requests: { ...requestCounts } });
     return;
   }
 
   if (url.pathname === "/geocode/forward") {
     counters.forward += 1;
+    bump(`forward:${url.searchParams.get("q") ?? ""}`);
     json(response, 200, {
       features: [
         {
@@ -50,8 +56,11 @@ const server = http.createServer((request, response) => {
 
   if (url.pathname === "/geocode/reverse") {
     counters.reverse += 1;
-    const latitude = Number(url.searchParams.get("latitude"));
-    const longitude = Number(url.searchParams.get("longitude"));
+    const latitudeText = url.searchParams.get("latitude") ?? "";
+    const longitudeText = url.searchParams.get("longitude") ?? "";
+    bump(`reverse:${latitudeText},${longitudeText}`);
+    const latitude = Number(latitudeText);
+    const longitude = Number(longitudeText);
     json(response, 200, {
       features: [
         {
@@ -74,6 +83,7 @@ const server = http.createServer((request, response) => {
   if (url.pathname.startsWith("/directions/")) {
     counters.directions += 1;
     const encoded = decodeURIComponent(url.pathname.slice("/directions/".length));
+    bump(`directions:${encoded}`);
     const [pickup, dropoff] = encoded.split(";");
     const [pickupLongitude, pickupLatitude] = pickup.split(",").map(Number);
     const [dropoffLongitude, dropoffLatitude] = dropoff.split(",").map(Number);
