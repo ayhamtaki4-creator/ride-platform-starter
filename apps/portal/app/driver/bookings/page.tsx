@@ -17,6 +17,11 @@ import {
   TRIP_STATUS_LABELS,
   VEHICLE_CLASS_LABELS,
 } from "@/lib/types";
+import { whatsappUrl } from "@/lib/whatsapp";
+
+function mapPointUrl(latitude: number, longitude: number) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
+}
 
 export default function DriverBookingsPage() {
   const { socket } = useAuth();
@@ -76,7 +81,7 @@ export default function DriverBookingsPage() {
         <DashboardHeader
           eyebrow="السائق / المهام"
           title="الحجوزات والمهام الحالية"
-          subtitle="تظهر المهام الجديدة أولًا. الحجوزات المكتملة أو الملغاة نُقلت إلى الحجوزات المنتهية."
+          subtitle="يعرض كل حجز موقع الالتقاط الذي حدده المسافر فعليًا، وليس نقطة قالب المسار فقط."
           actions={<div className="actions"><Link className="button" href="/driver/completed-bookings"><Icon name="check" size={17} /> الحجوزات المنتهية</Link><Link className="button" href="/driver"><Icon name="arrow-right" size={17} /> لوحة السائق</Link></div>}
         />
 
@@ -91,6 +96,11 @@ export default function DriverBookingsPage() {
               {activeSchedule.map((trip) => {
                 const requestBusy = Boolean(working);
                 const trackingAvailable = Boolean(trip.driver) && !["COMPLETED", "CANCELLED_BY_DRIVER", "CANCELLED_BY_PASSENGER"].includes(trip.status);
+                const passengerPhone = trip.contactPhone || trip.passenger?.phone || "";
+                const passengerWhatsapp = whatsappUrl(
+                  passengerPhone,
+                  `مرحباً، أنا سائق الحجز ${trip.bookingReference ?? ""}`,
+                );
                 return (
                   <article className="booking-card driver-assignment-card" key={trip.id}>
                     <div className="booking-card-head">
@@ -99,16 +109,33 @@ export default function DriverBookingsPage() {
                     </div>
 
                     <div className="booking-meta">
-                      <span>{trip.route?.nameAr || `${trip.pickupAddress} ← ${trip.dropoffAddress}`}</span>
+                      <span><Icon name="map-pin" size={15} /> {trip.pickupAddress}</span>
+                      <span><Icon name="route" size={15} /> {trip.dropoffAddress}</span>
                       <span>{trip.bookingType ? BOOKING_TYPE_LABELS[trip.bookingType] : "رحلة"}</span>
                       <span>{trip.bookingType === "PRIVATE_CAR" ? VEHICLE_CLASS_LABELS[trip.vehicleClass ?? "SMALL"] : "مقعد مشترك"}</span>
-                      <span>{TRIP_STATUS_LABELS[trip.status]}</span>
                     </div>
 
-                    <div className="driver-passenger-contact"><span><Icon name="user" size={18} /></span><div><small>المسافر</small><strong>{trip.contactName || trip.passenger?.firstName || "—"}</strong><a href={`tel:${trip.contactPhone || ""}`}>{trip.contactPhone || "لا يوجد رقم"}</a></div></div>
-                    <div className="detail-list compact-detail-list"><div><span>الالتقاط</span><strong>{trip.pickupAddress}</strong></div><div><span>الوصول</span><strong>{trip.dropoffAddress}</strong></div>{trip.flightNumber ? <div><span>الطائرة</span><strong>{trip.flightNumber} · {trip.flightArrivalTime}</strong></div> : null}</div>
+                    <div className="driver-passenger-contact">
+                      <span><Icon name="user" size={18} /></span>
+                      <div>
+                        <small>المسافر</small>
+                        <strong>{trip.contactName || trip.passenger?.firstName || "—"}</strong>
+                        {passengerWhatsapp ? (
+                          <a href={passengerWhatsapp} target="_blank" rel="noopener noreferrer">مراسلة المسافر عبر واتساب · {passengerPhone}</a>
+                        ) : <span>لا يوجد رقم تواصل</span>}
+                      </div>
+                    </div>
+
+                    <div className="detail-list compact-detail-list">
+                      <div><span>موقع الالتقاط الذي حدده المسافر</span><strong>{trip.pickupAddress}</strong></div>
+                      <div><span>الوصول</span><strong>{trip.dropoffAddress}</strong></div>
+                      {trip.flightNumber ? <div><span>الطائرة</span><strong>{trip.flightNumber} · {trip.flightArrivalTime}</strong></div> : null}
+                    </div>
 
                     <div className="actions">
+                      <a className="button" href={mapPointUrl(trip.pickupLatitude, trip.pickupLongitude)} target="_blank" rel="noopener noreferrer">
+                        <Icon name="map-pin" size={17} /> فتح موقع الالتقاط
+                      </a>
                       {trackingAvailable ? <Link className="button primary" href={`/driver/bookings/${trip.id}/tracking`}><Icon name="map-pin" size={17} /> الخريطة والتتبع</Link> : null}
                       {trip.serviceRun ? <Link className="button" href={`/driver/runs/${trip.serviceRun.id}`}>الرحلة التشغيلية {trip.serviceRun.runReference}</Link> : null}
                     </div>
