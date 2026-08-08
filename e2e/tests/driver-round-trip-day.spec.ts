@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import { apiBaseURL } from "../helpers/accounts";
 import { apiLogin, bearer } from "../helpers/auth";
 
@@ -24,7 +24,7 @@ function futureDate(days = 4) {
 }
 
 async function createBooking(
-  request: Parameters<typeof test>[0] extends never ? never : any,
+  request: APIRequestContext,
   riderToken: string,
   route: Route,
   travelDate: string,
