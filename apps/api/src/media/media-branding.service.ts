@@ -17,6 +17,13 @@ type BrandingRow = {
   logoVisibility: string | null;
 };
 
+const DEFAULTS = {
+  watermarkEnabled: true,
+  plateBlurEnabled: true,
+  watermarkOpacity: 0.72,
+  watermarkWidthPercent: 18
+};
+
 @Injectable()
 export class MediaBrandingService {
   constructor(
@@ -79,6 +86,74 @@ export class MediaBrandingService {
       });
     });
 
+    if (
+      dto.logoMediaAssetId &&
+      current.logoMediaAssetId &&
+      current.logoMediaAssetId !== dto.logoMediaAssetId
+    ) {
+      await this.media.remove(actor, current.logoMediaAssetId).catch(() => undefined);
+    }
+
+    return this.get();
+  }
+
+  async removeLogo(actor: AuthUser) {
+    await this.ensureRow();
+    const current = await this.readRow();
+    const oldLogoId = current.logoMediaAssetId;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE "MediaBrandingSetting"
+        SET
+          "logoMediaAssetId" = NULL,
+          "watermarkEnabled" = FALSE,
+          "updatedById" = ${actor.sub}::uuid,
+          "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "id" = 'default'
+      `);
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.sub,
+          action: 'media.branding.logo.remove',
+          entityType: 'MediaBrandingSetting',
+          entityId: 'default',
+          metadata: { oldLogoMediaAssetId: oldLogoId }
+        }
+      });
+    });
+
+    if (oldLogoId) {
+      await this.media.remove(actor, oldLogoId).catch(() => undefined);
+    }
+    return this.get();
+  }
+
+  async reset(actor: AuthUser) {
+    await this.ensureRow();
+    const current = await this.readRow();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE "MediaBrandingSetting"
+        SET
+          "watermarkEnabled" = ${Boolean(current.logoMediaAssetId)},
+          "plateBlurEnabled" = ${DEFAULTS.plateBlurEnabled},
+          "watermarkOpacity" = ${DEFAULTS.watermarkOpacity},
+          "watermarkWidthPercent" = ${DEFAULTS.watermarkWidthPercent},
+          "updatedById" = ${actor.sub}::uuid,
+          "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "id" = 'default'
+      `);
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.sub,
+          action: 'media.branding.reset',
+          entityType: 'MediaBrandingSetting',
+          entityId: 'default',
+          metadata: DEFAULTS as unknown as Prisma.InputJsonValue
+        }
+      });
+    });
     return this.get();
   }
 
