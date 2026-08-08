@@ -1,6 +1,8 @@
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 
+const REFRESH_COOKIE_SESSION_HINT = "ride_refresh_cookie_session";
+
 export function getRealtimeUrl() {
   try {
     return `${new URL(API_URL).origin}/realtime`;
@@ -26,11 +28,21 @@ type RefreshResponse = {
 
 let refreshPromise: Promise<string | null> | null = null;
 
+export function markRefreshCookieSession(enabled: boolean) {
+  if (typeof window === "undefined") return;
+  if (enabled) {
+    localStorage.setItem(REFRESH_COOKIE_SESSION_HINT, "1");
+  } else {
+    localStorage.removeItem(REFRESH_COOKIE_SESSION_HINT);
+  }
+}
+
 export function clearStoredAuth() {
   if (typeof window === "undefined") return;
   localStorage.removeItem("ride_access_token");
   localStorage.removeItem("ride_refresh_token");
   localStorage.removeItem("ride_user");
+  localStorage.removeItem(REFRESH_COOKIE_SESSION_HINT);
 }
 
 export async function refreshAccessToken() {
@@ -39,6 +51,9 @@ export async function refreshAccessToken() {
 
   refreshPromise = (async () => {
     const legacyRefreshToken = localStorage.getItem("ride_refresh_token");
+    const hasCookieSessionHint =
+      localStorage.getItem(REFRESH_COOKIE_SESSION_HINT) === "1";
+    if (!legacyRefreshToken && !hasCookieSessionHint) return null;
 
     try {
       const response = await fetch(`${API_URL}/auth/refresh`, {
@@ -57,8 +72,10 @@ export async function refreshAccessToken() {
       localStorage.setItem("ride_access_token", body.accessToken);
       if (body.refreshToken) {
         localStorage.setItem("ride_refresh_token", body.refreshToken);
+        markRefreshCookieSession(false);
       } else {
         localStorage.removeItem("ride_refresh_token");
+        markRefreshCookieSession(true);
       }
       window.dispatchEvent(new Event("ride-auth-refreshed"));
       return body.accessToken;
