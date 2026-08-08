@@ -132,6 +132,20 @@ export function VehicleGallery({ vehicle }: { vehicle: unknown }) {
     }
   }, [selectedIndex, visibleImages.length]);
 
+  useEffect(() => {
+    if (selectedIndex === null || visibleImages.length < 2) return;
+
+    const neighborIndexes = new Set([
+      (selectedIndex - 1 + visibleImages.length) % visibleImages.length,
+      (selectedIndex + 1) % visibleImages.length,
+    ]);
+    for (const index of neighborIndexes) {
+      const image = new Image();
+      image.decoding = "async";
+      image.src = visibleImages[index].url;
+    }
+  }, [selectedIndex, visibleImages]);
+
   function fail(url: string) {
     setFailedUrls((current) => new Set([...current, url]));
   }
@@ -173,6 +187,9 @@ export function VehicleGallery({ vehicle }: { vehicle: unknown }) {
                   src={image.url}
                   alt={`صورة المركبة رقم ${index + 1}`}
                   loading={index === 0 ? "eager" : "lazy"}
+                  fetchPriority={index === 0 ? "high" : "low"}
+                  decoding="async"
+                  draggable={false}
                   onError={() => fail(image.url)}
                   style={{ width: "100%", height: 220, objectFit: "cover", display: "block" }}
                 />
@@ -199,6 +216,9 @@ export function VehicleGallery({ vehicle }: { vehicle: unknown }) {
           <img
             src={visibleImages[selectedIndex].url}
             alt={`صورة المركبة رقم ${selectedIndex + 1}`}
+            fetchPriority="high"
+            decoding="async"
+            draggable={false}
             onClick={(event) => event.stopPropagation()}
             onError={() => fail(visibleImages[selectedIndex].url)}
             style={{ maxWidth: "96vw", maxHeight: "88vh", objectFit: "contain", borderRadius: 16 }}
