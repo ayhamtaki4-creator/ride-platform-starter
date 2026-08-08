@@ -4,6 +4,7 @@ import { AuthUser } from '../iam/auth-user.type';
 import { CurrentUser } from '../iam/current-user.decorator';
 import { Permissions } from '../iam/permissions.decorator';
 import { Public } from '../iam/public.decorator';
+import { LocationIngressThrottleService } from './location-ingress-throttle.service';
 import { TrackingService } from './tracking.service';
 import { TripRouteEditingService } from './trip-route-editing.service';
 
@@ -12,7 +13,8 @@ import { TripRouteEditingService } from './trip-route-editing.service';
 export class TrackingController {
   constructor(
     private readonly tracking: TrackingService,
-    private readonly routeEditing: TripRouteEditingService
+    private readonly routeEditing: TripRouteEditingService,
+    private readonly locationThrottle: LocationIngressThrottleService
   ) {}
 
   @ApiBearerAuth()
@@ -65,7 +67,7 @@ export class TrackingController {
   @ApiBearerAuth()
   @Permissions('trip:update:own')
   @Post('trips/:tripId/location')
-  updateDriverLocation(
+  async updateDriverLocation(
     @CurrentUser() user: AuthUser,
     @Param('tripId') tripId: string,
     @Body()
@@ -78,7 +80,23 @@ export class TrackingController {
       recordedAt?: string;
     }
   ) {
-    return this.tracking.updateDriverLocation(user, tripId, body);
+    const decision = this.locationThrottle.check(user.sub, tripId);
+    if (decision.throttled) {
+      return {
+        tripId,
+        throttled: true,
+        retryAfterMs: decision.retryAfterMs,
+        recordedAt: body.recordedAt ?? new Date().toISOString()
+      };
+    }
+
+    const accepted = await this.tracking.updateDriverLocation(user, tripId, body);
+    this.locationThrottle.markAccepted(user.sub, tripId);
+    return {
+      ...accepted,
+      throttled: false,
+      retryAfterMs: 0
+    };
   }
 
   @ApiBearerAuth()
