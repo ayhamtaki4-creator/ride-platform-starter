@@ -27,23 +27,38 @@ import { Public } from '../iam/public.decorator';
 import { RejectMediaDto } from './dto/reject-media.dto';
 import { UploadMediaDto } from './dto/upload-media.dto';
 import { MediaService, UploadedMediaFile } from './media.service';
+import { PublicMediaDeliveryService } from './public-media-delivery.service';
 
 @ApiTags('Media')
 @Controller()
 export class MediaController {
-  constructor(private readonly media: MediaService) {}
+  constructor(
+    private readonly media: MediaService,
+    private readonly publicDelivery: PublicMediaDeliveryService
+  ) {}
 
   @Public()
   @Get('media/public/:id')
-  async publicFile(@Param('id') id: string, @Res({ passthrough: true }) response: Response) {
-    const file = await this.media.publicFile(id);
+  async publicFile(@Param('id') id: string, @Res() response: Response) {
+    const delivery = await this.publicDelivery.resolve(id);
+
+    if (delivery.kind === 'redirect') {
+      response.set({
+        Location: delivery.url,
+        'Cache-Control': 'public, max-age=300, stale-while-revalidate=60'
+      });
+      response.status(302).end();
+      return;
+    }
+
+    const file = delivery.file;
     response.set({
       'Content-Type': file.mimeType,
       'Content-Length': String(file.sizeBytes),
       'Content-Disposition': `inline; filename="${encodeURIComponent(file.originalName)}"`,
       'Cache-Control': 'public, max-age=86400, immutable'
     });
-    return new StreamableFile(file.stream);
+    file.stream.pipe(response);
   }
 
   @ApiTags('Administration - Media')
