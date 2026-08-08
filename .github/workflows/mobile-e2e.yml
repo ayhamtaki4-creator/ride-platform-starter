@@ -46,16 +46,16 @@ jobs:
       JWT_SECRET: mobile-e2e-jwt-secret
       JWT_EXPIRES_IN: 15m
       REFRESH_TOKEN_EXPIRES_DAYS: 30
-      PORT: 4000
+      PORT: 4100
       WEB_ORIGINS: http://127.0.0.1:3000,http://localhost:3000
-      PUBLIC_API_URL: http://127.0.0.1:4000
+      PUBLIC_API_URL: http://127.0.0.1:4100
       PORTAL_URL: http://127.0.0.1:3000
-      NEXT_PUBLIC_API_URL: http://127.0.0.1:4000/api
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:4100/api
       MEDIA_STORAGE_ROOT: ./storage/media-e2e
       TELEGRAM_ENABLED: "false"
       WHATSAPP_ENABLED: "false"
       E2E_BASE_URL: http://127.0.0.1:3000
-      E2E_API_URL: http://127.0.0.1:4000/api
+      E2E_API_URL: http://127.0.0.1:4100/api
       CI: "1"
 
     steps:
