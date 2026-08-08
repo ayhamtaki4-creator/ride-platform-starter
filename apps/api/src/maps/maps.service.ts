@@ -1,5 +1,6 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { MapsCacheService } from './maps-cache.service';
 
 type ProviderName = 'mapbox' | 'public-osm';
 
@@ -27,7 +28,10 @@ export class MapsService {
   private readonly timeoutMs: number;
   private warnedAboutPublicFallback = false;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly cache: MapsCacheService
+  ) {
     const configured = Number.parseInt(
       this.config.get<string>('MAP_UPSTREAM_TIMEOUT_MS') ?? '',
       10
@@ -37,20 +41,32 @@ export class MapsService {
 
   async search(query: string, limit = 6) {
     const provider = this.provider();
-    const items =
-      provider === 'mapbox'
-        ? await this.mapboxSearch(query, limit)
-        : await this.nominatimSearch(query, limit);
+    const normalizedQuery = query.trim().replace(/\s+/g, ' ').toLowerCase();
+    const items = await this.cache.remember(
+      'search',
+      `${provider}|${normalizedQuery}|${limit}`,
+      this.positiveInt('MAPS_SEARCH_CACHE_TTL_SECONDS', 3600),
+      () =>
+        provider === 'mapbox'
+          ? this.mapboxSearch(query, limit)
+          : this.nominatimSearch(query, limit)
+    );
 
     return { provider, items };
   }
 
   async reverse(latitude: number, longitude: number) {
     const provider = this.provider();
-    const item =
-      provider === 'mapbox'
-        ? await this.mapboxReverse(latitude, longitude)
-        : await this.nominatimReverse(latitude, longitude);
+    const identity = `${provider}|${this.coordinateKey(latitude)}|${this.coordinateKey(longitude)}`;
+    const item = await this.cache.remember(
+      'reverse',
+      identity,
+      this.positiveInt('MAPS_REVERSE_CACHE_TTL_SECONDS', 21600),
+      () =>
+        provider === 'mapbox'
+          ? this.mapboxReverse(latitude, longitude)
+          : this.nominatimReverse(latitude, longitude)
+    );
 
     return { provider, item };
   }
@@ -62,20 +78,32 @@ export class MapsService {
     dropoffLongitude: number
   ) {
     const provider = this.provider();
-    const route =
-      provider === 'mapbox'
-        ? await this.mapboxRoute(
-            pickupLatitude,
-            pickupLongitude,
-            dropoffLatitude,
-            dropoffLongitude
-          )
-        : await this.osrmRoute(
-            pickupLatitude,
-            pickupLongitude,
-            dropoffLatitude,
-            dropoffLongitude
-          );
+    const identity = [
+      provider,
+      this.coordinateKey(pickupLatitude),
+      this.coordinateKey(pickupLongitude),
+      this.coordinateKey(dropoffLatitude),
+      this.coordinateKey(dropoffLongitude)
+    ].join('|');
+    const route = await this.cache.remember(
+      'route',
+      identity,
+      this.positiveInt('MAPS_ROUTE_CACHE_TTL_SECONDS', 21600),
+      () =>
+        provider === 'mapbox'
+          ? this.mapboxRoute(
+              pickupLatitude,
+              pickupLongitude,
+              dropoffLatitude,
+              dropoffLongitude
+            )
+          : this.osrmRoute(
+              pickupLatitude,
+              pickupLongitude,
+              dropoffLatitude,
+              dropoffLongitude
+            )
+    );
 
     return { provider, route };
   }
@@ -393,6 +421,15 @@ export class MapsService {
       'Accept-Language': 'ar',
       'User-Agent': `RidePlatform/1.0${portalUrl ? ` (${portalUrl})` : ''}`
     };
+  }
+
+  private coordinateKey(value: number) {
+    return value.toFixed(6);
+  }
+
+  private positiveInt(name: string, fallback: number) {
+    const parsed = Number.parseInt(this.config.get<string>(name) ?? '', 10);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
   }
 
   private validCoordinates(latitude: number, longitude: number) {

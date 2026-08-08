@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { apiBaseURL } from "../helpers/accounts";
 
+const mapsStubStatsURL = "http://127.0.0.1:4199/stats";
+
+type StubStats = {
+  requests: Record<string, number>;
+};
+
 test.describe("First-party maps API", () => {
   test("proxies forward and reverse geocoding without exposing the provider token", async ({ request }) => {
     const search = await request.get(
@@ -62,6 +68,38 @@ test.describe("First-party maps API", () => {
     expect(body.route?.geometry.coordinates.at(-1)).toEqual([35.4884, 33.8209]);
     expect(body.route?.distanceKm).toBe(123.4);
     expect(body.route?.durationMinutes).toBe(150);
+  });
+
+  test("serves identical search, reverse and route requests from Redis after the first upstream call", async ({ request }) => {
+    const nonce = Date.now();
+    const query = `cache-probe-${nonce}`;
+    const reverseLatitude = 32.91 + (nonce % 1000) / 1_000_000;
+    const reverseLongitude = 35.91 + (nonce % 1000) / 1_000_000;
+    const pickupLatitude = 32.71 + (nonce % 1000) / 1_000_000;
+    const pickupLongitude = 35.71 + (nonce % 1000) / 1_000_000;
+    const dropoffLatitude = 32.81 + (nonce % 1000) / 1_000_000;
+    const dropoffLongitude = 35.81 + (nonce % 1000) / 1_000_000;
+
+    const searchURL = `${apiBaseURL}/maps/geocode/search?query=${encodeURIComponent(query)}&limit=4`;
+    const reverseURL = `${apiBaseURL}/maps/geocode/reverse?latitude=${reverseLatitude}&longitude=${reverseLongitude}`;
+    const routeURL = `${apiBaseURL}/maps/route?pickupLatitude=${pickupLatitude}&pickupLongitude=${pickupLongitude}&dropoffLatitude=${dropoffLatitude}&dropoffLongitude=${dropoffLongitude}`;
+
+    for (const url of [searchURL, searchURL, reverseURL, reverseURL, routeURL, routeURL]) {
+      const response = await request.get(url);
+      expect(response.status(), await response.text()).toBe(200);
+    }
+
+    const statsResponse = await request.get(mapsStubStatsURL);
+    expect(statsResponse.status(), await statsResponse.text()).toBe(200);
+    const stats = (await statsResponse.json()) as StubStats;
+
+    expect(stats.requests[`forward:${query}`]).toBe(1);
+    expect(stats.requests[`reverse:${reverseLatitude},${reverseLongitude}`]).toBe(1);
+    expect(
+      stats.requests[
+        `directions:${pickupLongitude},${pickupLatitude};${dropoffLongitude},${dropoffLatitude}`
+      ],
+    ).toBe(1);
   });
 
   test("rejects malformed geocoding and routing requests before calling an upstream provider", async ({ request }) => {
