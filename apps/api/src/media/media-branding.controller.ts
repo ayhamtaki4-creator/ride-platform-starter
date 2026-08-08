@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '../iam/auth-user.type';
 import { CurrentUser } from '../iam/current-user.decorator';
@@ -22,5 +22,17 @@ export class MediaBrandingController {
   @Patch()
   update(@CurrentUser() actor: AuthUser, @Body() dto: UpdateMediaBrandingDto) {
     return this.branding.update(actor, dto);
+  }
+
+  @Permissions('media:manage')
+  @Delete('logo')
+  removeLogo(@CurrentUser() actor: AuthUser) {
+    return this.branding.removeLogo(actor);
+  }
+
+  @Permissions('media:manage')
+  @Post('reset')
+  reset(@CurrentUser() actor: AuthUser) {
+    return this.branding.reset(actor);
   }
 }
