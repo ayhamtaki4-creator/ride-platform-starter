@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '../iam/auth-user.type';
 import { CurrentUser } from '../iam/current-user.decorator';
@@ -119,6 +119,9 @@ export class TrackingController {
 
   @Public()
   @Get('public/:token')
+  @Header('Cache-Control', 'private, no-store, max-age=0')
+  @Header('Pragma', 'no-cache')
+  @Header('Referrer-Policy', 'no-referrer')
   publicTracking(@Param('token') token: string) {
     return this.tracking.getPublicTracking(token);
   }
