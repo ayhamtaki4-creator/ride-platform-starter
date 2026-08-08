@@ -229,20 +229,6 @@ export class BookingsService {
   }
 
   async create(user: AuthUser, dto: CreateBookingDto) {
-    if (dto.clientRequestId) {
-      const existing = await this.prisma.trip.findFirst({
-        where: {
-          clientRequestId: dto.clientRequestId,
-          passengerId: user.sub
-        },
-        include: bookingInclude
-      });
-      if (existing) {
-        await this.telegram.enqueueBookingCreated(existing.id);
-        return this.serialize(existing);
-      }
-    }
-
     const travelDate = new Date(dto.travelDate);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -348,6 +334,101 @@ export class BookingsService {
 
     const estimatedDistanceKm = Number(route?.distanceKm ?? legacyDefaults?.distanceKm ?? 0);
     const estimatedDurationMinutes = route?.estimatedMinutes ?? legacyDefaults?.durationMinutes ?? 0;
+    const normalizedBookingData = {
+      pricingRuleId: quote.pricingRuleId,
+      routeId: quote.routeId,
+      direction: quote.direction,
+      bookingType: dto.bookingType,
+      vehicleClass: quote.vehicleClass,
+      travelDate,
+      flightArrivalTime: dto.flightArrivalTime?.trim() || null,
+      flightNumber: dto.flightNumber?.trim() || null,
+      ...(flightTicket?.id ? { flightTicketMediaId: flightTicket.id } : {}),
+      ...(flightTicket?.metadata !== undefined && flightTicket?.metadata !== null
+        ? { flightTicketData: flightTicket.metadata }
+        : {}),
+      passengerCount: dto.passengerCount,
+      luggageCount: dto.luggageCount,
+      contactName: dto.passengerName.trim(),
+      contactPhone: dto.passengerPhone.trim(),
+      notes: dto.notes?.trim() || null,
+      pickupAddress,
+      pickupLatitude,
+      pickupLongitude,
+      dropoffAddress,
+      dropoffLatitude,
+      dropoffLongitude,
+      estimatedDistanceKm,
+      estimatedDurationMinutes,
+      estimatedFare: quote.passengerPrice,
+      driverFee: quote.driverFee,
+      platformMargin: quote.platformMargin,
+      currency: quote.currency
+    };
+
+    const refreshPendingIdempotentBooking = async (existing: BookingWithRelations) => {
+      const canRefresh =
+        existing.status === 'PENDING_DISPATCH' &&
+        existing.bookingReviewStatus === 'NEW' &&
+        existing.driverAssignmentStatus === 'UNASSIGNED' &&
+        !existing.driverId &&
+        !existing.serviceRunId;
+
+      if (!canRefresh) {
+        await this.telegram.enqueueBookingCreated(existing.id);
+        return existing;
+      }
+
+      const refreshed = await this.prisma.trip.update({
+        where: { id: existing.id },
+        data: normalizedBookingData,
+        include: bookingInclude
+      });
+
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: user.sub,
+          action: 'booking.idempotent_refresh',
+          entityType: 'Trip',
+          entityId: refreshed.id,
+          metadata: {
+            clientRequestId: dto.clientRequestId,
+            routeId: quote.routeId,
+            customPickup: dto.pickupLatitude !== undefined,
+            customDropoff: dto.dropoffLatitude !== undefined,
+            pickupAddress,
+            dropoffAddress
+          }
+        }
+      });
+
+      await this.telegram.enqueueBookingCreated(refreshed.id);
+      this.realtime.bookingUpdated({
+        tripId: refreshed.id,
+        passengerId: refreshed.passengerId,
+        driverId: refreshed.driverId,
+        status: refreshed.status,
+        bookingStatus: refreshed.bookingReviewStatus,
+        bookingReference: refreshed.bookingReference,
+        occurredAt: new Date().toISOString()
+      });
+      return refreshed;
+    };
+
+    if (dto.clientRequestId) {
+      const existing = await this.prisma.trip.findFirst({
+        where: {
+          clientRequestId: dto.clientRequestId,
+          passengerId: user.sub
+        },
+        include: bookingInclude
+      });
+      if (existing) {
+        const refreshed = await refreshPendingIdempotentBooking(existing);
+        return this.serialize(refreshed);
+      }
+    }
+
     const bookingReference = await this.generateReference();
 
     let booking: BookingWithRelations;
@@ -356,37 +437,10 @@ export class BookingsService {
         data: {
           clientRequestId: dto.clientRequestId,
           passengerId: user.sub,
-          pricingRuleId: quote.pricingRuleId,
-          routeId: quote.routeId,
           status: 'PENDING_DISPATCH',
           bookingReviewStatus: 'NEW',
           bookingReference,
-          direction: quote.direction,
-          bookingType: dto.bookingType,
-          vehicleClass: quote.vehicleClass,
-          travelDate,
-          flightArrivalTime: dto.flightArrivalTime?.trim() || null,
-          flightNumber: dto.flightNumber?.trim() || null,
-          flightTicketMediaId: flightTicket?.id,
-          flightTicketData:
-            flightTicket?.metadata === null ? undefined : flightTicket?.metadata,
-          passengerCount: dto.passengerCount,
-          luggageCount: dto.luggageCount,
-          contactName: dto.passengerName.trim(),
-          contactPhone: dto.passengerPhone.trim(),
-          notes: dto.notes?.trim() || null,
-          pickupAddress,
-          pickupLatitude,
-          pickupLongitude,
-          dropoffAddress,
-          dropoffLatitude,
-          dropoffLongitude,
-          estimatedDistanceKm,
-          estimatedDurationMinutes,
-          estimatedFare: quote.passengerPrice,
-          driverFee: quote.driverFee,
-          platformMargin: quote.platformMargin,
-          currency: quote.currency,
+          ...normalizedBookingData,
           statusHistory: {
             create: {
               to: 'PENDING_DISPATCH',
@@ -411,8 +465,8 @@ export class BookingsService {
           include: bookingInclude
         });
         if (existing) {
-          await this.telegram.enqueueBookingCreated(existing.id);
-          return this.serialize(existing);
+          const refreshed = await refreshPendingIdempotentBooking(existing);
+          return this.serialize(refreshed);
         }
       }
       throw error;

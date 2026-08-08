@@ -187,4 +187,132 @@ test.describe("Passenger-selected booking locations", () => {
     expect(created.pickupLongitude).toBeCloseTo(Number(route!.origin.longitude), 6);
     expect(created.dropoffAddress).toBe(route!.destination.nameAr);
   });
+
+  test("keeps a custom Beirut Airport dropoff through booking, admin details and tracking", async ({ request }) => {
+    const riderToken = await apiLogin(request, "rider");
+    const adminToken = await apiLogin(request, "admin");
+    const routesResponse = await request.get(`${apiBaseURL}/routes`);
+    expect(routesResponse.ok()).toBeTruthy();
+    const routes = (await routesResponse.json()) as Route[];
+    const route = routes.find((item) => item.code === "BEY-AIRPORT-DAM");
+    expect(route, "Seeded Beirut Airport → Damascus route is required").toBeTruthy();
+
+    const selectedDropoff = {
+      address: "الديماس, ناحية الديماس, منطقة قدسيا, محافظة ريف دمشق, سوريا",
+      latitude: 33.5877734,
+      longitude: 36.0921132,
+    };
+
+    const createResponse = await request.post(`${apiBaseURL}/bookings`, {
+      headers: bearer(riderToken),
+      data: {
+        clientRequestId: randomUUID(),
+        routeId: route!.id,
+        bookingType: "PRIVATE_CAR",
+        vehicleClass: "LARGE",
+        travelDate: futureDate(4),
+        flightArrivalTime: "18:30",
+        flightNumber: "E2E-BEY-DEIMAS",
+        passengerCount: 1,
+        luggageCount: 1,
+        pickupAddress: route!.origin.nameAr,
+        dropoffAddress: selectedDropoff.address,
+        dropoffLatitude: selectedDropoff.latitude,
+        dropoffLongitude: selectedDropoff.longitude,
+        passengerName: "اختبار الديماس",
+        passengerPhone: "+963944000003",
+      },
+    });
+
+    expect(createResponse.status(), await createResponse.text()).toBe(201);
+    const created = (await createResponse.json()) as Booking;
+    expect(created.dropoffAddress).toBe(selectedDropoff.address);
+    expect(created.dropoffLatitude).toBeCloseTo(selectedDropoff.latitude, 6);
+    expect(created.dropoffLongitude).toBeCloseTo(selectedDropoff.longitude, 6);
+
+    const adminResponse = await request.get(`${apiBaseURL}/admin/bookings/${created.id}`, {
+      headers: bearer(adminToken),
+    });
+    expect(adminResponse.status(), await adminResponse.text()).toBe(200);
+    const adminBooking = (await adminResponse.json()) as Booking;
+    expect(adminBooking.dropoffAddress).toBe(selectedDropoff.address);
+    expect(adminBooking.dropoffLatitude).toBeCloseTo(selectedDropoff.latitude, 6);
+    expect(adminBooking.dropoffLongitude).toBeCloseTo(selectedDropoff.longitude, 6);
+
+    const trackingResponse = await request.get(`${apiBaseURL}/tracking/trips/${created.id}`, {
+      headers: bearer(adminToken),
+    });
+    expect(trackingResponse.status(), await trackingResponse.text()).toBe(200);
+    const tracking = (await trackingResponse.json()) as { trip: Booking };
+    expect(tracking.trip.dropoffAddress).toBe(selectedDropoff.address);
+    expect(tracking.trip.dropoffLatitude).toBeCloseTo(selectedDropoff.latitude, 6);
+    expect(tracking.trip.dropoffLongitude).toBeCloseTo(selectedDropoff.longitude, 6);
+  });
+
+  test("refreshes an unassigned idempotent booking when the rider changes the editable dropoff", async ({ request }) => {
+    const riderToken = await apiLogin(request, "rider");
+    const adminToken = await apiLogin(request, "admin");
+    const routesResponse = await request.get(`${apiBaseURL}/routes`);
+    expect(routesResponse.ok()).toBeTruthy();
+    const routes = (await routesResponse.json()) as Route[];
+    const route = routes.find((item) => item.code === "BEY-AIRPORT-DAM");
+    expect(route, "Seeded Beirut Airport → Damascus route is required").toBeTruthy();
+
+    const clientRequestId = randomUUID();
+    const basePayload = {
+      clientRequestId,
+      routeId: route!.id,
+      bookingType: "PRIVATE_CAR",
+      vehicleClass: "SMALL",
+      travelDate: futureDate(5),
+      flightArrivalTime: "19:15",
+      flightNumber: "E2E-IDEMPOTENT",
+      passengerCount: 1,
+      luggageCount: 1,
+      pickupAddress: route!.origin.nameAr,
+      passengerName: "اختبار تحديث الطلب",
+      passengerPhone: "+963944000004",
+    };
+
+    const firstResponse = await request.post(`${apiBaseURL}/bookings`, {
+      headers: bearer(riderToken),
+      data: {
+        ...basePayload,
+        dropoffAddress: route!.destination.nameAr,
+      },
+    });
+    expect(firstResponse.status(), await firstResponse.text()).toBe(201);
+    const first = (await firstResponse.json()) as Booking;
+    expect(first.dropoffAddress).toBe(route!.destination.nameAr);
+
+    const selectedDropoff = {
+      address: "الديماس, ناحية الديماس, منطقة قدسيا, محافظة ريف دمشق, سوريا",
+      latitude: 33.5877734,
+      longitude: 36.0921132,
+    };
+    const retryResponse = await request.post(`${apiBaseURL}/bookings`, {
+      headers: bearer(riderToken),
+      data: {
+        ...basePayload,
+        dropoffAddress: selectedDropoff.address,
+        dropoffLatitude: selectedDropoff.latitude,
+        dropoffLongitude: selectedDropoff.longitude,
+      },
+    });
+    expect(retryResponse.status(), await retryResponse.text()).toBe(201);
+    const retried = (await retryResponse.json()) as Booking;
+    expect(retried.id).toBe(first.id);
+    expect(retried.dropoffAddress).toBe(selectedDropoff.address);
+    expect(retried.dropoffLatitude).toBeCloseTo(selectedDropoff.latitude, 6);
+    expect(retried.dropoffLongitude).toBeCloseTo(selectedDropoff.longitude, 6);
+
+    const trackingResponse = await request.get(`${apiBaseURL}/tracking/trips/${first.id}`, {
+      headers: bearer(adminToken),
+    });
+    expect(trackingResponse.status(), await trackingResponse.text()).toBe(200);
+    const tracking = (await trackingResponse.json()) as { trip: Booking };
+    expect(tracking.trip.dropoffAddress).toBe(selectedDropoff.address);
+    expect(tracking.trip.dropoffLatitude).toBeCloseTo(selectedDropoff.latitude, 6);
+    expect(tracking.trip.dropoffLongitude).toBeCloseTo(selectedDropoff.longitude, 6);
+  });
 });
