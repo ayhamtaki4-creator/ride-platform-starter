@@ -6,6 +6,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { createHttpObservabilityMiddleware } from './common/http-observability';
+import { RetryAfterInterceptor } from './common/retry-after.interceptor';
 import { RedisIoAdapter } from './realtime/redis-io.adapter';
 
 async function bootstrap() {
@@ -82,8 +83,9 @@ async function bootstrap() {
   app.enableCors({
     origin: webOrigins,
     credentials: true,
-    exposedHeaders: ['X-Request-Id']
+    exposedHeaders: ['X-Request-Id', 'Retry-After']
   });
+  app.useGlobalInterceptors(new RetryAfterInterceptor());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
