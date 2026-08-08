@@ -94,8 +94,8 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run mobile, booking, dispatch, contact, health, and security Playwright suites
-        run: pnpm exec playwright test e2e/tests/mobile-shell.spec.ts e2e/tests/health.spec.ts e2e/tests/auth-rate-limit.spec.ts e2e/tests/booking-location.spec.ts e2e/tests/public-ticket-analysis.spec.ts e2e/tests/rider-booking-details.spec.ts e2e/tests/driver-round-trip-day.spec.ts e2e/tests/assigned-driver-contact.spec.ts --project=chromium
+      - name: Run mobile, booking, dispatch, contact, fleet, health, and security Playwright suites
+        run: pnpm exec playwright test e2e/tests/mobile-shell.spec.ts e2e/tests/health.spec.ts e2e/tests/auth-rate-limit.spec.ts e2e/tests/booking-location.spec.ts e2e/tests/public-ticket-analysis.spec.ts e2e/tests/rider-booking-details.spec.ts e2e/tests/driver-round-trip-day.spec.ts e2e/tests/assigned-driver-contact.spec.ts e2e/tests/vehicle-primary-image.spec.ts --project=chromium
 
       - name: Upload Playwright report on failure
         if: failure()

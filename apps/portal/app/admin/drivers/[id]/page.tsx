@@ -149,6 +149,14 @@ export default function AdminDriverDetailPage() {
     }
   }
 
+  async function setPrimaryVehicleImage(vehicleId: string, image: DriverVehicle["images"][number]) {
+    await runAction(
+      `primary-image-${image.id}`,
+      () => apiFetch(`/admin/drivers/${driverId}/vehicles/${vehicleId}/media-images/${image.id}/primary`, { method: "PATCH" }),
+      "تم تعيين الصورة الرئيسية للمركبة.",
+    );
+  }
+
   async function deleteVehicleImage(vehicleId: string, image: DriverVehicle["images"][number]) {
     const mediaId = image.mediaAsset?.id;
     if (!mediaId) {
@@ -248,17 +256,33 @@ export default function AdminDriverDetailPage() {
             <div className="section-heading"><div><div className="eyebrow">{vehicle.baseRegion?.nameAr ?? "بلا مركز"}</div><h2>{vehicle.make} {vehicle.model} — {vehicle.year}</h2><p className="subtitle">{vehicle.color} · {vehicle.plateNumber} · {vehicle.seatCapacity} مقاعد</p></div><StatusPill status={vehicle.isActive ? "ACTIVE" : "SUSPENDED"} label={vehicle.isActive ? "فعالة" : "متوقفة"} /></div>
             <div className="vehicle-gallery">
               {vehicle.images.filter((img) => img.isApproved).map((image) => (
-                <div key={image.id} style={{ position: "relative" }}>
-                  <img src={image.url} alt={`${vehicle.make} ${vehicle.model}`} />
-                  <button
-                    className="button danger compact-button"
-                    style={{ position: "absolute", left: 8, bottom: 8 }}
-                    disabled={working === `delete-image-${image.id}`}
-                    type="button"
-                    onClick={() => void deleteVehicleImage(vehicle.id, image)}
-                  >
-                    حذف
-                  </button>
+                <div key={image.id}>
+                  <div style={{ position: "relative" }}>
+                    <img src={image.url} alt={`${vehicle.make} ${vehicle.model}`} />
+                    {image.isPrimary ? (
+                      <span className="status-pill success" style={{ position: "absolute", right: 8, top: 8 }}>الصورة الرئيسية</span>
+                    ) : null}
+                  </div>
+                  <div className="actions" style={{ marginTop: 8 }}>
+                    {!image.isPrimary ? (
+                      <button
+                        className="button primary compact-button"
+                        disabled={working === `primary-image-${image.id}`}
+                        type="button"
+                        onClick={() => void setPrimaryVehicleImage(vehicle.id, image)}
+                      >
+                        تعيين كرئيسية
+                      </button>
+                    ) : null}
+                    <button
+                      className="button danger compact-button"
+                      disabled={working === `delete-image-${image.id}`}
+                      type="button"
+                      onClick={() => void deleteVehicleImage(vehicle.id, image)}
+                    >
+                      حذف
+                    </button>
+                  </div>
                 </div>
               ))}
               {vehicle.images.filter((img) => img.isApproved).length === 0 ? <div className="vehicle-image-placeholder">لا توجد صور معتمدة</div> : null}

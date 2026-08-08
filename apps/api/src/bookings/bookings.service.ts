@@ -312,39 +312,32 @@ export class BookingsService {
       const dropoffLatitudeProvided = dto.dropoffLatitude !== undefined;
       const dropoffLongitudeProvided = dto.dropoffLongitude !== undefined;
 
-      if (pickupLatitudeProvided !== pickupLongitudeProvided) {
-        throw new BadRequestException('يجب إرسال إحداثيي نقطة الانطلاق معًا.');
-      }
-      if (dropoffLatitudeProvided !== dropoffLongitudeProvided) {
-        throw new BadRequestException('يجب إرسال إحداثيي نقطة الوصول معًا.');
-      }
-
       if (!policy.passengerCanEditPickup) {
-        if (
-          pickupLatitudeProvided ||
-          pickupLongitudeProvided ||
-          pickupAddress !== route.origin.nameAr
-        ) {
-          throw new BadRequestException('نقطة الانطلاق ثابتة حسب إعدادات هذا المسار.');
-        }
         pickupAddress = route.origin.nameAr;
-      } else if (pickupLatitudeProvided && pickupLongitudeProvided) {
-        pickupLatitude = dto.pickupLatitude!;
-        pickupLongitude = dto.pickupLongitude!;
+        pickupLatitude = Number(route.origin.latitude);
+        pickupLongitude = Number(route.origin.longitude);
+      } else {
+        if (pickupLatitudeProvided !== pickupLongitudeProvided) {
+          throw new BadRequestException('يجب إرسال إحداثيي نقطة الانطلاق معًا.');
+        }
+        if (pickupLatitudeProvided && pickupLongitudeProvided) {
+          pickupLatitude = dto.pickupLatitude!;
+          pickupLongitude = dto.pickupLongitude!;
+        }
       }
 
       if (!policy.passengerCanEditDropoff) {
-        if (
-          dropoffLatitudeProvided ||
-          dropoffLongitudeProvided ||
-          dropoffAddress !== route.destination.nameAr
-        ) {
-          throw new BadRequestException('نقطة الوصول ثابتة حسب إعدادات هذا المسار.');
-        }
         dropoffAddress = route.destination.nameAr;
-      } else if (dropoffLatitudeProvided && dropoffLongitudeProvided) {
-        dropoffLatitude = dto.dropoffLatitude!;
-        dropoffLongitude = dto.dropoffLongitude!;
+        dropoffLatitude = Number(route.destination.latitude);
+        dropoffLongitude = Number(route.destination.longitude);
+      } else {
+        if (dropoffLatitudeProvided !== dropoffLongitudeProvided) {
+          throw new BadRequestException('يجب إرسال إحداثيي نقطة الوصول معًا.');
+        }
+        if (dropoffLatitudeProvided && dropoffLongitudeProvided) {
+          dropoffLatitude = dto.dropoffLatitude!;
+          dropoffLongitude = dto.dropoffLongitude!;
+        }
       }
     }
 
