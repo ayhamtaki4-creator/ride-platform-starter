@@ -653,19 +653,48 @@ export class AdminService {
 
     const { start, end } = this.dayBounds(trip.travelDate);
 
-    const activeRuns = await tx.serviceRun.findMany({
-      where: {
-        driverId,
-        travelDate: { gte: start, lt: end },
-        status: { in: ACTIVE_RUN_STATUSES }
-      },
-      orderBy: { createdAt: 'asc' }
-    });
+    const [activeRuns, requestedRoute] = await Promise.all([
+      tx.serviceRun.findMany({
+        where: {
+          driverId,
+          travelDate: { gte: start, lt: end },
+          status: { in: ACTIVE_RUN_STATUSES }
+        },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          route: { select: { originId: true, destinationId: true } }
+        }
+      }),
+      trip.routeId
+        ? tx.serviceRoute.findUnique({
+            where: { id: trip.routeId },
+            select: { originId: true, destinationId: true }
+          })
+        : Promise.resolve(null)
+    ]);
 
     if (trip.bookingType === 'PRIVATE_CAR' && activeRuns.length > 0) {
-      throw new ConflictException(
-        `لدى السائق رحلة مجدولة في هذا اليوم (${activeRuns[0].runReference}).`
+      const existing = activeRuns[0];
+      const reverseDynamicRoute = Boolean(
+        activeRuns.length === 1 &&
+        requestedRoute &&
+        existing.route &&
+        existing.route.originId === requestedRoute.destinationId &&
+        existing.route.destinationId === requestedRoute.originId
       );
+      const reverseLegacyDirection = Boolean(
+        activeRuns.length === 1 &&
+        !trip.routeId &&
+        this.areLegacyDirectionsOpposite(existing.direction, trip.direction)
+      );
+
+      if (!reverseDynamicRoute && !reverseLegacyDirection) {
+        throw new ConflictException(
+          activeRuns.length >= 2
+            ? 'لدى السائق بالفعل رحلتا ذهاب وإياب في هذا اليوم.'
+            : `لدى السائق رحلة في الاتجاه نفسه أو مسار غير معاكس في هذا اليوم (${existing.runReference}).`
+        );
+      }
     }
 
     if (trip.bookingType === 'SHARED_SEAT') {
@@ -727,6 +756,16 @@ export class AdminService {
         status: remaining === 0 ? 'CANCELLED' : 'PLANNED'
       }
     });
+  }
+
+  private areLegacyDirectionsOpposite(
+    first: string | null,
+    second: string | null
+  ) {
+    return (
+      (first === 'BEIRUT_AIRPORT_TO_DAMASCUS' && second === 'DAMASCUS_TO_BEIRUT_AIRPORT') ||
+      (first === 'DAMASCUS_TO_BEIRUT_AIRPORT' && second === 'BEIRUT_AIRPORT_TO_DAMASCUS')
+    );
   }
 
   private hasAllRegions(

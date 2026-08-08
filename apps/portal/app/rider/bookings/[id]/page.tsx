@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ProtectedRoute } from "@/components/protected-route";
+import { RiderBookingLiveMap } from "@/components/rider-booking-live-map";
+import { RiderDriverVehicleSummary } from "@/components/rider-driver-vehicle-summary";
 import { BookingStatusBadge } from "@/components/rider/booking-status-badge";
 import { BookingTimeline } from "@/components/rider/booking-timeline";
 import { RiderBookingSkeleton } from "@/components/rider/rider-loading";
@@ -41,7 +43,6 @@ export default function RiderBookingDetailsPage() {
 
   async function copyReference() {
     if (!booking?.bookingReference) return;
-
     try {
       await navigator.clipboard.writeText(booking.bookingReference);
       showToast("تم نسخ رقم الحجز.", "success");
@@ -53,7 +54,6 @@ export default function RiderBookingDetailsPage() {
   async function cancelBooking() {
     if (!booking) return;
     setIsCancelling(true);
-
     try {
       await apiFetch<Trip>(`/trips/${booking.id}/cancel`, {
         method: "POST",
@@ -73,9 +73,9 @@ export default function RiderBookingDetailsPage() {
     <ProtectedRoute roles={["PASSENGER"]}>
       <Shell>
         <DashboardHeader
-          eyebrow="حساب المسافر / تفاصيل الحجز"
-          title={booking?.bookingReference ?? "تفاصيل الحجز"}
-          subtitle="تابع مراحل الحجز وراجع بيانات الرحلة والسائق والمركبة."
+          eyebrow="حساب المسافر / الحجز"
+          title={booking?.bookingReference ?? "الحجز"}
+          subtitle="السائق والمركبة والخريطة والموقع المباشر ثم جميع معلومات الرحلة."
           actions={
             <Link className="button" href="/rider/bookings">
               <Icon name="arrow-right" size={17} /> العودة إلى الحجوزات
@@ -110,7 +110,7 @@ export default function RiderBookingDetailsPage() {
         <ConfirmDialog
           open={cancelOpen}
           title="إلغاء الحجز"
-          description="سيتم إرسال الإلغاء فورًا إلى مركز العمليات وإخلاء المقاعد المحجوزة. لا يمكن التراجع عن هذه العملية من لوحة المسافر."
+          description="سيتم إرسال الإلغاء فورًا إلى مركز العمليات. لا يمكن التراجع عن هذه العملية من لوحة المسافر."
           confirmLabel="تأكيد الإلغاء"
           tone="danger"
           working={isCancelling}
@@ -132,9 +132,9 @@ function BookingDetails({
   onCancel: () => void;
 }) {
   const status = getBookingStatus(booking);
-  const vehicle = booking.driver?.driverProfile?.vehicles[0];
   const { showToast } = useToast();
   const [openingTicket, setOpeningTicket] = useState(false);
+  const assignedVehicle = booking.driverPublicProfile?.vehicle ?? booking.serviceRun?.vehicle ?? null;
 
   async function openFlightTicket() {
     setOpeningTicket(true);
@@ -161,11 +161,11 @@ function BookingDetails({
               <Icon name="bookings" size={16} /> نسخ الرقم
             </button>
           </div>
-          <h2>{booking.direction ? DIRECTION_LABELS[booking.direction] : "تفاصيل الرحلة"}</h2>
+          <h2>{booking.direction ? DIRECTION_LABELS[booking.direction] : booking.route?.nameAr || "رحلتك"}</h2>
           <p>{status.description}</p>
           <div className="rider-detail-hero-facts">
             <span><Icon name="calendar" size={18} />{formatBookingDate(booking.travelDate)}</span>
-            {booking.bookingType === "PRIVATE_CAR" ? <span><Icon name="car" size={18} />{VEHICLE_CLASS_LABELS[booking.vehicleClass ?? "SMALL"]}</span> : <span><Icon name="users" size={18} />مقعد واحد</span>}
+            <span><Icon name="car" size={18} />{VEHICLE_CLASS_LABELS[booking.vehicleClass ?? "SMALL"]}</span>
           </div>
         </div>
         <div className="rider-detail-price">
@@ -175,145 +175,101 @@ function BookingDetails({
         </div>
       </section>
 
-      <div className="rider-detail-layout">
-        <main className="rider-detail-main">
-          <section className="panel rider-detail-panel">
-            <div className="section-heading rider-section-heading">
+      <div className="rider-detail-main" style={{ display: "grid", gap: 16 }}>
+        <RiderDriverVehicleSummary booking={booking} />
+
+        <VehicleGallery vehicle={assignedVehicle} />
+
+        <RiderBookingLiveMap tripId={booking.id} />
+
+        <section className="panel rider-detail-panel">
+          <div className="section-heading rider-section-heading">
+            <div>
+              <span className="eyebrow">بيانات الرحلة</span>
+              <h2>معلومات الحجز</h2>
+            </div>
+          </div>
+
+          <div className="rider-detail-cards">
+            <DetailItem icon="map-pin" label="موقع الالتقاط المحدد" value={booking.pickupAddress} />
+            <DetailItem icon="route" label="نقطة الوصول" value={booking.dropoffAddress} />
+            <DetailItem icon="plane" label="رقم الرحلة الجوية" value={booking.flightNumber || "غير مسجل"} />
+            <DetailItem icon="clock" label="وقت الطائرة" value={booking.flightArrivalTime || "غير محدد"} />
+            <DetailItem icon="user" label="اسم المسافر" value={booking.contactName || "غير مسجل"} />
+            <DetailItem icon="phone" label="رقم التواصل" value={booking.contactPhone || "غير مسجل"} ltr />
+          </div>
+
+          {booking.flightTicketMedia ? (
+            <div className="flight-ticket-detail-row">
               <div>
-                <span className="eyebrow">بيانات الرحلة</span>
-                <h2>تفاصيل الحجز</h2>
+                <Icon name="plane" size={20} />
+                <span><small>تذكرة الطيران المرفقة</small><strong>{booking.flightTicketMedia.originalName}</strong></span>
               </div>
+              <button className="button compact-button" type="button" disabled={openingTicket} onClick={() => void openFlightTicket()}>
+                {openingTicket ? "جارٍ الفتح..." : "عرض التذكرة"}
+              </button>
             </div>
-
-            <div className="rider-detail-cards">
-              <DetailItem icon="map-pin" label="نقطة الانطلاق" value={booking.pickupAddress} />
-              <DetailItem icon="route" label="نقطة الوصول" value={booking.dropoffAddress} />
-              <DetailItem icon="plane" label="رقم الرحلة الجوية" value={booking.flightNumber || "غير مسجل"} />
-              <DetailItem icon="clock" label="وقت وصول الطائرة" value={booking.flightArrivalTime || "غير محدد"} />
-              <DetailItem icon="user" label="اسم المسافر" value={booking.contactName || "غير مسجل"} />
-              <DetailItem icon="phone" label="رقم التواصل" value={booking.contactPhone || "غير مسجل"} ltr />
-            </div>
-
-            {booking.flightTicketMedia ? (
-              <div className="flight-ticket-detail-row">
-                <div><Icon name="plane" size={20} /><span><small>تذكرة الطيران المرفقة</small><strong>{booking.flightTicketMedia.originalName}</strong></span></div>
-                <button className="button compact-button" type="button" disabled={openingTicket} onClick={() => void openFlightTicket()}>{openingTicket ? "جارٍ الفتح..." : "عرض التذكرة"}</button>
-              </div>
-            ) : null}
-
-            {booking.notes ? (
-              <div className="rider-notes-box">
-                <strong>ملاحظات الحجز</strong>
-                <p>{booking.notes}</p>
-              </div>
-            ) : null}
-          </section>
-
-          <VehicleGallery vehicle={vehicle ?? null} />
-
-          <section className="panel rider-detail-panel">
-            <div className="section-heading rider-section-heading">
-              <div>
-                <span className="eyebrow">متابعة مباشرة</span>
-                <h2>مراحل الحجز</h2>
-              </div>
-              <span className="rider-current-state">{TRIP_STATUS_LABELS[booking.status]}</span>
-            </div>
-            <BookingTimeline booking={booking} />
-          </section>
-
-
-
-          {booking.statusHistory && booking.statusHistory.length > 0 ? (
-            <section className="panel rider-detail-panel">
-              <div className="section-heading rider-section-heading">
-                <div>
-                  <span className="eyebrow">سجل النظام</span>
-                  <h2>آخر تحديثات الرحلة</h2>
-                </div>
-              </div>
-              <div className="rider-history-list">
-                {[...booking.statusHistory].reverse().slice(0, 6).map((history) => (
-                  <div key={history.id}>
-                    <span className="rider-history-dot" />
-                    <div>
-                      <strong>{TRIP_STATUS_LABELS[history.to]}</strong>
-                      {history.note ? <p>{history.note}</p> : null}
-                    </div>
-                    <time>{formatBookingDate(history.createdAt, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</time>
-                  </div>
-                ))}
-              </div>
-            </section>
           ) : null}
-        </main>
 
-        <aside className="rider-detail-aside">
-          <section className="panel rider-driver-panel">
-            <span className="eyebrow">السائق والمركبة</span>
-            {booking.driver ? (
-              <>
-                <div className="rider-driver-profile">
-                  <span className="rider-driver-avatar">{booking.driver.firstName.slice(0, 1)}{booking.driver.lastName?.slice(0, 1) ?? ""}</span>
+          {booking.notes ? (
+            <div className="rider-notes-box">
+              <strong>ملاحظات الحجز</strong>
+              <p>{booking.notes}</p>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="panel rider-detail-panel">
+          <div className="section-heading rider-section-heading">
+            <div>
+              <span className="eyebrow">متابعة الحجز</span>
+              <h2>مراحل الرحلة</h2>
+            </div>
+            <span className="rider-current-state">{TRIP_STATUS_LABELS[booking.status]}</span>
+          </div>
+          <BookingTimeline booking={booking} />
+        </section>
+
+        {booking.serviceRun ? (
+          <section className="panel rider-detail-panel">
+            <div className="section-heading rider-section-heading">
+              <div><span className="eyebrow">التشغيل</span><h2>الرحلة التشغيلية</h2></div>
+            </div>
+            <dl className="rider-summary-list">
+              <div><dt>رقم الرحلة</dt><dd>{booking.serviceRun.runReference}</dd></div>
+              <div><dt>حالة الرحلة</dt><dd>{SERVICE_RUN_STATUS_LABELS[booking.serviceRun.status]}</dd></div>
+              <div><dt>حالة المسافر</dt><dd>{booking.serviceRunPassengerStatus ? SERVICE_RUN_PASSENGER_STATUS_LABELS[booking.serviceRunPassengerStatus] : "بانتظار المتابعة"}</dd></div>
+            </dl>
+          </section>
+        ) : null}
+
+        {booking.statusHistory?.length ? (
+          <section className="panel rider-detail-panel">
+            <div className="section-heading rider-section-heading">
+              <div><span className="eyebrow">سجل النظام</span><h2>آخر تحديثات الرحلة</h2></div>
+            </div>
+            <div className="rider-history-list">
+              {[...booking.statusHistory].reverse().slice(0, 6).map((history) => (
+                <div key={history.id}>
+                  <span className="rider-history-dot" />
                   <div>
-                    <strong>{booking.driver.firstName} {booking.driver.lastName}</strong>
-                    <small>سائق معتمد</small>
+                    <strong>{TRIP_STATUS_LABELS[history.to]}</strong>
+                    {history.note ? <p>{history.note}</p> : null}
                   </div>
+                  <time>{formatBookingDate(history.createdAt, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</time>
                 </div>
-                {vehicle ? (
-                  <div className="rider-vehicle-card">
-                    <Icon name="car" size={25} />
-                    <div>
-                      <strong>{vehicle.make} {vehicle.model}</strong>
-                      <span>{vehicle.color} · {vehicle.plateNumber}</span>
-                    </div>
-                  </div>
-                ) : null}
-                {booking.driver.phone ? (
-                  <a className="button primary" href={`tel:${booking.driver.phone}`}><Icon name="phone" size={18} /> الاتصال بالسائق</a>
-                ) : null}
-              </>
-            ) : (
-              <div className="rider-assignment-empty">
-                <span><Icon name="drivers" size={30} /></span>
-                <h3>لم يُعيّن السائق بعد</h3>
-                <p>سيظهر اسم السائق والمركبة هنا بعد انتهاء مركز العمليات من التعيين.</p>
-              </div>
-            )}
+              ))}
+            </div>
           </section>
+        ) : null}
 
-          {booking.serviceRun ? (
-            <section className="panel rider-run-panel">
-              <span className="eyebrow">الرحلة التشغيلية</span>
-              <div className="rider-run-reference">
-                <Icon name="route" size={23} />
-                <div><small>رقم الرحلة</small><strong>{booking.serviceRun.runReference}</strong></div>
-              </div>
-              <dl className="rider-summary-list">
-                <div><dt>حالة الرحلة</dt><dd>{SERVICE_RUN_STATUS_LABELS[booking.serviceRun.status]}</dd></div>
-                <div><dt>حالة المسافر</dt><dd>{booking.serviceRunPassengerStatus ? SERVICE_RUN_PASSENGER_STATUS_LABELS[booking.serviceRunPassengerStatus] : "بانتظار المتابعة"}</dd></div>
-                <div><dt>المقاعد</dt><dd>{booking.serviceRun.reservedSeats} / {booking.serviceRun.seatCapacity}</dd></div>
-                <div><dt>المركبة</dt><dd>{booking.serviceRun.vehicle?.make ?? "لم يتم تعيين مركبة بعد"} {booking.serviceRun.vehicle?.model ?? ""}</dd></div>
-                
-              </dl>
-            </section>
-          ) : null}
-
-          <section className="panel rider-support-panel">
-            <span className="rider-quick-icon"><Icon name="phone" size={24} /></span>
-            <h2>تحتاج إلى مساعدة؟</h2>
-            <p>تواصل مع مركز العمليات مع ذكر رقم الحجز لتسريع المتابعة.</p>
-            <a className="button" href="tel:+96100000000">الاتصال بالدعم</a>
+        {canPassengerCancel(booking) ? (
+          <section className="panel rider-cancel-panel">
+            <h3>إلغاء الحجز</h3>
+            <p>يمكن إلغاء الحجز قبل بدء الرحلة وفق سياسة المنصة.</p>
+            <button className="button danger" type="button" onClick={onCancel}>إلغاء الحجز</button>
           </section>
-
-          {canPassengerCancel(booking) ? (
-            <section className="panel rider-cancel-panel">
-              <h3>إلغاء الحجز</h3>
-              <p>يمكن إلغاء الحجز قبل بدء الرحلة. قد تطبق سياسة الإلغاء وفق موعد الرحلة.</p>
-              <button className="button danger" type="button" onClick={onCancel}>إلغاء هذا الحجز</button>
-            </section>
-          ) : null}
-        </aside>
+        ) : null}
       </div>
     </>
   );
@@ -325,15 +281,18 @@ function DetailItem({
   value,
   ltr = false,
 }: {
-  icon: "map-pin" | "route" | "plane" | "clock" | "user" | "phone";
+  icon: Parameters<typeof Icon>[0]["name"];
   label: string;
   value: string;
   ltr?: boolean;
 }) {
   return (
     <div className="rider-detail-item">
-      <span><Icon name={icon} size={20} /></span>
-      <div><small>{label}</small><strong className={ltr ? "ltr-text" : ""}>{value}</strong></div>
+      <span><Icon name={icon} size={19} /></span>
+      <div>
+        <small>{label}</small>
+        <strong dir={ltr ? "ltr" : undefined}>{value}</strong>
+      </div>
     </div>
   );
 }

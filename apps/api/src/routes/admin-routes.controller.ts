@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '../iam/auth-user.type';
 import { CurrentUser } from '../iam/current-user.decorator';
 import { Permissions } from '../iam/permissions.decorator';
+import { DriverSchedulePolicyService } from './driver-schedule-policy.service';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { CreateRegionDto } from './dto/create-region.dto';
 import { CreateRouteDto } from './dto/create-route.dto';
@@ -16,7 +17,10 @@ import { RoutesService } from './routes.service';
 @ApiBearerAuth()
 @Controller('admin')
 export class AdminRoutesController {
-  constructor(private readonly routes: RoutesService) {}
+  constructor(
+    private readonly routes: RoutesService,
+    private readonly schedulePolicy: DriverSchedulePolicyService
+  ) {}
 
   @Permissions('route:manage')
   @Get('regions')
@@ -98,10 +102,15 @@ export class AdminRoutesController {
 
   @Permissions('trip:update:any')
   @Get('routes/:id/eligible-drivers')
-  eligibleDrivers(
+  async eligibleDrivers(
     @Param('id') id: string,
     @Query() query: EligibleDriversQueryDto
   ) {
-    return this.routes.eligibleDrivers(id, query);
+    const rows = await this.routes.eligibleDrivers(id, query);
+    return this.schedulePolicy.applySameDayReturnPolicy(
+      id,
+      new Date(query.travelDate),
+      rows
+    );
   }
 }

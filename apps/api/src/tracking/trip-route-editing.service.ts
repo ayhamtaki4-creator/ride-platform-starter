@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -28,26 +29,174 @@ type RoutePlanRow = {
   updatedAt: Date;
 };
 
+type RouteInput = {
+  geometry: unknown;
+  waypoints?: unknown;
+  distanceKm?: number;
+  durationMinutes?: number;
+};
+
+type EditAccess = {
+  dispatch: boolean;
+  passengerOwner: boolean;
+  trip: {
+    id: string;
+    routeId: string | null;
+    pickupAddress: string;
+    pickupLatitude: number;
+    pickupLongitude: number;
+    dropoffAddress: string;
+    dropoffLatitude: number;
+    dropoffLongitude: number;
+  };
+};
+
 @Injectable()
 export class TripRouteEditingService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async updateRoutePlan(
+  async updateRoutePlan(user: AuthUser, tripId: string, input: RouteInput) {
+    const access = await this.assertEditAccess(user, tripId);
+    const route = this.validateRouteInput(input);
+
+    await this.persistRoutePlan(
+      this.prisma,
+      user,
+      tripId,
+      route,
+      access.passengerOwner && !access.dispatch
+    );
+
+    return this.getRoutePlan(tripId);
+  }
+
+  async updateEndpoints(
     user: AuthUser,
     tripId: string,
-    input: {
-      geometry: unknown;
-      waypoints?: unknown;
-      distanceKm?: number;
-      durationMinutes?: number;
+    input: RouteInput & {
+      originAddress: string;
+      originLatitude: number;
+      originLongitude: number;
+      destinationAddress: string;
+      destinationLatitude: number;
+      destinationLongitude: number;
     }
   ) {
+    const access = await this.assertEditAccess(user, tripId);
+    const route = this.validateRouteInput(input);
+    const originAddress = this.address(input.originAddress, 'عنوان الانطلاق');
+    const destinationAddress = this.address(input.destinationAddress, 'عنوان الوصول');
+    const originLatitude = this.coordinate(input.originLatitude, 90, 'خط عرض الانطلاق');
+    const originLongitude = this.coordinate(input.originLongitude, 180, 'خط طول الانطلاق');
+    const destinationLatitude = this.coordinate(input.destinationLatitude, 90, 'خط عرض الوصول');
+    const destinationLongitude = this.coordinate(input.destinationLongitude, 180, 'خط طول الوصول');
+
+    if (access.passengerOwner && !access.dispatch) {
+      const policy = await this.endpointPolicy(access.trip.routeId);
+      if (
+        !policy.passengerCanEditPickup &&
+        this.endpointChanged(
+          access.trip.pickupAddress,
+          access.trip.pickupLatitude,
+          access.trip.pickupLongitude,
+          originAddress,
+          originLatitude,
+          originLongitude
+        )
+      ) {
+        throw new ForbiddenException('نقطة الانطلاق ثابتة حسب إعدادات الإدارة لهذا المسار.');
+      }
+      if (
+        !policy.passengerCanEditDropoff &&
+        this.endpointChanged(
+          access.trip.dropoffAddress,
+          access.trip.dropoffLatitude,
+          access.trip.dropoffLongitude,
+          destinationAddress,
+          destinationLatitude,
+          destinationLongitude
+        )
+      ) {
+        throw new ForbiddenException('نقطة الوصول ثابتة حسب إعدادات الإدارة لهذا المسار.');
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.trip.update({
+        where: { id: tripId },
+        data: {
+          pickupAddress: originAddress,
+          pickupLatitude: originLatitude,
+          pickupLongitude: originLongitude,
+          dropoffAddress: destinationAddress,
+          dropoffLatitude: destinationLatitude,
+          dropoffLongitude: destinationLongitude,
+          ...(route.distanceKm !== null ? { estimatedDistanceKm: route.distanceKm } : {}),
+          ...(route.durationMinutes !== null ? { estimatedDurationMinutes: route.durationMinutes } : {})
+        }
+      });
+
+      await this.persistRoutePlan(
+        tx,
+        user,
+        tripId,
+        route,
+        access.passengerOwner && !access.dispatch
+      );
+
+      await tx.auditLog.create({
+        data: {
+          actorId: user.sub,
+          action: access.passengerOwner && !access.dispatch
+            ? 'trip.endpoints.passenger_update'
+            : 'trip.endpoints.update',
+          entityType: 'Trip',
+          entityId: tripId,
+          metadata: {
+            originAddress,
+            originLatitude,
+            originLongitude,
+            destinationAddress,
+            destinationLatitude,
+            destinationLongitude
+          }
+        }
+      });
+    });
+
+    return {
+      trip: await this.prisma.trip.findUniqueOrThrow({
+        where: { id: tripId },
+        select: {
+          id: true,
+          pickupAddress: true,
+          pickupLatitude: true,
+          pickupLongitude: true,
+          dropoffAddress: true,
+          dropoffLatitude: true,
+          dropoffLongitude: true,
+          estimatedDistanceKm: true,
+          estimatedDurationMinutes: true
+        }
+      }),
+      routePlan: await this.getRoutePlan(tripId)
+    };
+  }
+
+  private async assertEditAccess(user: AuthUser, tripId: string): Promise<EditAccess> {
     const trip = await this.prisma.trip.findUnique({
       where: { id: tripId },
       select: {
         id: true,
         passengerId: true,
-        status: true
+        routeId: true,
+        status: true,
+        pickupAddress: true,
+        pickupLatitude: true,
+        pickupLongitude: true,
+        dropoffAddress: true,
+        dropoffLatitude: true,
+        dropoffLongitude: true
       }
     });
     if (!trip) throw new NotFoundException('الحجز غير موجود.');
@@ -64,18 +213,84 @@ export class TripRouteEditingService {
       throw new ForbiddenException('تم قفل المسار بعد بدء الرحلة ولا يمكن تعديله.');
     }
 
-    const geometry = this.validateGeometry(input.geometry);
-    const waypoints = this.validateWaypoints(input.waypoints);
-    const distanceKm = this.optionalPositive(input.distanceKm, 'المسافة');
-    const durationMinutes = this.optionalPositiveInteger(input.durationMinutes, 'المدة');
+    return { dispatch, passengerOwner, trip };
+  }
 
-    await this.prisma.$executeRaw`
+  private async endpointPolicy(routeId: string | null) {
+    if (!routeId) {
+      return { passengerCanEditPickup: false, passengerCanEditDropoff: false };
+    }
+
+    const route = await this.prisma.serviceRoute.findUnique({
+      where: { id: routeId },
+      include: { origin: true, destination: true }
+    });
+    if (!route) {
+      return { passengerCanEditPickup: false, passengerCanEditDropoff: false };
+    }
+
+    const rows = await this.prisma.$queryRaw<Array<{
+      passengerCanEditPickup: boolean;
+      passengerCanEditDropoff: boolean;
+    }>>(Prisma.sql`
+      SELECT "passengerCanEditPickup", "passengerCanEditDropoff"
+      FROM "RouteBookingPolicy"
+      WHERE "routeId" = ${routeId}::uuid
+      LIMIT 1
+    `).catch(() => [] as Array<{
+      passengerCanEditPickup: boolean;
+      passengerCanEditDropoff: boolean;
+    }>);
+
+    return rows[0] ?? {
+      passengerCanEditPickup: route.origin.type !== 'AIRPORT',
+      passengerCanEditDropoff: route.destination.type !== 'AIRPORT'
+    };
+  }
+
+  private endpointChanged(
+    currentAddress: string,
+    currentLatitude: number,
+    currentLongitude: number,
+    nextAddress: string,
+    nextLatitude: number,
+    nextLongitude: number
+  ) {
+    return (
+      currentAddress.trim() !== nextAddress.trim() ||
+      Math.abs(currentLatitude - nextLatitude) > 0.000001 ||
+      Math.abs(currentLongitude - nextLongitude) > 0.000001
+    );
+  }
+
+  private validateRouteInput(input: RouteInput) {
+    return {
+      geometry: this.validateGeometry(input.geometry),
+      waypoints: this.validateWaypoints(input.waypoints),
+      distanceKm: this.optionalPositive(input.distanceKm, 'المسافة'),
+      durationMinutes: this.optionalPositiveInteger(input.durationMinutes, 'المدة')
+    };
+  }
+
+  private async persistRoutePlan(
+    client: PrismaService | Prisma.TransactionClient,
+    user: AuthUser,
+    tripId: string,
+    route: {
+      geometry: { type?: unknown; coordinates?: unknown };
+      waypoints: Array<{ latitude: number; longitude: number; label?: string }>;
+      distanceKm: number | null;
+      durationMinutes: number | null;
+    },
+    updatedByPassenger: boolean
+  ) {
+    await client.$executeRaw`
       INSERT INTO "TripRoutePlan" (
         "tripId", "geometry", "waypoints", "distanceKm", "durationMinutes",
         "version", "updatedById", "createdAt", "updatedAt"
       ) VALUES (
-        ${tripId}::uuid, ${JSON.stringify(geometry)}::jsonb, ${JSON.stringify(waypoints)}::jsonb,
-        ${distanceKm}, ${durationMinutes}, 1, ${user.sub}::uuid, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ${tripId}::uuid, ${JSON.stringify(route.geometry)}::jsonb, ${JSON.stringify(route.waypoints)}::jsonb,
+        ${route.distanceKm}, ${route.durationMinutes}, 1, ${user.sub}::uuid, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       )
       ON CONFLICT ("tripId") DO UPDATE SET
         "geometry" = EXCLUDED."geometry",
@@ -87,32 +302,20 @@ export class TripRouteEditingService {
         "updatedAt" = CURRENT_TIMESTAMP
     `;
 
-    if (distanceKm !== null || durationMinutes !== null) {
-      await this.prisma.trip.update({
-        where: { id: tripId },
-        data: {
-          ...(distanceKm !== null ? { estimatedDistanceKm: distanceKm } : {}),
-          ...(durationMinutes !== null ? { estimatedDurationMinutes: durationMinutes } : {})
-        }
-      });
-    }
-
-    await this.prisma.auditLog.create({
+    await client.auditLog.create({
       data: {
         actorId: user.sub,
-        action: passengerOwner && !dispatch ? 'trip.route_plan.passenger_update' : 'trip.route_plan.update',
+        action: updatedByPassenger ? 'trip.route_plan.passenger_update' : 'trip.route_plan.update',
         entityType: 'Trip',
         entityId: tripId,
         metadata: {
-          waypointCount: waypoints.length,
-          distanceKm: distanceKm ?? null,
-          durationMinutes: durationMinutes ?? null,
-          updatedByPassenger: passengerOwner && !dispatch
+          waypointCount: route.waypoints.length,
+          distanceKm: route.distanceKm,
+          durationMinutes: route.durationMinutes,
+          updatedByPassenger
         }
       }
     });
-
-    return this.getRoutePlan(tripId);
   }
 
   private async getRoutePlan(tripId: string) {
@@ -158,6 +361,14 @@ export class TripRouteEditingService {
       const label = typeof point.label === 'string' ? point.label.trim().slice(0, 180) : undefined;
       return { latitude, longitude, ...(label ? { label } : {}) };
     });
+  }
+
+  private address(value: string, label: string) {
+    const trimmed = value?.trim();
+    if (!trimmed || trimmed.length < 3 || trimmed.length > 180) {
+      throw new BadRequestException(`${label} غير صالح.`);
+    }
+    return trimmed;
   }
 
   private coordinate(value: number, limit: number, label: string) {

@@ -69,6 +69,16 @@ export class AuthRateLimitService implements OnModuleDestroy {
     );
   }
 
+  async assertTicketAnalysisAllowed(ipAddress: string | undefined) {
+    if (!this.enabled()) return;
+    await this.consume(
+      'ticket-analysis-ip',
+      this.normalizeIp(ipAddress),
+      this.positiveInt('TICKET_ANALYSIS_IP_MAX', 12),
+      this.positiveInt('TICKET_ANALYSIS_WINDOW_SECONDS', 60 * 60)
+    );
+  }
+
   async onModuleDestroy() {
     if (!this.redis?.isOpen) return;
     try {

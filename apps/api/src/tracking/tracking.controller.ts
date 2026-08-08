@@ -40,6 +40,29 @@ export class TrackingController {
   }
 
   @ApiBearerAuth()
+  @Permissions()
+  @Patch('trips/:tripId/endpoints')
+  updateEndpoints(
+    @CurrentUser() user: AuthUser,
+    @Param('tripId') tripId: string,
+    @Body()
+    body: {
+      originAddress: string;
+      originLatitude: number;
+      originLongitude: number;
+      destinationAddress: string;
+      destinationLatitude: number;
+      destinationLongitude: number;
+      geometry: unknown;
+      waypoints?: unknown;
+      distanceKm?: number;
+      durationMinutes?: number;
+    }
+  ) {
+    return this.routeEditing.updateEndpoints(user, tripId, body);
+  }
+
+  @ApiBearerAuth()
   @Permissions('trip:update:own')
   @Post('trips/:tripId/location')
   updateDriverLocation(

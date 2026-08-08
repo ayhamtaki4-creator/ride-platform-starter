@@ -7,12 +7,16 @@ import { AdminService } from './admin.service';
 import { AssignDriverDto } from './dto/assign-driver.dto';
 import { ReassignDriverDto } from './dto/reassign-driver.dto';
 import { UnassignDriverDto } from './dto/unassign-driver.dto';
+import { DriverDayAssignmentPolicyService } from './driver-day-assignment-policy.service';
 
 @ApiTags('Administration')
 @ApiBearerAuth()
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly dayAssignmentPolicy: DriverDayAssignmentPolicyService
+  ) {}
 
   @Permissions('trip:read:any')
   @Get('trips/pending')
@@ -28,11 +32,12 @@ export class AdminController {
 
   @Permissions('trip:update:any')
   @Post('trips/:tripId/assign-driver')
-  assignDriver(
+  async assignDriver(
     @CurrentUser() user: AuthUser,
     @Param('tripId') tripId: string,
     @Body() dto: AssignDriverDto
   ) {
+    await this.dayAssignmentPolicy.assertCanAssign(tripId, dto.driverId);
     return this.adminService.assignDriver(user, tripId, dto.driverId, dto.vehicleId);
   }
 
@@ -48,11 +53,12 @@ export class AdminController {
 
   @Permissions('trip:update:any')
   @Post('trips/:tripId/reassign-driver')
-  reassignDriver(
+  async reassignDriver(
     @CurrentUser() user: AuthUser,
     @Param('tripId') tripId: string,
     @Body() dto: ReassignDriverDto
   ) {
+    await this.dayAssignmentPolicy.assertCanAssign(tripId, dto.driverId);
     return this.adminService.reassignDriver(
       user,
       tripId,

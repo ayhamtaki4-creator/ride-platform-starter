@@ -11,11 +11,13 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '../iam/auth-user.type';
 import { CurrentUser } from '../iam/current-user.decorator';
 import { Permissions } from '../iam/permissions.decorator';
+import { AdminDriverContactService } from './admin-driver-contact.service';
 import { AdminDriverManagementService } from './admin-driver-management.service';
 import { AddVehicleImageDto } from './dto/add-vehicle-image.dto';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateAccessRegionsDto } from './dto/update-access-regions.dto';
+import { UpdateDriverContactDto } from './dto/update-driver-contact.dto';
 import { UpdateDriverProfileDto } from './dto/update-driver-profile.dto';
 import { UpdateDriverStatusDto } from './dto/update-driver-status.dto';
 import { UpdateDriverVehicleDto } from './dto/update-driver-vehicle.dto';
@@ -24,7 +26,10 @@ import { UpdateDriverVehicleDto } from './dto/update-driver-vehicle.dto';
 @ApiBearerAuth()
 @Controller('admin/drivers')
 export class AdminDriverManagementController {
-  constructor(private readonly drivers: AdminDriverManagementService) {}
+  constructor(
+    private readonly drivers: AdminDriverManagementService,
+    private readonly contacts: AdminDriverContactService
+  ) {}
 
   @Permissions('driver:review')
   @Get()
@@ -62,6 +67,16 @@ export class AdminDriverManagementController {
     @Body() dto: UpdateDriverProfileDto
   ) {
     return this.drivers.updateProfile(user, driverId, dto);
+  }
+
+  @Permissions('driver:review')
+  @Patch(':driverId/contact')
+  updateContact(
+    @CurrentUser() user: AuthUser,
+    @Param('driverId') driverId: string,
+    @Body() dto: UpdateDriverContactDto
+  ) {
+    return this.contacts.update(user, driverId, dto.phone);
   }
 
   @Permissions('driver:review')

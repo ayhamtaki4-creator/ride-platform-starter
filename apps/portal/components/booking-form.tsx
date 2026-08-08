@@ -55,6 +55,10 @@ type RouteBookingPolicy = {
   flightTimeMode: "ARRIVAL" | "DEPARTURE";
 };
 
+type FlightTicketAnalysisResponse = {
+  extraction: FlightTicketExtraction;
+};
+
 type BookingFormState = PendingBookingForm;
 type PickerButtonProps = {
   value?: string;
@@ -495,6 +499,30 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     }
   }
 
+  async function analyzeTicketFile(file: File, routeId: string) {
+    setTicketWorking(true);
+    setError("");
+    try {
+      const data = new FormData();
+      data.set("file", file);
+      if (routeId) data.set("routeId", routeId);
+      const result = await apiUpload<FlightTicketAnalysisResponse>(
+        "/bookings/flight-ticket/analyze",
+        data,
+        { skipAuth: true },
+      );
+      setTicketExtraction(result.extraction);
+      if (result.extraction.warning) {
+        showToast(result.extraction.warning, result.extraction.status === "EXTRACTED" ? "success" : "info");
+      } else {
+        showToast("تم تحليل التذكرة وتعبئة بيانات الرحلة قبل تسجيل الدخول.", "success");
+      }
+      return result.extraction;
+    } finally {
+      setTicketWorking(false);
+    }
+  }
+
   function withExtraction(candidate: BookingFormState, upload: FlightTicketUploadResponse): BookingFormState {
     const { extraction } = upload;
     return {
@@ -505,6 +533,21 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       flightArrivalTime: extraction.arrivalTime || candidate.flightArrivalTime,
       flightNumber: extraction.flightNumber || candidate.flightNumber,
       passengerName: candidate.passengerName.trim() ? candidate.passengerName : extraction.passengerName || candidate.passengerName,
+    };
+  }
+
+  function withPublicExtraction(
+    candidate: BookingFormState,
+    extraction: FlightTicketExtraction,
+  ): BookingFormState {
+    return {
+      ...candidate,
+      travelDate: extraction.arrivalDate || candidate.travelDate,
+      flightArrivalTime: extraction.arrivalTime || candidate.flightArrivalTime,
+      flightNumber: extraction.flightNumber || candidate.flightNumber,
+      passengerName: candidate.passengerName.trim()
+        ? candidate.passengerName
+        : extraction.passengerName || candidate.passengerName,
     };
   }
 
@@ -536,7 +579,10 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         setForm(extracted);
         savePendingBooking({ id: draftId, form: extracted, step, submitAfterAuth: false });
       } else {
-        showToast("تم حفظ ملف التذكرة مؤقتًا، وسيُحلل تلقائيًا بعد تسجيل الدخول.", "success");
+        const extraction = await analyzeTicketFile(file, candidate.routeId);
+        const extracted = withPublicExtraction(candidate, extraction);
+        setForm(extracted);
+        savePendingBooking({ id: draftId, form: extracted, step, submitAfterAuth: false });
       }
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "تعذر حفظ أو تحليل التذكرة.";
@@ -710,12 +756,12 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
 
             {isTicketUploadEnabled ? (
               <section className={`flight-ticket-upload ${form.flightTicketFileName ? "has-file" : ""}`}>
-                <div className="flight-ticket-upload-copy"><span className="flight-ticket-icon"><Icon name="plane" size={24} /></span><div><strong>أرفق تذكرة الطيران (إختياري)</strong><small>سنقرأ تاريخ ووقت الرحلة ورقم الرحلة تلقائيًا. الصيغ: JPG، PNG، WEBP أو PDF حتى 10 MB.</small></div></div>
+                <div className="flight-ticket-upload-copy"><span className="flight-ticket-icon"><Icon name="plane" size={24} /></span><div><strong>أرفق تذكرة الطيران (إختياري)</strong><small>سنقرأ تاريخ ووقت الرحلة ورقم الرحلة تلقائيًا حتى قبل تسجيل الدخول. الصيغ: JPG، PNG، WEBP أو PDF حتى 10 MB.</small></div></div>
                 <label className={`button ${form.flightTicketFileName ? "" : "primary"}`}>
                   <input hidden type="file" accept="image/jpeg,image/png,image/webp,application/pdf" disabled={ticketWorking} onChange={(event) => void handleTicketSelected(event.target.files?.[0])} />
                   {ticketWorking ? "جارٍ تحليل التذكرة..." : form.flightTicketFileName ? "استبدال التذكرة" : "اختيار التذكرة"}
                 </label>
-                {form.flightTicketFileName ? <div className="flight-ticket-result"><Icon name="check" size={18} /><span><strong>{form.flightTicketFileName}</strong><small>{form.flightTicketMediaId ? "تم رفعها وحفظها بصورة خاصة" : "محفوظة مؤقتًا حتى تسجيل الدخول"}</small></span></div> : null}
+                {form.flightTicketFileName ? <div className="flight-ticket-result"><Icon name="check" size={18} /><span><strong>{form.flightTicketFileName}</strong><small>{form.flightTicketMediaId ? "تم رفعها وحفظها بصورة خاصة" : "تم تحليلها ومحفوظة مؤقتًا حتى تسجيل الدخول"}</small></span></div> : null}
                 {ticketExtraction ? <div className={`ticket-extraction-status ${ticketExtraction.status === "EXTRACTED" ? "success" : "warning"}`}><strong>{ticketExtraction.status === "EXTRACTED" ? "تمت تعبئة البيانات تلقائيًا" : "تحتاج البيانات إلى مراجعة"}</strong><span>دقة القراءة التقريبية: {Math.round(ticketExtraction.confidence * 100)}%</span>{ticketExtraction.warning ? <small>{ticketExtraction.warning}</small> : null}</div> : null}
               </section>
             ) : null}

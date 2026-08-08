@@ -57,6 +57,10 @@ function bookingForm(booking: Trip): BookingEditForm {
   };
 }
 
+function mapPointUrl(latitude: number, longitude: number) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
+}
+
 export default function AdminBookingDetailPage() {
   const params = useParams<{ id: string }>();
   const [booking, setBooking] = useState<Trip | null>(null);
@@ -215,6 +219,26 @@ export default function AdminBookingDetailPage() {
 
             <section className="panel">
               <div className="section-heading">
+                <div>
+                  <span className="eyebrow">الموقع الفعلي للحجز</span>
+                  <h2>موقع الالتقاط الذي حدده المسافر</h2>
+                  <p className="subtitle">هذه بيانات الحجز نفسه وليست نقطة الانطلاق الافتراضية الموجودة في قالب المسار.</p>
+                </div>
+                <div className="actions">
+                  <a className="button primary" href={mapPointUrl(booking.pickupLatitude, booking.pickupLongitude)} target="_blank" rel="noopener noreferrer">فتح نقطة الالتقاط</a>
+                  <Link className="button" href={`/admin/bookings/${booking.id}/tracking`}>فتح خريطة الحجز</Link>
+                </div>
+              </div>
+              <div className="detail-list">
+                <div><span>عنوان الالتقاط</span><strong>{booking.pickupAddress}</strong></div>
+                <div><span>إحداثيات الالتقاط</span><strong dir="ltr">{booking.pickupLatitude.toFixed(6)}, {booking.pickupLongitude.toFixed(6)}</strong></div>
+                <div><span>عنوان الوصول</span><strong>{booking.dropoffAddress}</strong></div>
+                <div><span>إحداثيات الوصول</span><strong dir="ltr">{booking.dropoffLatitude.toFixed(6)}, {booking.dropoffLongitude.toFixed(6)}</strong></div>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="section-heading">
                 <div><h2>إجراءات الإدارة</h2><p className="subtitle">تستطيع الإدارة تنفيذ الإجراءات نيابة عن مركز العمليات دون انتظار صفحات أخرى.</p></div>
               </div>
               <div className="actions">
@@ -255,7 +279,7 @@ export default function AdminBookingDetailPage() {
                   <button className="button primary full-width" disabled={working === "save"} type="submit">{working === "save" ? "جارٍ الحفظ..." : "حفظ التعديلات"}</button>
                 </form>
                 <div className="notice">
-                  <strong>نقاط المسار:</strong> {booking.pickupAddress} ← {booking.dropoffAddress}
+                  <strong>نقاط الحجز الحالية:</strong> {booking.pickupAddress} ← {booking.dropoffAddress}
                   <br />لتعديل المكان الدقيق والإحداثيات استخدم زر «الخريطة والمسار» حتى يتحدث الطريق معها بصورة صحيحة.
                 </div>
                 {booking.flightTicketMedia ? (
@@ -276,7 +300,7 @@ export default function AdminBookingDetailPage() {
                 {booking.routeId && booking.travelDate ? (
                   <div className="eligible-dispatch-panel">
                     <div className="section-heading">
-                      <div><strong>{booking.driver ? "تغيير السائق" : "تعيين سائق"}</strong><small>السائق الذي يعمل الآن سيظهر أيضًا إذا لم يكن لديه تعارض في تاريخ هذا الحجز.</small></div>
+                      <div><strong>{booking.driver ? "تغيير السائق" : "تعيين سائق"}</strong><small>يمكن للسائق نفسه تنفيذ رحلتي ذهاب وإياب في اليوم نفسه عندما يكون المسار الثاني معكوسًا تمامًا للمسار الأول.</small></div>
                       <button className="button" disabled={working === "eligible"} type="button" onClick={() => void loadEligibleDrivers()}>{working === "eligible" ? "جارٍ الفحص..." : "تحميل السائقين المؤهلين"}</button>
                     </div>
                     {eligible.length ? (
