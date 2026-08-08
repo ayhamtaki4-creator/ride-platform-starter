@@ -1,0 +1,104 @@
+name: Mobile E2E
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, "agent/**"]
+
+concurrency:
+  group: mobile-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mobile-chrome:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_USER: ride
+          POSTGRES_PASSWORD: ride_password
+          POSTGRES_DB: ride_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ride -d ride_platform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgresql://ride:ride_password@127.0.0.1:5432/ride_platform?schema=public
+      DIRECT_URL: postgresql://ride:ride_password@127.0.0.1:5432/ride_platform?schema=public
+      REDIS_URL: redis://127.0.0.1:6379
+      JWT_SECRET: mobile-e2e-jwt-secret
+      JWT_EXPIRES_IN: 15m
+      REFRESH_TOKEN_EXPIRES_DAYS: 30
+      PORT: 4000
+      WEB_ORIGINS: http://127.0.0.1:3000,http://localhost:3000
+      PUBLIC_API_URL: http://127.0.0.1:4000
+      PORTAL_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:4000/api
+      MEDIA_STORAGE_ROOT: ./storage/media-e2e
+      TELEGRAM_ENABLED: "false"
+      WHATSAPP_ENABLED: "false"
+      E2E_BASE_URL: http://127.0.0.1:3000
+      E2E_API_URL: http://127.0.0.1:4000/api
+      CI: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.0.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Apply database migrations
+        run: pnpm --filter api run prisma:deploy
+
+      - name: Seed E2E data
+        run: pnpm db:seed
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run mobile Playwright suite
+        run: pnpm exec playwright test e2e/tests/mobile-shell.spec.ts --project=chromium
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-playwright-report-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7
