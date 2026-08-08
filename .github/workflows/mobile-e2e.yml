@@ -48,6 +48,11 @@ jobs:
       REFRESH_TOKEN_EXPIRES_DAYS: 30
       PORT: 4100
       WEB_ORIGINS: http://127.0.0.1:3000,http://localhost:3000
+      TRUST_PROXY_HOPS: "0"
+      AUTH_RATE_LIMIT_ENABLED: "true"
+      AUTH_LOGIN_IDENTITY_MAX: "3"
+      AUTH_LOGIN_IP_MAX: "40"
+      AUTH_LOGIN_WINDOW_SECONDS: "900"
       PUBLIC_API_URL: http://127.0.0.1:4100
       PORTAL_URL: http://127.0.0.1:3000
       NEXT_PUBLIC_API_URL: http://127.0.0.1:4100/api
@@ -89,8 +94,8 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run mobile and health Playwright suites
-        run: pnpm exec playwright test e2e/tests/mobile-shell.spec.ts e2e/tests/health.spec.ts --project=chromium
+      - name: Run mobile, health, and auth security Playwright suites
+        run: pnpm exec playwright test e2e/tests/mobile-shell.spec.ts e2e/tests/health.spec.ts e2e/tests/auth-rate-limit.spec.ts --project=chromium
 
       - name: Upload Playwright report on failure
         if: failure()
