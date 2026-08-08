@@ -52,43 +52,60 @@ export class BookingRoutePlanService {
       const geometry = JSON.stringify(result.route.geometry);
       const distanceKm = result.route.distanceKm;
       const durationMinutes = result.route.durationMinutes;
+      const endpointGuard = Prisma.sql`
+        ABS(current_trip."pickupLatitude" - ${trip.pickupLatitude}) < 0.0000001
+        AND ABS(current_trip."pickupLongitude" - ${trip.pickupLongitude}) < 0.0000001
+        AND ABS(current_trip."dropoffLatitude" - ${trip.dropoffLatitude}) < 0.0000001
+        AND ABS(current_trip."dropoffLongitude" - ${trip.dropoffLongitude}) < 0.0000001
+      `;
 
-      const updatedPlans = await this.prisma.$executeRaw(Prisma.sql`
-        UPDATE "TripRoutePlan" plan
-        SET "geometry" = ${geometry}::jsonb,
-            "waypoints" = '[]'::jsonb,
-            "distanceKm" = ${distanceKm},
-            "durationMinutes" = ${durationMinutes},
-            "version" = plan."version" + 1,
-            "updatedAt" = CURRENT_TIMESTAMP
-        WHERE plan."tripId" = ${trip.id}::uuid
-          AND plan."lockedAt" IS NULL
-          AND EXISTS (
-            SELECT 1
-            FROM "Trip" current_trip
-            WHERE current_trip."id" = plan."tripId"
-              AND current_trip."status"::text = 'PENDING_DISPATCH'
-              AND current_trip."bookingReviewStatus"::text = 'NEW'
-              AND current_trip."driverAssignmentStatus"::text = 'UNASSIGNED'
-              AND current_trip."driverId" IS NULL
-              AND current_trip."serviceRunId" IS NULL
-          )
-      `);
+      const persisted = await this.prisma.$transaction(async (tx) => {
+        const updatedPlans = await tx.$executeRaw(Prisma.sql`
+          UPDATE "TripRoutePlan" plan
+          SET "geometry" = ${geometry}::jsonb,
+              "waypoints" = '[]'::jsonb,
+              "distanceKm" = ${distanceKm},
+              "durationMinutes" = ${durationMinutes},
+              "version" = plan."version" + 1,
+              "updatedAt" = CURRENT_TIMESTAMP
+          WHERE plan."tripId" = ${trip.id}::uuid
+            AND plan."lockedAt" IS NULL
+            AND EXISTS (
+              SELECT 1
+              FROM "Trip" current_trip
+              WHERE current_trip."id" = plan."tripId"
+                AND current_trip."status"::text = 'PENDING_DISPATCH'
+                AND current_trip."bookingReviewStatus"::text = 'NEW'
+                AND current_trip."driverAssignmentStatus"::text = 'UNASSIGNED'
+                AND current_trip."driverId" IS NULL
+                AND current_trip."serviceRunId" IS NULL
+                AND ${endpointGuard}
+            )
+        `);
 
-      if (updatedPlans === 0) return null;
+        if (updatedPlans === 0) return false;
 
-      await this.prisma.$executeRaw(Prisma.sql`
-        UPDATE "Trip"
-        SET "estimatedDistanceKm" = ${distanceKm},
-            "estimatedDurationMinutes" = ${durationMinutes},
-            "updatedAt" = CURRENT_TIMESTAMP
-        WHERE "id" = ${trip.id}::uuid
-          AND "status"::text = 'PENDING_DISPATCH'
-          AND "bookingReviewStatus"::text = 'NEW'
-          AND "driverAssignmentStatus"::text = 'UNASSIGNED'
-          AND "driverId" IS NULL
-          AND "serviceRunId" IS NULL
-      `);
+        const updatedTrips = await tx.$executeRaw(Prisma.sql`
+          UPDATE "Trip" current_trip
+          SET "estimatedDistanceKm" = ${distanceKm},
+              "estimatedDurationMinutes" = ${durationMinutes},
+              "updatedAt" = CURRENT_TIMESTAMP
+          WHERE current_trip."id" = ${trip.id}::uuid
+            AND current_trip."status"::text = 'PENDING_DISPATCH'
+            AND current_trip."bookingReviewStatus"::text = 'NEW'
+            AND current_trip."driverAssignmentStatus"::text = 'UNASSIGNED'
+            AND current_trip."driverId" IS NULL
+            AND current_trip."serviceRunId" IS NULL
+            AND ${endpointGuard}
+        `);
+
+        if (updatedTrips === 0) {
+          throw new Error('Booking endpoints changed before route enrichment completed');
+        }
+        return true;
+      });
+
+      if (!persisted) return null;
 
       return {
         provider: result.provider,
