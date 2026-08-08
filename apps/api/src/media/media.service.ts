@@ -25,6 +25,14 @@ export interface UploadedMediaFile {
   buffer: Buffer;
 }
 
+export type MediaVariantKind = 'ORIGINAL' | 'DISPLAY' | 'THUMBNAIL';
+
+type VariantRow = {
+  id: string;
+  storagePath: string;
+  variantKind: string | null;
+};
+
 const MIME_EXTENSIONS: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
@@ -75,6 +83,10 @@ export class MediaService implements OnModuleInit {
     return `${this.publicApiUrl}/api/media/public/${id}`;
   }
 
+  publicVariantUrl(id: string, variant: 'display' | 'thumbnail') {
+    return `${this.publicUrl(id)}?variant=${variant}`;
+  }
+
   adminFileUrl(id: string) {
     return `${this.publicApiUrl}/api/admin/media/${id}/file`;
   }
@@ -105,9 +117,33 @@ export class MediaService implements OnModuleInit {
       );
     }
 
-    const visibility = DOCUMENT_PURPOSES.includes(dto.purpose)
-      ? MediaVisibility.PRIVATE
-      : dto.visibility ?? MediaVisibility.PUBLIC;
+    const variantKind: MediaVariantKind = dto.variantKind ?? 'ORIGINAL';
+    let variantParent: { id: string; visibility: MediaVisibility } | null = null;
+    if (dto.variantOfId) {
+      if (dto.purpose !== MediaPurpose.VEHICLE_IMAGE || variantKind === 'ORIGINAL') {
+        throw new BadRequestException('نسخ الصور المصغرة والمتوسطة مدعومة لصور المركبات فقط.');
+      }
+      variantParent = await this.prisma.mediaAsset.findFirst({
+        where: {
+          id: dto.variantOfId,
+          purpose: MediaPurpose.VEHICLE_IMAGE,
+          uploadedById: actor.sub,
+          deletedAt: null
+        },
+        select: { id: true, visibility: true, metadata: true }
+      });
+      if (!variantParent || this.variantOfId(variantParent.metadata)) {
+        throw new BadRequestException('الصورة الأصلية المرتبطة بالنسخة غير صالحة.');
+      }
+    } else if (variantKind !== 'ORIGINAL') {
+      throw new BadRequestException('يجب تحديد الصورة الأصلية لهذه النسخة.');
+    }
+
+    const visibility = variantParent
+      ? variantParent.visibility
+      : DOCUMENT_PURPOSES.includes(dto.purpose)
+        ? MediaVisibility.PRIVATE
+        : dto.visibility ?? MediaVisibility.PUBLIC;
     const storedName = `${randomUUID()}${extension}`;
     const localStoragePath = resolve(this.root, storedName);
     if (!localStoragePath.startsWith(this.root)) throw new BadRequestException('مسار التخزين غير صالح.');
@@ -133,7 +169,9 @@ export class MediaService implements OnModuleInit {
           visibility,
           uploadedById: actor.sub,
           metadata: {
-            storageProvider: this.r2.enabled ? 'R2' : 'LOCAL'
+            storageProvider: this.r2.enabled ? 'R2' : 'LOCAL',
+            variantKind,
+            ...(variantParent ? { variantOfId: variantParent.id } : {})
           }
         }
       });
@@ -143,6 +181,8 @@ export class MediaService implements OnModuleInit {
         mimeType: asset.mimeType,
         sizeBytes: asset.sizeBytes,
         sha256: asset.sha256,
+        variantKind,
+        variantOfId: variantParent?.id ?? null,
         storageProvider: this.r2.enabled ? 'R2' : 'LOCAL'
       });
       return this.serialize(asset);
@@ -160,31 +200,52 @@ export class MediaService implements OnModuleInit {
         ...(purpose ? { purpose: purpose as never } : {})
       },
       orderBy: { createdAt: 'desc' },
-      take: 200,
+      take: 600,
       include: {
         uploadedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
         approvedBy: { select: { id: true, firstName: true, lastName: true } }
       }
     });
-    return assets.map((asset) => this.serialize(asset));
+    return assets
+      .filter((asset) => !this.variantOfId(asset.metadata))
+      .slice(0, 200)
+      .map((asset) => this.serialize(asset));
   }
 
   async approve(actor: AuthUser, id: string) {
     const asset = await this.getExisting(id);
     if (asset.status === 'DELETED') throw new ConflictException('الملف محذوف.');
+    if (this.variantOfId(asset.metadata)) {
+      throw new ConflictException('اعتمد الصورة الأصلية وسيتم اعتماد نسخها تلقائيًا.');
+    }
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      const approvedAt = new Date();
       const approved = await tx.mediaAsset.update({
         where: { id },
         data: {
           status: 'APPROVED',
           approvedById: actor.sub,
-          approvedAt: new Date(),
+          approvedAt,
           rejectedAt: null,
           rejectionReason: null
         }
       });
-      const publicUrl = this.publicUrl(id);
+      const variants = await this.variantRows(tx, id);
+      if (variants.length) {
+        await tx.mediaAsset.updateMany({
+          where: { id: { in: variants.map((variant) => variant.id) } },
+          data: {
+            status: 'APPROVED',
+            approvedById: actor.sub,
+            approvedAt,
+            rejectedAt: null,
+            rejectionReason: null
+          }
+        });
+      }
+      const displayVariant = variants.find((variant) => variant.variantKind === 'DISPLAY');
+      const publicUrl = this.publicUrl(displayVariant?.id ?? id);
       await tx.driverProfile.updateMany({
         where: { avatarMediaId: id },
         data: { avatarUrl: publicUrl }
@@ -203,7 +264,7 @@ export class MediaService implements OnModuleInit {
           action: 'media.approve',
           entityType: 'MediaAsset',
           entityId: id,
-          metadata: { purpose: approved.purpose }
+          metadata: { purpose: approved.purpose, variants: variants.map((variant) => variant.variantKind) }
         }
       });
       return approved;
@@ -214,18 +275,35 @@ export class MediaService implements OnModuleInit {
   async reject(actor: AuthUser, id: string, reason: string) {
     const asset = await this.getExisting(id);
     if (asset.status === 'DELETED') throw new ConflictException('الملف محذوف.');
+    if (this.variantOfId(asset.metadata)) {
+      throw new ConflictException('ارفض الصورة الأصلية وسيتم رفض نسخها تلقائيًا.');
+    }
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      const rejectedAt = new Date();
       const rejected = await tx.mediaAsset.update({
         where: { id },
         data: {
           status: 'REJECTED',
           approvedById: actor.sub,
           approvedAt: null,
-          rejectedAt: new Date(),
+          rejectedAt,
           rejectionReason: reason.trim()
         }
       });
+      const variants = await this.variantRows(tx, id);
+      if (variants.length) {
+        await tx.mediaAsset.updateMany({
+          where: { id: { in: variants.map((variant) => variant.id) } },
+          data: {
+            status: 'REJECTED',
+            approvedById: actor.sub,
+            approvedAt: null,
+            rejectedAt,
+            rejectionReason: reason.trim()
+          }
+        });
+      }
       await tx.driverProfile.updateMany({
         where: { avatarMediaId: id },
         data: { avatarUrl: null }
@@ -258,10 +336,14 @@ export class MediaService implements OnModuleInit {
       include: { driverDocument: true, vehicleDocument: true }
     });
     if (!asset || asset.deletedAt) throw new NotFoundException('الملف غير موجود.');
+    if (this.variantOfId(asset.metadata)) {
+      throw new ConflictException('احذف الصورة الأصلية لحذف جميع نسخها معًا.');
+    }
     if (asset.driverDocument || asset.vehicleDocument) {
       throw new ConflictException('لا يمكن حذف ملف مرتبط بوثيقة. ارفض الوثيقة أو استبدلها أولًا.');
     }
 
+    const variants = await this.variantRows(this.prisma, id);
     await this.prisma.$transaction(async (tx) => {
       await tx.driverProfile.updateMany({
         where: { avatarMediaId: id },
@@ -272,20 +354,31 @@ export class MediaService implements OnModuleInit {
         data: { primaryImageMediaId: null, primaryImageUrl: null }
       });
       await tx.vehicleImage.deleteMany({ where: { mediaAssetId: id } });
+      const deletedAt = new Date();
       await tx.mediaAsset.update({
         where: { id },
-        data: { status: 'DELETED', deletedAt: new Date() }
+        data: { status: 'DELETED', deletedAt }
       });
+      if (variants.length) {
+        await tx.mediaAsset.updateMany({
+          where: { id: { in: variants.map((variant) => variant.id) } },
+          data: { status: 'DELETED', deletedAt }
+        });
+      }
       await tx.auditLog.create({
         data: {
           actorId: actor.sub,
           action: 'media.delete',
           entityType: 'MediaAsset',
-          entityId: id
+          entityId: id,
+          metadata: { variantIds: variants.map((variant) => variant.id) }
         }
       });
     });
-    await this.deleteStoredObject(asset.storagePath).catch(() => undefined);
+    await Promise.allSettled([
+      this.deleteStoredObject(asset.storagePath),
+      ...variants.map((variant) => this.deleteStoredObject(variant.storagePath))
+    ]);
     return { success: true };
   }
 
@@ -300,6 +393,27 @@ export class MediaService implements OnModuleInit {
     });
     if (!asset) throw new NotFoundException('الصورة غير موجودة أو غير معتمدة.');
     return this.fileResult(asset);
+  }
+
+  async publicVariantAssetId(id: string, variant?: string) {
+    if (variant !== 'display' && variant !== 'thumbnail') return id;
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT "id"
+      FROM "MediaAsset"
+      WHERE "deletedAt" IS NULL
+        AND "status"::text = 'APPROVED'
+        AND "visibility"::text = 'PUBLIC'
+        AND "metadata"->>'variantOfId' = ${id}
+        AND "metadata"->>'variantKind' = ${variant === 'display' ? 'DISPLAY' : 'THUMBNAIL'}
+      ORDER BY "createdAt" DESC
+      LIMIT 1
+    `;
+    return rows[0]?.id ?? id;
+  }
+
+  async preferredPublicUrl(id: string) {
+    const displayId = await this.publicVariantAssetId(id, 'display');
+    return this.publicUrl(displayId);
   }
 
   async adminFile(id: string) {
@@ -336,6 +450,9 @@ export class MediaService implements OnModuleInit {
     if (expectedVisibility && asset.visibility !== expectedVisibility) {
       throw new BadRequestException('خصوصية الملف غير متوافقة مع الاستخدام المطلوب.');
     }
+    if (this.variantOfId(asset.metadata)) {
+      throw new BadRequestException('يجب ربط الصورة الأصلية، وليس نسخة العرض أو الصورة المصغرة.');
+    }
     return asset;
   }
 
@@ -343,6 +460,25 @@ export class MediaService implements OnModuleInit {
     const asset = await this.prisma.mediaAsset.findUnique({ where: { id } });
     if (!asset || asset.deletedAt) throw new NotFoundException('الملف غير موجود.');
     return asset;
+  }
+
+  private async variantRows(
+    db: Prisma.TransactionClient | PrismaService,
+    parentId: string
+  ): Promise<VariantRow[]> {
+    return db.$queryRaw<VariantRow[]>`
+      SELECT "id", "storagePath", "metadata"->>'variantKind' AS "variantKind"
+      FROM "MediaAsset"
+      WHERE "deletedAt" IS NULL
+        AND "metadata"->>'variantOfId' = ${parentId}
+      ORDER BY "createdAt" ASC
+    `;
+  }
+
+  private variantOfId(metadata: Prisma.JsonValue | null | undefined) {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+    const value = (metadata as Record<string, unknown>).variantOfId;
+    return typeof value === 'string' && value ? value : null;
   }
 
   private async fileResult(asset: { storagePath: string; mimeType: string; originalName: string; sizeBytes: number }) {
@@ -372,9 +508,14 @@ export class MediaService implements OnModuleInit {
     await unlink(storagePath).catch(() => undefined);
   }
 
-  private serialize<T extends { id: string; visibility: string; status: string; deletedAt?: Date | null }>(asset: T) {
+  private serialize<T extends { id: string; visibility: string; status: string; deletedAt?: Date | null; metadata?: Prisma.JsonValue | null }>(asset: T) {
+    const metadata = asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata)
+      ? asset.metadata as Record<string, unknown>
+      : {};
     return {
       ...asset,
+      variantKind: typeof metadata.variantKind === 'string' ? metadata.variantKind : 'ORIGINAL',
+      variantOfId: typeof metadata.variantOfId === 'string' ? metadata.variantOfId : null,
       publicUrl:
         asset.visibility === 'PUBLIC' && asset.status === 'APPROVED' && !asset.deletedAt
           ? this.publicUrl(asset.id)
