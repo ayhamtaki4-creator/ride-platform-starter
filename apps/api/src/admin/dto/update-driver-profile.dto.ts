@@ -2,12 +2,6 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
 
 export class UpdateDriverProfileDto {
-  @ApiPropertyOptional({ description: 'رقم التواصل الدولي المستخدم في WhatsApp' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(40)
-  phone?: string;
-
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
