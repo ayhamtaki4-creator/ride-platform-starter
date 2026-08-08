@@ -27,17 +27,15 @@ export class VehicleImageManagementService {
     if (!image) {
       throw new NotFoundException('صورة المركبة غير موجودة لهذا السائق.');
     }
-    if (
-      !image.isApproved ||
-      !image.mediaAsset ||
-      image.mediaAsset.status !== 'APPROVED' ||
-      image.mediaAsset.deletedAt
-    ) {
+    if (!image.isApproved) {
       throw new BadRequestException('يجب اعتماد الصورة قبل تعيينها كصورة رئيسية.');
     }
+    if (image.mediaAsset && (image.mediaAsset.status !== 'APPROVED' || image.mediaAsset.deletedAt)) {
+      throw new BadRequestException('ملف الصورة غير معتمد أو محذوف.');
+    }
 
-    const mediaAssetId = image.mediaAsset.id;
-    const publicUrl = this.media.publicUrl(mediaAssetId);
+    const mediaAssetId = image.mediaAsset?.id ?? null;
+    const publicUrl = mediaAssetId ? this.media.publicUrl(mediaAssetId) : image.url;
 
     await this.prisma.$transaction(async (tx) => {
       await tx.vehicleImage.updateMany({
@@ -61,7 +59,7 @@ export class VehicleImageManagementService {
           action: 'vehicle.image.primary',
           entityType: 'VehicleImage',
           entityId: image.id,
-          metadata: { driverId, vehicleId, mediaAssetId }
+          metadata: { driverId, vehicleId, mediaAssetId, publicUrl }
         }
       });
     });
