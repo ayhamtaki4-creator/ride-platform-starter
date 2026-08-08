@@ -37,7 +37,9 @@ export function RiderBookingLiveMap({ tripId }: { tripId: string }) {
       setData((current) => current ? { ...current, liveLocation: location } : current);
     };
     socket.on("trip.location.updated", onLocation);
-    return () => socket.off("trip.location.updated", onLocation);
+    return () => {
+      socket.off("trip.location.updated", onLocation);
+    };
   }, [socket, tripId]);
 
   async function shareTrip() {
