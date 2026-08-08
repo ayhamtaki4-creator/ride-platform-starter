@@ -88,8 +88,7 @@ export class BookingRoutePlanService {
         const updatedTrips = await tx.$executeRaw(Prisma.sql`
           UPDATE "Trip" current_trip
           SET "estimatedDistanceKm" = ${distanceKm},
-              "estimatedDurationMinutes" = ${durationMinutes},
-              "updatedAt" = CURRENT_TIMESTAMP
+              "estimatedDurationMinutes" = ${durationMinutes}
           WHERE current_trip."id" = ${trip.id}::uuid
             AND current_trip."status"::text = 'PENDING_DISPATCH'
             AND current_trip."bookingReviewStatus"::text = 'NEW'
