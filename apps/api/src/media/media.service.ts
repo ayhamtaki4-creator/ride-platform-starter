@@ -14,6 +14,7 @@ import { basename, resolve } from 'path';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadMediaDto } from './dto/upload-media.dto';
+import { R2ObjectStorageService } from './r2-object-storage.service';
 
 export interface UploadedMediaFile {
   originalname: string;
@@ -44,19 +45,24 @@ export class MediaService implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly r2: R2ObjectStorageService
   ) {
     const configuredRoot = this.config.get<string>('MEDIA_STORAGE_ROOT') ?? './storage/media';
     this.root = resolve(process.cwd(), configuredRoot);
     const maxMb = Number(this.config.get<string>('MEDIA_MAX_FILE_MB') ?? '10');
     this.maxBytes = Math.max(1, Number.isFinite(maxMb) ? maxMb : 10) * 1024 * 1024;
     this.publicApiUrl = (
-      this.config.get<string>('PUBLIC_API_URL') ?? `http://localhost:${this.config.get<number>('PORT', 4000)}`
+      this.config.get<string>('PUBLIC_API_URL') ??
+      this.config.get<string>('RENDER_EXTERNAL_URL') ??
+      `http://localhost:${this.config.get<number>('PORT', 4000)}`
     ).replace(/\/$/, '');
   }
 
   async onModuleInit() {
-    await mkdir(this.root, { recursive: true });
+    if (!this.r2.enabled) {
+      await mkdir(this.root, { recursive: true });
+    }
   }
 
   publicUrl(id: string) {
@@ -92,10 +98,15 @@ export class MediaService implements OnModuleInit {
       ? MediaVisibility.PRIVATE
       : dto.visibility ?? MediaVisibility.PUBLIC;
     const storedName = `${randomUUID()}${extension}`;
-    const storagePath = resolve(this.root, storedName);
-    if (!storagePath.startsWith(this.root)) throw new BadRequestException('مسار التخزين غير صالح.');
+    const localStoragePath = resolve(this.root, storedName);
+    if (!localStoragePath.startsWith(this.root)) throw new BadRequestException('مسار التخزين غير صالح.');
 
-    await writeFile(storagePath, file.buffer, { flag: 'wx' });
+    let storagePath = localStoragePath;
+    if (this.r2.enabled) {
+      storagePath = await this.r2.put(storedName, file.buffer, file.mimetype);
+    } else {
+      await writeFile(localStoragePath, file.buffer, { flag: 'wx' });
+    }
     const sha256 = createHash('sha256').update(file.buffer).digest('hex');
 
     try {
@@ -109,7 +120,10 @@ export class MediaService implements OnModuleInit {
           storagePath,
           purpose: dto.purpose,
           visibility,
-          uploadedById: actor.sub
+          uploadedById: actor.sub,
+          metadata: {
+            storageProvider: this.r2.enabled ? 'R2' : 'LOCAL'
+          }
         }
       });
       await this.audit(actor, 'media.upload', asset.id, {
@@ -117,11 +131,12 @@ export class MediaService implements OnModuleInit {
         visibility: asset.visibility,
         mimeType: asset.mimeType,
         sizeBytes: asset.sizeBytes,
-        sha256: asset.sha256
+        sha256: asset.sha256,
+        storageProvider: this.r2.enabled ? 'R2' : 'LOCAL'
       });
       return this.serialize(asset);
     } catch (error) {
-      await unlink(storagePath).catch(() => undefined);
+      await this.deleteStoredObject(storagePath).catch(() => undefined);
       throw error;
     }
   }
@@ -259,7 +274,7 @@ export class MediaService implements OnModuleInit {
         }
       });
     });
-    await unlink(asset.storagePath).catch(() => undefined);
+    await this.deleteStoredObject(asset.storagePath).catch(() => undefined);
     return { success: true };
   }
 
@@ -319,13 +334,31 @@ export class MediaService implements OnModuleInit {
     return asset;
   }
 
-  private fileResult(asset: { storagePath: string; mimeType: string; originalName: string; sizeBytes: number }) {
+  private async fileResult(asset: { storagePath: string; mimeType: string; originalName: string; sizeBytes: number }) {
+    if (this.r2.isR2Path(asset.storagePath)) {
+      const buffer = await this.r2.get(asset.storagePath);
+      return {
+        stream: buffer,
+        mimeType: asset.mimeType,
+        originalName: asset.originalName,
+        sizeBytes: buffer.length
+      };
+    }
+
     return {
       stream: createReadStream(asset.storagePath),
       mimeType: asset.mimeType,
       originalName: asset.originalName,
       sizeBytes: asset.sizeBytes
     };
+  }
+
+  private async deleteStoredObject(storagePath: string) {
+    if (this.r2.isR2Path(storagePath)) {
+      await this.r2.remove(storagePath);
+      return;
+    }
+    await unlink(storagePath).catch(() => undefined);
   }
 
   private serialize<T extends { id: string; visibility: string; status: string; deletedAt?: Date | null }>(asset: T) {
