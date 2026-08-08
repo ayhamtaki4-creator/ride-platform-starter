@@ -1,9 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BookingDirection, BookingType, VehicleClass } from '@prisma/client';
+import { Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -102,11 +104,43 @@ export class CreateBookingDto {
   @MaxLength(180)
   pickupAddress!: string;
 
+  @ApiPropertyOptional({ example: 33.5138, minimum: -90, maximum: 90 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'خط عرض نقطة الانطلاق غير صالح.' })
+  @Min(-90, { message: 'خط عرض نقطة الانطلاق غير صالح.' })
+  @Max(90, { message: 'خط عرض نقطة الانطلاق غير صالح.' })
+  pickupLatitude?: number;
+
+  @ApiPropertyOptional({ example: 36.2765, minimum: -180, maximum: 180 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'خط طول نقطة الانطلاق غير صالح.' })
+  @Min(-180, { message: 'خط طول نقطة الانطلاق غير صالح.' })
+  @Max(180, { message: 'خط طول نقطة الانطلاق غير صالح.' })
+  pickupLongitude?: number;
+
   @ApiProperty({ example: 'فندق الشام - دمشق' })
   @IsString()
   @MinLength(3)
   @MaxLength(180)
   dropoffAddress!: string;
+
+  @ApiPropertyOptional({ example: 33.8209, minimum: -90, maximum: 90 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'خط عرض نقطة الوصول غير صالح.' })
+  @Min(-90, { message: 'خط عرض نقطة الوصول غير صالح.' })
+  @Max(90, { message: 'خط عرض نقطة الوصول غير صالح.' })
+  dropoffLatitude?: number;
+
+  @ApiPropertyOptional({ example: 35.4884, minimum: -180, maximum: 180 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: 'خط طول نقطة الوصول غير صالح.' })
+  @Min(-180, { message: 'خط طول نقطة الوصول غير صالح.' })
+  @Max(180, { message: 'خط طول نقطة الوصول غير صالح.' })
+  dropoffLongitude?: number;
 
   @ApiProperty({ example: 'عمر حداد' })
   @IsString()
