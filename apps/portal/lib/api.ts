@@ -21,7 +21,7 @@ export class ApiError extends Error {
 
 type RefreshResponse = {
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string;
 };
 
 let refreshPromise: Promise<string | null> | null = null;
@@ -38,22 +38,28 @@ export async function refreshAccessToken() {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
-    const refreshToken = localStorage.getItem("ride_refresh_token");
-    if (!refreshToken) return null;
+    const legacyRefreshToken = localStorage.getItem("ride_refresh_token");
 
     try {
       const response = await fetch(`${API_URL}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
+        body: JSON.stringify(
+          legacyRefreshToken ? { refreshToken: legacyRefreshToken } : {}
+        ),
+        credentials: "include",
         cache: "no-store",
       });
       if (!response.ok) return null;
       const body = (await response.json()) as RefreshResponse;
-      if (!body.accessToken || !body.refreshToken) return null;
+      if (!body.accessToken) return null;
 
       localStorage.setItem("ride_access_token", body.accessToken);
-      localStorage.setItem("ride_refresh_token", body.refreshToken);
+      if (body.refreshToken) {
+        localStorage.setItem("ride_refresh_token", body.refreshToken);
+      } else {
+        localStorage.removeItem("ride_refresh_token");
+      }
       window.dispatchEvent(new Event("ride-auth-refreshed"));
       return body.accessToken;
     } catch {
@@ -101,6 +107,7 @@ export async function apiFetch<T>(
   const response = await fetch(`${API_URL}${path}`, {
     ...requestOptions,
     headers,
+    credentials: requestOptions.credentials ?? "include",
     cache: "no-store",
   });
 
@@ -154,6 +161,7 @@ export async function fetchProtectedBlob(pathOrUrl: string, retry = true): Promi
   const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${API_URL}${pathOrUrl}`;
   const response = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    credentials: "include",
     cache: "no-store",
   });
   if (response.status === 401 && retry) {
