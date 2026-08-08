@@ -12,6 +12,7 @@ import {
 import { io, Socket } from "socket.io-client";
 import {
   ApiError,
+  AuthRefreshUnavailableError,
   apiFetch,
   clearStoredAuth,
   getRealtimeUrl,
@@ -44,6 +45,15 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function readCachedUser() {
+  try {
+    const cached = localStorage.getItem("ride_user");
+    return cached ? (JSON.parse(cached) as AuthUser) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,20 +66,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const preserveCachedSession = useCallback(() => {
+    const cached = readCachedUser();
+    if (cached) setUser(cached);
+  }, []);
+
   const refreshUser = useCallback(async () => {
-    let token = localStorage.getItem("ride_access_token");
-
-    if (!token) {
-      token = await refreshAccessToken();
-    }
-
-    if (!token) {
-      setUser(null);
-      setIsLoading(false);
-      return;
-    }
-
     try {
+      let token = localStorage.getItem("ride_access_token");
+
+      if (!token) {
+        token = await refreshAccessToken();
+      }
+
+      if (!token) {
+        setUser(null);
+        return;
+      }
+
       const currentUser = await apiFetch<AuthUser>("/auth/me", { token });
       localStorage.setItem("ride_user", JSON.stringify(currentUser));
       setUser(currentUser);
@@ -77,17 +91,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (caught instanceof ApiError && caught.status === 401) {
         clearSession();
       } else {
-        try {
-          const cached = localStorage.getItem("ride_user");
-          if (cached) setUser(JSON.parse(cached) as AuthUser);
-        } catch {
-          // Keep the current in-memory user during a temporary network failure.
-        }
+        // Network errors, Render restarts/timeouts, 429 and 5xx refresh failures
+        // must not destroy a valid local session. Keep the last known user and
+        // allow polling/socket reconnects to recover when the API returns.
+        preserveCachedSession();
       }
     } finally {
       setIsLoading(false);
     }
-  }, [clearSession]);
+  }, [clearSession, preserveCachedSession]);
 
   useEffect(() => {
     void refreshUser();
@@ -97,12 +109,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     };
     const handleRefreshed = () => setAuthVersion((current) => current + 1);
+    const handleOnline = () => void refreshUser();
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void refreshUser();
+    };
 
     window.addEventListener("ride-auth-expired", handleExpired);
     window.addEventListener("ride-auth-refreshed", handleRefreshed);
+    window.addEventListener("online", handleOnline);
+    document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       window.removeEventListener("ride-auth-expired", handleExpired);
       window.removeEventListener("ride-auth-refreshed", handleRefreshed);
+      window.removeEventListener("online", handleOnline);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [clearSession, refreshUser]);
 
@@ -120,20 +140,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const realtimeSocket = io(getRealtimeUrl(), {
       auth: { token },
-      transports: ["websocket", "polling"],
+      // Polling-first is more tolerant of Render/Cloudflare connection churn;
+      // Socket.IO upgrades to WebSocket automatically when the path is healthy.
+      transports: ["polling", "websocket"],
       reconnection: true,
       reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 8000,
-      timeout: 10000,
+      reconnectionDelay: 1500,
+      reconnectionDelayMax: 30_000,
+      randomizationFactor: 0.5,
+      timeout: 12_000,
     });
 
     const handleConnect = () => setIsRealtimeConnected(true);
     const handleDisconnect = () => setIsRealtimeConnected(false);
-    const handleAuthError = () => void refreshUser();
+    const handleConnectError = () => setIsRealtimeConnected(false);
+    const handleAuthError = () => {
+      setIsRealtimeConnected(false);
+      void (async () => {
+        try {
+          const refreshedToken = await refreshAccessToken();
+          if (!refreshedToken) {
+            clearSession();
+            setIsLoading(false);
+          }
+        } catch (caught) {
+          if (!(caught instanceof AuthRefreshUnavailableError)) {
+            preserveCachedSession();
+          }
+          // For a transient refresh outage, keep the session. Socket.IO will
+          // retry with backoff and a later API poll/visibility event can refresh.
+        }
+      })();
+    };
 
     realtimeSocket.on("connect", handleConnect);
     realtimeSocket.on("disconnect", handleDisconnect);
+    realtimeSocket.on("connect_error", handleConnectError);
     realtimeSocket.on("realtime.auth.error", handleAuthError);
 
     setSocket(realtimeSocket);
@@ -141,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       realtimeSocket.off("connect", handleConnect);
       realtimeSocket.off("disconnect", handleDisconnect);
+      realtimeSocket.off("connect_error", handleConnectError);
       realtimeSocket.off("realtime.auth.error", handleAuthError);
       realtimeSocket.disconnect();
       setIsRealtimeConnected(false);
@@ -148,7 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         current === realtimeSocket ? null : current
       );
     };
-  }, [authVersion, refreshUser, user?.id]);
+  }, [authVersion, clearSession, preserveCachedSession, user?.id]);
 
   const storeSession = useCallback((response: SessionResponse) => {
     localStorage.setItem("ride_access_token", response.accessToken);

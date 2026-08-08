@@ -2,6 +2,7 @@ export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 
 const REFRESH_COOKIE_SESSION_HINT = "ride_refresh_cookie_session";
+const REFRESH_TIMEOUT_MS = 12_000;
 
 export function getRealtimeUrl() {
   try {
@@ -22,6 +23,27 @@ export class ApiError extends Error {
   ) {
     super(message);
     this.name = "ApiError";
+    this.retryAfterSeconds = metadata.retryAfterSeconds;
+    this.requestId = metadata.requestId || undefined;
+  }
+}
+
+export class AuthRefreshUnavailableError extends Error {
+  readonly status?: number;
+  readonly retryAfterSeconds?: number;
+  readonly requestId?: string;
+
+  constructor(
+    message = "تعذر تجديد الجلسة بسبب مشكلة اتصال مؤقتة.",
+    metadata: {
+      status?: number;
+      retryAfterSeconds?: number;
+      requestId?: string | null;
+    } = {}
+  ) {
+    super(message);
+    this.name = "AuthRefreshUnavailableError";
+    this.status = metadata.status;
     this.retryAfterSeconds = metadata.retryAfterSeconds;
     this.requestId = metadata.requestId || undefined;
   }
@@ -61,8 +83,12 @@ export async function refreshAccessToken() {
       localStorage.getItem(REFRESH_COOKIE_SESSION_HINT) === "1";
     if (!legacyRefreshToken && !hasCookieSessionHint) return null;
 
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
+
+    let response: Response;
     try {
-      const response = await fetch(`${API_URL}/auth/refresh`, {
+      response = await fetch(`${API_URL}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
@@ -70,24 +96,54 @@ export async function refreshAccessToken() {
         ),
         credentials: "include",
         cache: "no-store",
+        signal: controller.signal,
       });
-      if (!response.ok) return null;
-      const body = (await response.json()) as RefreshResponse;
-      if (!body.accessToken) return null;
-
-      localStorage.setItem("ride_access_token", body.accessToken);
-      if (body.refreshToken) {
-        localStorage.setItem("ride_refresh_token", body.refreshToken);
-        markRefreshCookieSession(false);
-      } else {
-        localStorage.removeItem("ride_refresh_token");
-        markRefreshCookieSession(true);
-      }
-      window.dispatchEvent(new Event("ride-auth-refreshed"));
-      return body.accessToken;
-    } catch {
-      return null;
+    } catch (caught) {
+      throw new AuthRefreshUnavailableError(
+        caught instanceof DOMException && caught.name === "AbortError"
+          ? "انتهت مهلة الاتصال أثناء محاولة تجديد الجلسة."
+          : "تعذر الاتصال بالخادم أثناء محاولة تجديد الجلسة."
+      );
+    } finally {
+      window.clearTimeout(timeout);
     }
+
+    if (!response.ok) {
+      // These statuses mean the stored refresh credential is missing/invalid.
+      // Only then may callers treat the session as truly expired.
+      if ([400, 401, 403].includes(response.status)) return null;
+
+      throw new AuthRefreshUnavailableError(
+        "تعذر تجديد الجلسة مؤقتًا. سنحافظ على الجلسة ونحاول مرة أخرى.",
+        {
+          status: response.status,
+          retryAfterSeconds: readRetryAfterSeconds(response, null),
+          requestId: response.headers.get("X-Request-Id"),
+        }
+      );
+    }
+
+    const body = (await response.json().catch(() => null)) as RefreshResponse | null;
+    if (!body?.accessToken) {
+      throw new AuthRefreshUnavailableError(
+        "استجابة تجديد الجلسة غير مكتملة. سنحافظ على الجلسة ونحاول مرة أخرى.",
+        {
+          status: response.status,
+          requestId: response.headers.get("X-Request-Id"),
+        }
+      );
+    }
+
+    localStorage.setItem("ride_access_token", body.accessToken);
+    if (body.refreshToken) {
+      localStorage.setItem("ride_refresh_token", body.refreshToken);
+      markRefreshCookieSession(false);
+    } else {
+      localStorage.removeItem("ride_refresh_token");
+      markRefreshCookieSession(true);
+    }
+    window.dispatchEvent(new Event("ride-auth-refreshed"));
+    return body.accessToken;
   })().finally(() => {
     refreshPromise = null;
   });
@@ -150,6 +206,9 @@ export async function apiFetch<T>(
     }
 
     if (response.status === 401 && !options.skipAuth && options.retryAuth !== false) {
+      // refreshAccessToken intentionally throws for transient network/5xx/429
+      // failures. In that case we keep local auth intact instead of turning a
+      // temporary Render outage into a permanent logout.
       const refreshedToken = await refreshAccessToken();
       if (refreshedToken) {
         return apiFetch<T>(path, {
@@ -194,6 +253,10 @@ export async function fetchProtectedBlob(pathOrUrl: string, retry = true): Promi
   if (response.status === 401 && retry) {
     const refreshedToken = await refreshAccessToken();
     if (refreshedToken) return fetchProtectedBlob(pathOrUrl, false);
+    if (typeof window !== "undefined") {
+      clearStoredAuth();
+      window.dispatchEvent(new Event("ride-auth-expired"));
+    }
   }
   if (!response.ok) {
     throw new ApiError("تعذر فتح الملف.", response.status, {
