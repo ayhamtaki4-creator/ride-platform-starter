@@ -1,0 +1,217 @@
+.public-mobile-menu-button,
+.public-mobile-nav,
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .public-header {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .public-header-inner {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 9px;
+  }
+
+  .public-brand {
+    min-width: 0;
+  }
+
+  .public-brand > span:last-child {
+    min-width: 0;
+  }
+
+  .public-brand strong,
+  .public-brand small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .public-mobile-menu-button {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    background: #fff;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .public-mobile-nav {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 7px;
+    padding: 10px 0 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  .public-mobile-nav a {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    color: var(--text-strong);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .public-mobile-nav a:active {
+    background: var(--primary-soft);
+  }
+
+  .public-mobile-nav a > span {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border-radius: 11px;
+    color: var(--primary);
+    background: var(--primary-soft);
+  }
+
+  .mobile-menu-button {
+    top: max(12px, env(safe-area-inset-top));
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .app-sidebar {
+    padding-top: max(22px, calc(12px + env(safe-area-inset-top)));
+    padding-bottom: max(22px, calc(12px + env(safe-area-inset-bottom)));
+  }
+
+  .app-top-strip {
+    min-height: calc(64px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .has-mobile-bottom-nav .app-main {
+    padding-bottom: calc(105px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-bottom-nav {
+    position: fixed;
+    z-index: 820;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 7px 8px max(7px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 -12px 32px rgba(16, 33, 26, 0.08);
+    backdrop-filter: blur(16px);
+  }
+
+  .mobile-bottom-nav a {
+    min-width: 0;
+    min-height: 54px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 3px;
+    padding: 5px 3px;
+    border-radius: 13px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .mobile-bottom-nav a > span {
+    height: 24px;
+    display: grid;
+    place-items: center;
+  }
+
+  .mobile-bottom-nav small {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 10px;
+    font-weight: 850;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-bottom-nav a.is-active {
+    color: var(--primary-dark);
+    background: var(--primary-soft);
+  }
+
+  .button,
+  .app-top-actions button,
+  .sidebar-close,
+  .sidebar-logout-v2,
+  .rider-booking-tabs button,
+  .admin-tabs button,
+  .notification-delete-button {
+    min-height: 44px;
+  }
+
+  input.input,
+  textarea.input,
+  select.input,
+  button.date-time-picker-input,
+  .international-phone-input.react-tel-input .form-control.international-phone-field {
+    font-size: 16px !important;
+  }
+
+  .toast-region {
+    right: max(12px, env(safe-area-inset-right));
+    left: max(12px, env(safe-area-inset-left));
+    width: auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .public-header-inner {
+    width: min(100% - 18px, 1200px);
+  }
+
+  .public-header-actions .button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .public-header-actions .button svg {
+    flex: 0 0 auto;
+  }
+
+  .has-mobile-bottom-nav .app-main {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .has-mobile-bottom-nav .app-top-strip {
+    margin-right: -14px;
+    margin-left: -14px;
+  }
+
+  .mobile-bottom-nav {
+    padding-right: max(7px, env(safe-area-inset-right));
+    padding-left: max(7px, env(safe-area-inset-left));
+  }
+}
+
+@media (max-width: 390px) {
+  .public-brand small {
+    display: none;
+  }
+
+  .public-header-actions .button {
+    padding-right: 9px;
+    padding-left: 9px;
+  }
+
+  .mobile-bottom-nav small {
+    font-size: 9px;
+  }
+}

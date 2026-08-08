@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { AuthProvider } from "@/components/auth-provider";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import "leaflet/dist/leaflet.css";
@@ -8,13 +8,21 @@ import "react-phone-input-2/lib/style.css";
 import "./globals.css";
 import "./tracking.css";
 import "./booking-mobile.css";
+import "./mobile-shell.css";
 
 export const metadata: Metadata = {
   title: {
     default: "طريق الشام",
     template: "%s | طريق الشام",
   },
-  description: "منصة حجز نقل منظم وآمن بين مطار بيروت ودمشق",
+  description: "منصة حجز ومتابعة نقل منظم وآمن بين سوريا ولبنان والأردن.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0b7a53",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
