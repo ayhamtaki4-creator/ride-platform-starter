@@ -7,21 +7,30 @@ test.describe("Mobile shell", () => {
   test("public mobile menu is usable without horizontal overflow", async ({ page }) => {
     await page.goto("/");
 
-    const menuButton = page.getByRole("button", { name: "فتح قائمة الموقع" });
-    await expect(menuButton).toBeVisible();
-    await expect(menuButton).toHaveAttribute("aria-expanded", "false");
+    const openMenuButton = page.getByRole("button", { name: "فتح قائمة الموقع" });
+    await expect(openMenuButton).toBeVisible();
+    await expect(openMenuButton).toHaveAttribute("aria-expanded", "false");
 
-    await menuButton.click();
+    await openMenuButton.click();
 
     const navigation = page.getByRole("navigation", { name: "قائمة الموقع للهاتف" });
+    const closeMenuButton = page.getByRole("button", { name: "إغلاق قائمة الموقع" });
     await expect(navigation).toBeVisible();
-    await expect(menuButton).toHaveAttribute("aria-expanded", "true");
+    await expect(closeMenuButton).toBeVisible();
+    await expect(closeMenuButton).toHaveAttribute("aria-expanded", "true");
     await expect(navigation.getByRole("link", { name: "احجز رحلتك" })).toBeVisible();
     await expect(navigation.getByRole("link", { name: "كيف تعمل المنصة" })).toBeVisible();
     await expect(navigation.getByRole("link", { name: "خدماتنا" })).toBeVisible();
     await expect(navigation.getByRole("link", { name: "الأسئلة الشائعة" })).toBeVisible();
 
     expect(await hasHorizontalOverflow(page)).toBe(false);
+
+    await closeMenuButton.click();
+    await expect(navigation).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "فتح قائمة الموقع" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 
   test("login inputs keep an iOS-safe font size", async ({ page }) => {
