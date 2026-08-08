@@ -119,8 +119,24 @@ export class MapsService {
     return this.config.get<string>('MAPBOX_ACCESS_TOKEN')?.trim() || '';
   }
 
+  private mapboxGeocodingUrl(path: 'forward' | 'reverse') {
+    const base = (
+      this.config.get<string>('MAPBOX_GEOCODING_BASE_URL') ??
+      'https://api.mapbox.com/search/geocode/v6'
+    ).replace(/\/+$/, '');
+    return new URL(`${base}/${path}`);
+  }
+
+  private mapboxDirectionsUrl(coordinates: string) {
+    const base = (
+      this.config.get<string>('MAPBOX_DIRECTIONS_BASE_URL') ??
+      'https://api.mapbox.com/directions/v5/mapbox/driving'
+    ).replace(/\/+$/, '');
+    return new URL(`${base}/${coordinates}`);
+  }
+
   private async mapboxSearch(query: string, limit: number): Promise<MapPlace[]> {
-    const url = new URL('https://api.mapbox.com/search/geocode/v6/forward');
+    const url = this.mapboxGeocodingUrl('forward');
     url.searchParams.set('q', query);
     url.searchParams.set('limit', String(limit));
     url.searchParams.set('language', 'ar');
@@ -176,7 +192,7 @@ export class MapsService {
     latitude: number,
     longitude: number
   ): Promise<MapPlace | null> {
-    const url = new URL('https://api.mapbox.com/search/geocode/v6/reverse');
+    const url = this.mapboxGeocodingUrl('reverse');
     url.searchParams.set('latitude', String(latitude));
     url.searchParams.set('longitude', String(longitude));
     url.searchParams.set('language', 'ar');
@@ -233,9 +249,7 @@ export class MapsService {
     dropoffLongitude: number
   ): Promise<DrivingRoute | null> {
     const coordinates = `${pickupLongitude},${pickupLatitude};${dropoffLongitude},${dropoffLatitude}`;
-    const url = new URL(
-      `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}`
-    );
+    const url = this.mapboxDirectionsUrl(coordinates);
     url.searchParams.set('geometries', 'geojson');
     url.searchParams.set('overview', 'full');
     url.searchParams.set('steps', 'false');
