@@ -30,11 +30,10 @@ export class CreateDriverDto {
   @MaxLength(160)
   email!: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty({ description: 'رقم دولي يستخدم للتواصل عبر WhatsApp' })
   @IsString()
   @MaxLength(40)
-  phone?: string;
+  phone!: string;
 
   @ApiProperty({ minLength: 8 })
   @IsString()
