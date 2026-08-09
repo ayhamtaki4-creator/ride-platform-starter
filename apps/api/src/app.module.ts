@@ -20,6 +20,7 @@ import { UsersModule } from './users/users.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { WebPushModule } from './web-push/web-push.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     AuthModule,
     TelegramModule,
     WhatsAppModule,
+    WebPushModule,
     RealtimeModule,
     NotificationsModule,
     UsersModule,
