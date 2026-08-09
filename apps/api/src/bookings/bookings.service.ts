@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { BookingDirection, Prisma } from '@prisma/client';
 import { randomInt } from 'crypto';
+import { isPastServiceDate, parseDateOnly } from '../common/service-date';
 import { AuthUser } from '../iam/auth-user.type';
 import { MediaService } from '../media/media.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -229,11 +230,9 @@ export class BookingsService {
   }
 
   async create(user: AuthUser, dto: CreateBookingDto) {
-    const travelDate = new Date(dto.travelDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const travelDate = parseDateOnly(dto.travelDate);
 
-    if (Number.isNaN(travelDate.getTime()) || travelDate < today) {
+    if (!travelDate || isPastServiceDate(travelDate)) {
       throw new BadRequestException('يجب اختيار تاريخ رحلة صالح وغير ماضٍ.');
     }
 
