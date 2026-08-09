@@ -23,7 +23,7 @@ export default function LoginPage() {
 
   function destinationFor(roles: string[]) {
     return roles.includes("PASSENGER") && hasPendingBooking()
-      ? "/?resumeBooking=1#booking"
+      ? "/booking?resumeBooking=1"
       : homeForRoles(roles);
   }
 
