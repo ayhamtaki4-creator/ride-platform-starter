@@ -2,6 +2,7 @@
 
 import PhoneInput from "react-phone-input-2";
 import arabicCountries from "react-phone-input-2/lang/ar.json";
+import "react-phone-input-2/lib/style.css";
 
 type InternationalPhoneInputProps = {
   value: string;
