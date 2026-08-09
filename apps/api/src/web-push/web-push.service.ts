@@ -12,6 +12,9 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { UpsertWebPushSubscriptionDto } from './dto/upsert-web-push-subscription.dto';
 
+const MAX_SUBSCRIPTIONS_PER_USER = 8;
+const MAX_DELIVERY_FAILURES = 5;
+
 @Injectable()
 export class WebPushService {
   private readonly logger = new Logger(WebPushService.name);
@@ -128,6 +131,21 @@ export class WebPushService {
       }
     });
 
+    const overflow = await this.prisma.webPushSubscription.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+      skip: MAX_SUBSCRIPTIONS_PER_USER,
+      select: { id: true }
+    });
+
+    if (overflow.length > 0) {
+      await this.prisma.webPushSubscription.deleteMany({
+        where: {
+          id: { in: overflow.map((item) => item.id) }
+        }
+      });
+    }
+
     return subscription;
   }
 
@@ -149,6 +167,7 @@ export class WebPushService {
       await this.prisma.webPushSubscription.findMany({
         where: {
           userId,
+          failureCount: { lt: MAX_DELIVERY_FAILURES },
           OR: [
             { expiresAt: null },
             { expiresAt: { gt: new Date() } }
