@@ -7,9 +7,80 @@
   margin-bottom: 0;
 }
 
+.tracking-map-stack {
+  display: grid;
+  gap: 10px;
+}
+
 .tracking-map-frame {
   margin-top: 0;
   box-shadow: var(--shadow-sm);
+}
+
+.tracking-health-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #f8faf9;
+}
+
+.tracking-health-card > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.tracking-health-card strong {
+  font-size: 13px;
+  color: var(--text-strong);
+}
+
+.tracking-health-card small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.tracking-health-card > span {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  background: #fff;
+  border: 1px solid currentColor;
+}
+
+.tracking-health-live {
+  border-color: #b7dfcc;
+  background: #f0faf5;
+  color: #12613f;
+}
+
+.tracking-health-weak {
+  border-color: #ecd49a;
+  background: #fff9e9;
+  color: #8a5a00;
+}
+
+.tracking-health-stale {
+  border-color: #edc08c;
+  background: #fff5eb;
+  color: #94500b;
+}
+
+.tracking-health-lost {
+  border-color: #e8b5b5;
+  background: #fff2f2;
+  color: #9d2b2b;
+}
+
+.tracking-health-waiting {
+  color: var(--muted);
 }
 
 .ride-marker-waypoint {
@@ -140,6 +211,10 @@
   .tracking-summary-grid,
   .public-tracking-summary {
     grid-template-columns: 1fr;
+  }
+
+  .tracking-health-card {
+    align-items: flex-start;
   }
 
   .public-tracking-page {
