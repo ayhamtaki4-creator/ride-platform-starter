@@ -14,6 +14,13 @@ import { UpsertWebPushSubscriptionDto } from './dto/upsert-web-push-subscription
 
 const MAX_SUBSCRIPTIONS_PER_USER = 8;
 const MAX_DELIVERY_FAILURES = 5;
+const DEFAULT_PUSH_HOST_PATTERNS = [
+  'fcm.googleapis.com',
+  '.push.apple.com',
+  '.push.services.mozilla.com',
+  '.notify.windows.com',
+  '.wns.windows.com'
+];
 
 @Injectable()
 export class WebPushService {
@@ -21,6 +28,7 @@ export class WebPushService {
   private readonly enabled: boolean;
   private readonly publicKey: string;
   private readonly subject: string;
+  private readonly allowedHostPatterns: string[];
   private readonly signingKey?: KeyObject;
 
   constructor(
@@ -40,9 +48,18 @@ export class WebPushService {
     const subject = (
       config.get<string>('WEB_PUSH_SUBJECT') ?? ''
     ).trim();
+    const extraAllowedHosts = (
+      config.get<string>('WEB_PUSH_EXTRA_ALLOWED_HOSTS') ?? ''
+    )
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter((value) => /^[a-z0-9.-]+$/.test(value));
 
     this.publicKey = publicKey;
     this.subject = subject;
+    this.allowedHostPatterns = Array.from(
+      new Set([...DEFAULT_PUSH_HOST_PATTERNS, ...extraAllowedHosts])
+    );
 
     if (!requested) {
       this.enabled = false;
@@ -99,6 +116,7 @@ export class WebPushService {
     userAgent?: string
   ) {
     this.assertEnabled();
+    this.assertEndpointAllowed(dto.endpoint);
 
     const expiresAt = dto.expirationTime
       ? new Date(dto.expirationTime)
@@ -187,6 +205,12 @@ export class WebPushService {
   }
 
   private async send(id: string, endpoint: string) {
+    if (!this.isEndpointAllowed(endpoint)) {
+      await this.prisma.webPushSubscription.deleteMany({ where: { id } });
+      this.logger.warn('Removed Web Push subscription with a disallowed endpoint host.');
+      return;
+    }
+
     try {
       const token = this.vapidToken(endpoint);
       const response = await fetch(endpoint, {
@@ -275,6 +299,37 @@ export class WebPushService {
     ).toString('base64url');
 
     return `${unsigned}.${signature}`;
+  }
+
+  private assertEndpointAllowed(endpoint: string) {
+    if (!this.isEndpointAllowed(endpoint)) {
+      throw new BadRequestException(
+        'عنوان خدمة Web Push غير معتمد.'
+      );
+    }
+  }
+
+  private isEndpointAllowed(endpoint: string) {
+    try {
+      const url = new URL(endpoint);
+      if (
+        url.protocol !== 'https:' ||
+        url.username ||
+        url.password ||
+        (url.port && url.port !== '443')
+      ) {
+        return false;
+      }
+
+      const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
+      return this.allowedHostPatterns.some((pattern) =>
+        pattern.startsWith('.')
+          ? hostname.endsWith(pattern) && hostname.length > pattern.length
+          : hostname === pattern
+      );
+    } catch {
+      return false;
+    }
   }
 
   private assertEnabled() {
