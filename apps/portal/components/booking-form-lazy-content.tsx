@@ -1,10 +1,14 @@
 "use client";
 
-import "leaflet/dist/leaflet.css";
-import "react-datepicker/dist/react-datepicker.css";
-import "@/app/booking-mobile.css";
 import { BookingForm } from "./booking-form";
 
 export default function BookingFormLazyContent() {
-  return <BookingForm />;
+  return (
+    <>
+      <link rel="stylesheet" href="/vendor/leaflet.css" precedence="route-vendor" />
+      <link rel="stylesheet" href="/vendor/react-datepicker.css" precedence="route-vendor" />
+      <link rel="stylesheet" href="/vendor/booking-mobile.css" precedence="route-vendor" />
+      <BookingForm />
+    </>
+  );
 }
