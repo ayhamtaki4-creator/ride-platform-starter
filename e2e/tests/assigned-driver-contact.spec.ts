@@ -1,8 +1,35 @@
 import { randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { expect, test } from "@playwright/test";
 import { apiBaseURL } from "../helpers/accounts";
 import { apiLogin, bearer } from "../helpers/auth";
+
+async function assignDriverWithDeadlockRetry(
+  prisma: PrismaClient,
+  tripId: string,
+  driverId: string,
+) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await prisma.trip.update({
+        where: { id: tripId },
+        data: {
+          driverId,
+          status: "DRIVER_ASSIGNED",
+          driverAssignmentStatus: "PENDING",
+          assignedAt: new Date(),
+        },
+      });
+      return;
+    } catch (caught) {
+      const transientDeadlock =
+        caught instanceof Prisma.PrismaClientUnknownRequestError &&
+        /(?:40P01|deadlock detected)/i.test(caught.message);
+      if (!transientDeadlock || attempt === 3) throw caught;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 100));
+    }
+  }
+}
 
 test.describe("Assigned driver contact", () => {
   test("booking owner receives the driver phone while assignment is still pending", async ({ request }) => {
@@ -54,15 +81,7 @@ test.describe("Assigned driver contact", () => {
         where: { id: driver!.user.id },
         data: { phone: expectedPhone },
       });
-      await prisma.trip.update({
-        where: { id: booking.id },
-        data: {
-          driverId: driver!.user.id,
-          status: "DRIVER_ASSIGNED",
-          driverAssignmentStatus: "PENDING",
-          assignedAt: new Date(),
-        },
-      });
+      await assignDriverWithDeadlockRetry(prisma, booking.id, driver!.user.id);
     } finally {
       await prisma.$disconnect();
     }
