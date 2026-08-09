@@ -57,6 +57,7 @@ test.describe("PWA and SEO foundation", () => {
     expect(workerText).toContain("offline.html");
     expect(workerText).toContain("route-sham-192.png");
     expect(workerText).toContain('addEventListener("push"');
+    expect(workerText).toContain("showNotification");
     expect(workerText).toContain('addEventListener("notificationclick"');
     expect(workerText).toContain("route-sham.push-received");
 
