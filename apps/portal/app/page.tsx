@@ -4,21 +4,19 @@ import { Shell } from "@/components/shell";
 import { Icon } from "@/components/ui/icon";
 
 const steps = [
-  { icon: "bookings" as const, number: "01", title: "أرسل طلبك", text: "اختر اتجاه الرحلة ونوع الحجز وأدخل بيانات الموعد والمسافرين." },
+  { icon: "bookings" as const, number: "01", title: "أرسل طلبك", text: "اختر مسار الرحلة وحجم السيارة وأدخل بيانات الموعد والمسافرين." },
   { icon: "shield" as const, number: "02", title: "مراجعة الإدارة", text: "يراجع مركز العمليات الحجز ويثبت السعر ثم يعيّن السائق المناسب." },
   { icon: "car" as const, number: "03", title: "انطلق بأمان", text: "تصل إليك بيانات السائق والمركبة وتتابع حالة رحلتك حتى الوصول." },
 ];
 
 const benefits = [
   { icon: "shield" as const, title: "سائقون معتمدون", text: "تدقيق بيانات السائقين والمركبات ومتابعة مستمرة من مركز العمليات." },
-  // { icon: "pricing" as const, title: "سعر واضح وموحّد", text: "تعرف قيمة الحجز قبل الإرسال، من دون مساومة أو رسوم مفاجئة." },
   { icon: "clock" as const, title: "تنظيم حسب موعدك", text: "رحلات مجدولة تراعي وقت الطائرة وعدد الركاب والحقائب." },
   { icon: "wifi" as const, title: "متابعة مباشرة", text: "تحديثات فورية لحالة الحجز وتعيين السائق وتنفيذ الرحلة." },
 ];
 
 const faqs = [
-  ["كيف يتم تحديد السعر؟", "تعتمد الإدارة سعرًا مستقلًا لكل مسار ونوع حجز، ويظهر السعر النهائي قبل إرسال الطلب."],
-  // ["هل يمكن حجز مقعد واحد؟", "نعم، يمكنك اختيار مقعد في سيارة مشتركة أو حجز سيارة خاصة بالكامل."],
+  ["كيف يتم تحديد السعر؟", "تعتمد الإدارة سعرًا مستقلًا لكل مسار وفئة سيارة، ويظهر السعر النهائي قبل إرسال الطلب."],
   ["ماذا يحدث عند تأخر الطائرة؟", "أدخل رقم الرحلة ووقت الوصول ضمن الحجز ليتمكن مركز العمليات من متابعة الموعد وتنسيق الاستلام."],
   ["متى تظهر بيانات السائق؟", "تظهر بيانات السائق والمركبة بعد مراجعة الإدارة وتأكيد التعيين وقبول السائق للمهمة."],
 ];
@@ -30,7 +28,7 @@ export default function Home() {
         <div className="home-hero-content">
           <div className="hero-kicker"><span><Icon name="sparkles" size={17} /></span>شبكة نقل منظمة بين سوريا ولبنان والأردن</div>
           <h1>رحلتك بين <em>دمشق وبيروت وعمّان</em> تبدأ بخطوات واضحة وآمنة</h1>
-          <p>اختر أي خط متاح، واحجز مقعدك أو سيارتك الخاصة مع سعر واضح وسائق ومركبة مؤهلين للدول المطلوبة.</p>
+          <p>اختر أي خط متاح، واحجز سيارة خاصة بالحجم المناسب لك مع سعر واضح وسائق ومركبة مؤهلين للدول المطلوبة.</p>
           <div className="hero-actions">
             <a className="button primary button-lg" href="#booking">احجز رحلتك الآن <Icon name="arrow-left" size={19} /></a>
             <a className="button button-lg button-ghost" href="#how-it-works"><Icon name="play" size={19} />كيف تعمل الخدمة؟</a>
@@ -100,18 +98,17 @@ export default function Home() {
 
       <section id="services" className="content-section services-section-v2">
         <div className="service-copy">
-          <div className="eyebrow-v2 light-eyebrow">خيارات تناسب رحلتك</div>
-          <h2> سيارة خاصة</h2>
-          <p>اختر الخدمة الأنسب لعدد الركاب والخصوصية المطلوبة، مع الاحتفاظ بنفس مستوى المتابعة والأمان.</p>
+          <div className="eyebrow-v2 light-eyebrow">سيارة تناسب رحلتك</div>
+          <h2>سيارة خاصة بالحجم المناسب</h2>
+          <p>اختر فئة السيارة بحسب عدد الركاب والحقائب، مع نفس مستوى المتابعة والأمان في جميع المسارات.</p>
           <ul className="service-checklist">
             <li><Icon name="check" size={18} />تحديد عدد الركاب والحقائب مسبقًا</li>
             <li><Icon name="check" size={18} />مراعاة موعد وصول أو إقلاع الطائرة</li>
             <li><Icon name="check" size={18} />عرض السعر قبل إرسال الحجز</li>
           </ul>
-          <a className="button light-button" href="#booking">اختيار نوع الحجز <Icon name="arrow-left" size={18} /></a>
+          <a className="button light-button" href="#booking">اختيار السيارة <Icon name="arrow-left" size={18} /></a>
         </div>
         <div className="service-cards">
-          {/* <article><span><Icon name="users" size={25} /></span><div><small>الخيار الاقتصادي</small><h3>مقعد مشترك</h3><p>احجز عدد المقاعد المطلوبة ضمن رحلة منظمة مع مسافرين آخرين في الاتجاه نفسه.</p></div></article> */}
           <article><span><Icon name="car" size={25} /></span><div><small>خصوصية ومرونة</small><h3>سيارة خاصة</h3><p>مركبة مخصصة لك ولمرافقيك مع تنسيق مباشر لنقطة الاستلام والوجهة.</p></div></article>
         </div>
       </section>

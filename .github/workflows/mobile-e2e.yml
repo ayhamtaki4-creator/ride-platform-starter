@@ -46,6 +46,7 @@ jobs:
       JWT_SECRET: mobile-e2e-jwt-secret
       JWT_EXPIRES_IN: 15m
       REFRESH_TOKEN_EXPIRES_DAYS: 30
+      SERVICE_TIME_ZONE: Asia/Damascus
       AUTH_REFRESH_COOKIE_ENABLED: "false"
       PORT: 4100
       WEB_ORIGINS: http://127.0.0.1:3000,http://localhost:3000
@@ -71,16 +72,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.0.0
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24.18.0
           cache: pnpm
@@ -113,7 +114,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run mobile, booking, dispatch, contact, fleet, health, PWA, auth, maps, and security Playwright suites
-        run: pnpm exec playwright test e2e/tests/mobile-shell.spec.ts e2e/tests/pwa-seo.spec.ts e2e/tests/health.spec.ts e2e/tests/auth-rate-limit.spec.ts e2e/tests/auth-refresh-legacy.spec.ts e2e/tests/booking-location.spec.ts e2e/tests/booking-template-endpoint-regression.spec.ts e2e/tests/booking-route-plan-enrichment.spec.ts e2e/tests/gps-server-throttle.spec.ts e2e/tests/r2-presigned-url.spec.ts e2e/tests/vehicle-image-variants.spec.ts e2e/tests/public-ticket-analysis.spec.ts e2e/tests/rider-booking-details.spec.ts e2e/tests/driver-round-trip-day.spec.ts e2e/tests/assigned-driver-contact.spec.ts e2e/tests/vehicle-primary-image.spec.ts e2e/tests/maps-api.spec.ts --project=chromium
+        run: pnpm exec playwright test e2e/tests/mobile-shell.spec.ts e2e/tests/pwa-seo.spec.ts e2e/tests/health.spec.ts e2e/tests/auth-rate-limit.spec.ts e2e/tests/auth-refresh-legacy.spec.ts e2e/tests/private-car-public.spec.ts e2e/tests/mobile-ticket-upload.spec.ts e2e/tests/booking-location.spec.ts e2e/tests/booking-template-endpoint-regression.spec.ts e2e/tests/booking-route-plan-enrichment.spec.ts e2e/tests/gps-server-throttle.spec.ts e2e/tests/r2-presigned-url.spec.ts e2e/tests/vehicle-image-variants.spec.ts e2e/tests/public-ticket-analysis.spec.ts e2e/tests/rider-booking-details.spec.ts e2e/tests/driver-round-trip-day.spec.ts e2e/tests/assigned-driver-contact.spec.ts e2e/tests/vehicle-primary-image.spec.ts e2e/tests/maps-api.spec.ts --project=chromium
 
       - name: Upload Playwright report on failure
         if: failure()
@@ -161,6 +162,7 @@ jobs:
       JWT_SECRET: refresh-cookie-e2e-jwt-secret
       JWT_EXPIRES_IN: 15m
       REFRESH_TOKEN_EXPIRES_DAYS: 30
+      SERVICE_TIME_ZONE: Asia/Damascus
       AUTH_REFRESH_COOKIE_ENABLED: "true"
       AUTH_REFRESH_COOKIE_SECURE: "false"
       AUTH_REFRESH_COOKIE_SAME_SITE: "lax"
@@ -180,16 +182,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.0.0
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24.18.0
           cache: pnpm
