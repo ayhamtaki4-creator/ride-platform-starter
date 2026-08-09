@@ -4,7 +4,6 @@ import { AuthProvider } from "@/components/auth-provider";
 import { PwaRegistration } from "@/components/pwa-registration";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { SITE_URL } from "@/lib/site";
-import "leaflet/dist/leaflet.css";
 import "./globals.css";
 import "./tracking.css";
 import "./mobile-shell.css";
