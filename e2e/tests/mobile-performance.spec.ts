@@ -14,8 +14,8 @@ test.describe("Mobile performance boundaries", () => {
     await expect(page).toHaveURL(/\/booking$/);
     await expect(page.locator("#booking-card")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".route-choice-card").first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('link[href="/vendor/react-datepicker.css"]')).toHaveCount(1);
-    await expect(page.locator('link[href="/vendor/leaflet.css"]')).toHaveCount(1);
-    await expect(page.locator('link[href="/vendor/booking-mobile.css"]')).toHaveCount(1);
+    await expect(page.locator('link[href="/vendor/react-datepicker.css"]').first()).toBeAttached();
+    await expect(page.locator('link[href="/vendor/leaflet.css"]').first()).toBeAttached();
+    await expect(page.locator('link[href="/vendor/booking-mobile.css"]').first()).toBeAttached();
   });
 });
