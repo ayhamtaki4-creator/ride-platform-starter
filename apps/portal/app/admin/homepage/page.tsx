@@ -110,7 +110,7 @@ export default function AdminHomepagePage() {
           </div>
 
           {items.length ? (
-            <div className="admin-home-showcase-grid">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))", gap: 18 }}>
               {items.map((item) => (
                 <article className="booking-card" key={item.id}>
                   <img
