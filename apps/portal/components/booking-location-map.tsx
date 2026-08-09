@@ -5,6 +5,7 @@ import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { getDrivingRoute, searchPlace, type DrivingRoute } from "@/lib/geocoding";
+import { MAP_TILE_ATTRIBUTION, MAP_TILE_URL } from "@/lib/map-tiles";
 
 export type BookingMapPoint = {
   latitude: number;
@@ -272,11 +273,7 @@ export default function BookingLocationMap({
 
         <div className="booking-map-modal-map">
           <MapContainer center={center} zoom={11} className="ride-map" scrollWheelZoom>
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-              maxZoom={19}
-            />
+            <TileLayer attribution={MAP_TILE_ATTRIBUTION} url={MAP_TILE_URL} maxZoom={19} />
             <InitialViewport points={points} fitKey={fitKey} />
             <SearchViewport point={searchPoint} />
             <PickerEvents activeMode={activeMode} onSelect={onSelect} />
