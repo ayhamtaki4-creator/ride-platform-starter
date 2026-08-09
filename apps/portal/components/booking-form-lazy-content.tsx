@@ -1,5 +1,6 @@
 "use client";
 
+import "leaflet/dist/leaflet.css";
 import "react-datepicker/dist/react-datepicker.css";
 import "@/app/booking-mobile.css";
 import { BookingForm } from "./booking-form";
