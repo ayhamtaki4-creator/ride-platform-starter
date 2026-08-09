@@ -41,6 +41,9 @@ jobs:
         env:
           SERVICE_TIME_ZONE: Asia/Damascus
 
+      - name: Lint portal
+        run: pnpm --filter portal lint
+
       - name: Typecheck
         run: pnpm typecheck
 
