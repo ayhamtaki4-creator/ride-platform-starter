@@ -61,7 +61,10 @@ test.describe("Mobile API network resilience", () => {
     await page.locator('input[type="password"]').fill("not-used-by-the-stub");
     await page.getByRole("button", { name: "تسجيل الدخول", exact: true }).click();
 
-    await expect(page.getByText("الخدمة غير متاحة مؤقتًا.")).toBeVisible();
+    // The same error may be rendered in more than one accessible surface
+    // (for example inline + toast). We only need to assert that the failure is
+    // surfaced while independently verifying that the POST happened once.
+    await expect(page.getByText("الخدمة غير متاحة مؤقتًا.").first()).toBeVisible();
     await page.waitForTimeout(1_000);
     expect(loginCalls).toBe(1);
   });
