@@ -20,8 +20,8 @@ test.describe("Mobile flight-ticket upload", () => {
     );
     expect(route, "Seed data must include a route with flight-ticket upload enabled").toBeTruthy();
 
-    await page.goto("/");
-    await expect(page.getByText("احجز رحلتك خلال دقائق")).toBeVisible();
+    await page.goto("/booking");
+    await expect(page.locator("#booking-card")).toBeVisible();
 
     await page
       .getByRole("button", { name: new RegExp(escapeRegExp(route!.nameAr)) })
