@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import "leaflet/dist/leaflet.css";
 import type { RideMapProps } from "./ride-map";
 
 const DynamicRideMap = dynamic(() => import("./ride-map"), {
