@@ -9,6 +9,7 @@ import {
   startDriverLiveLocation,
   stopDriverLiveLocation,
 } from "@/lib/driver-live-location";
+import { trackingHealth } from "@/lib/tracking-health";
 
 type WakeLockSentinelLike = {
   released?: boolean;
@@ -74,6 +75,8 @@ export function DriverLocationBroadcaster({ tripId, active }: { tripId: string; 
       stopDriverLiveLocation(tripId, true);
       setAutoRequested(false);
       setSharing(false);
+      setLastDeliveredAt(null);
+      setLastTransport(null);
     }
   }, [active, start, tripId]);
 
@@ -124,19 +127,36 @@ export function DriverLocationBroadcaster({ tripId, active }: { tripId: string; 
     };
   }, [sharing]);
 
+  const deliveryState = trackingHealth(
+    lastDeliveredAt ? { recordedAt: new Date(lastDeliveredAt).toISOString() } : null,
+    now,
+  );
+  const serverConfirmed = sharing && ["live", "weak"].includes(deliveryState.level);
+
+  const sharingLabel = !sharing
+    ? autoRequested
+      ? "جارٍ تشغيل GPS تلقائيًا"
+      : "يبدأ GPS تلقائيًا عند الضغط على «وصلت إلى المسافر»"
+    : deliveryState.level === "waiting"
+      ? "GPS يعمل · بانتظار تأكيد الخادم"
+      : deliveryState.level === "live"
+        ? `GPS مؤكد · ${isRealtimeConnected ? "مباشر" : "مسار احتياطي"}`
+        : deliveryState.level === "weak"
+          ? "GPS مؤكد · الإشارة ضعيفة"
+          : deliveryState.level === "stale"
+            ? "GPS متأخر · تحقق من الشبكة"
+            : "GPS منقطع · أعد فتح الصفحة والشبكة";
+
   return (
     <div className="driver-location-controls">
-      <div className={`connection-badge ${sharing ? "is-online" : "is-offline"}`}>
-        {sharing
-          ? `مشاركة الموقع فعالة${isRealtimeConnected ? " · مباشر" : " · احتياطي"}`
-          : autoRequested
-            ? "جارٍ تشغيل GPS تلقائيًا"
-            : "يبدأ GPS تلقائيًا عند الضغط على «وصلت إلى المسافر»"}
+      <div className={`connection-badge ${serverConfirmed ? "is-online" : "is-offline"}`} aria-live="polite">
+        {sharingLabel}
       </div>
 
       {sharing ? (
-        <div className="tracking-delivery-health" aria-live="polite">
+        <div className={`tracking-delivery-health tracking-health-${deliveryState.level}`} aria-live="polite">
           <strong>{deliveryAge(lastDeliveredAt, now)}</strong>
+          <small>{deliveryState.description}</small>
           <small>
             {lastTransport === "realtime"
               ? "تم التأكيد عبر الاتصال المباشر"
