@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { io } from "socket.io-client";
 import { TrackingMapClient } from "@/components/tracking-map-client";
 import { apiFetch, getRealtimeUrl } from "@/lib/api";
+import { trackingHealth } from "@/lib/tracking-health";
 import type { TripLiveLocation, TripTrackingPayload } from "@/lib/tracking";
 
 export default function PublicTrackingPage() {
@@ -62,18 +63,20 @@ export default function PublicTrackingPage() {
     };
   }, [params.token]);
 
+  const health = trackingHealth(data?.liveLocation);
+
   return (
     <main className="public-tracking-page" dir="rtl">
       <section className="public-tracking-header">
         <div>
           <span className="eyebrow">Sham Route</span>
           <h1>متابعة الرحلة</h1>
-          <p>رابط متابعة آمن يعرض مسار السيارة وموقعها الحالي فقط.</p>
+          <p>رابط متابعة آمن يعرض مسار السيارة وآخر موقع معروف لها.</p>
         </div>
         <div>
           <span className="status">{data?.trip.status ?? "جارٍ الاتصال"}</span>
           <div className={`connection-badge ${isLive ? "is-online" : "is-offline"}`}>
-            {isLive ? "تتبع مباشر" : "تحديث دوري"}
+            {isLive ? "قناة مباشرة متصلة" : "تحديث دوري"}
           </div>
         </div>
       </section>
@@ -86,7 +89,7 @@ export default function PublicTrackingPage() {
             <div><small>الانطلاق</small><strong>{data.trip.pickupAddress}</strong></div>
             <div><small>الوجهة</small><strong>{data.trip.dropoffAddress}</strong></div>
             <div><small>السائق</small><strong>{data.trip.driver ? `${data.trip.driver.firstName} ${data.trip.driver.lastName}` : "لم يتم تعيين السائق بعد"}</strong></div>
-            <div><small>آخر تحديث للموقع</small><strong>{data.liveLocation ? new Date(data.liveLocation.recordedAt).toLocaleTimeString("ar") : "لم يبدأ التتبع بعد"}</strong></div>
+            <div><small>حالة الموقع</small><strong>{health.label} · {health.ageLabel}</strong></div>
           </section>
         </>
       ) : !error ? <div className="empty-state">جارٍ تحميل الرحلة...</div> : null}
