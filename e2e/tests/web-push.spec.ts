@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { accounts, apiBaseURL } from "../helpers/accounts";
 
-const testEndpoint = "https://push.example.test/subscriptions/mobile-e2e-device";
+const testEndpoint = "https://fcm.googleapis.com/fcm/send/mobile-e2e-device";
 const testP256dh = "BOeEgIs4pVqcHNpQbKpvtzbDQzphJo9Udx5-iU_Ujk4CDLMcuksk3NedDYSF6t0iCdnLySBRTLYmD1vEtxwNw6M";
 const testAuth = "mobile-e2e-auth-secret";
 
 test.describe("Web Push subscriptions", () => {
-  test("exposes the public VAPID key and persists an authenticated device subscription", async ({ request }) => {
+  test("exposes the public VAPID key and persists only trusted push-service endpoints", async ({ request }) => {
     const login = await request.post(`${apiBaseURL}/auth/login`, {
       data: {
         email: accounts.rider.email,
@@ -28,15 +28,26 @@ test.describe("Web Push subscriptions", () => {
     expect(configBody.enabled).toBe(true);
     expect(configBody.publicKey).toBe(process.env.WEB_PUSH_PUBLIC_KEY);
 
-    const invalid = await request.post(`${apiBaseURL}/web-push/subscriptions`, {
+    const insecure = await request.post(`${apiBaseURL}/web-push/subscriptions`, {
       headers,
       data: {
-        endpoint: "http://push.example.test/not-secure",
+        endpoint: "http://fcm.googleapis.com/fcm/send/not-secure",
         p256dh: testP256dh,
         auth: testAuth,
       },
     });
-    expect(invalid.status()).toBe(400);
+    expect(insecure.status()).toBe(400);
+
+    const unknownHttpsHost = await request.post(`${apiBaseURL}/web-push/subscriptions`, {
+      headers,
+      data: {
+        endpoint: "https://internal.example.test/push/device",
+        p256dh: testP256dh,
+        auth: testAuth,
+      },
+    });
+    expect(unknownHttpsHost.status()).toBe(400);
+    expect(JSON.stringify(await unknownHttpsHost.json())).toContain("غير معتمد");
 
     const subscribe = await request.post(`${apiBaseURL}/web-push/subscriptions`, {
       headers,
