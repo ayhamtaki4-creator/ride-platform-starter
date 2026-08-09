@@ -5,6 +5,12 @@ export const API_URL =
 
 const REFRESH_COOKIE_SESSION_HINT = "ride_refresh_cookie_session";
 const REFRESH_TIMEOUT_MS = 12_000;
+const READ_TIMEOUT_MS = 15_000;
+const MUTATION_TIMEOUT_MS = 30_000;
+const UPLOAD_TIMEOUT_MS = 60_000;
+const READ_RETRY_DELAY_MS = 500;
+const MAX_RETRY_AFTER_MS = 3_000;
+const RETRYABLE_READ_STATUSES = new Set([429, 502, 503, 504]);
 
 export function getRealtimeUrl() {
   try {
@@ -48,6 +54,13 @@ export class AuthRefreshUnavailableError extends Error {
     this.status = metadata.status;
     this.retryAfterSeconds = metadata.retryAfterSeconds;
     this.requestId = metadata.requestId || undefined;
+  }
+}
+
+class RequestTransportError extends Error {
+  constructor(readonly kind: "timeout" | "network") {
+    super(kind === "timeout" ? "request timeout" : "network failure");
+    this.name = "RequestTransportError";
   }
 }
 
@@ -157,6 +170,7 @@ type ApiOptions = RequestInit & {
   token?: string | null;
   skipAuth?: boolean;
   retryAuth?: boolean;
+  timeoutMs?: number;
 };
 
 export async function apiFetch<T>(
@@ -183,14 +197,34 @@ export async function apiFetch<T>(
     token: _token,
     skipAuth: _skipAuth,
     retryAuth: _retryAuth,
+    timeoutMs,
     ...requestOptions
   } = options;
-  const response = await fetch(`${API_URL}${path}`, {
-    ...requestOptions,
-    headers,
-    credentials: requestOptions.credentials ?? "include",
-    cache: "no-store",
-  });
+  const method = (requestOptions.method ?? "GET").toUpperCase();
+
+  let response: Response;
+  try {
+    response = await fetchWithMobileResilience(
+      `${API_URL}${path}`,
+      {
+        ...requestOptions,
+        headers,
+        credentials: requestOptions.credentials ?? "include",
+        cache: "no-store",
+      },
+      timeoutMs ?? defaultTimeoutForMethod(method)
+    );
+  } catch (caught) {
+    if (caught instanceof RequestTransportError) {
+      throw new ApiError(
+        caught.kind === "timeout"
+          ? "استغرق الاتصال وقتًا أطول من المتوقع. تحقق من الشبكة وحاول مجددًا."
+          : "تعذر الاتصال بالخادم. تحقق من الإنترنت وأعد المحاولة.",
+        0
+      );
+    }
+    throw caught;
+  }
 
   const body: unknown = await response.json().catch(() => null);
 
@@ -249,17 +283,41 @@ export async function apiUpload<T>(
     }
   }
 
-  return apiFetch<T>(path, { ...options, method: "POST", body: formData });
+  return apiFetch<T>(path, {
+    ...options,
+    method: "POST",
+    body: formData,
+    timeoutMs: options.timeoutMs ?? UPLOAD_TIMEOUT_MS,
+  });
 }
 
 export async function fetchProtectedBlob(pathOrUrl: string, retry = true): Promise<Blob> {
   const token = typeof window !== "undefined" ? localStorage.getItem("ride_access_token") : null;
   const url = pathOrUrl.startsWith("http") ? pathOrUrl : `${API_URL}${pathOrUrl}`;
-  const response = await fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    credentials: "include",
-    cache: "no-store",
-  });
+
+  let response: Response;
+  try {
+    response = await fetchWithMobileResilience(
+      url,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        credentials: "include",
+        cache: "no-store",
+      },
+      UPLOAD_TIMEOUT_MS
+    );
+  } catch (caught) {
+    if (caught instanceof RequestTransportError) {
+      throw new ApiError(
+        caught.kind === "timeout"
+          ? "استغرق فتح الملف وقتًا أطول من المتوقع. تحقق من الشبكة وحاول مجددًا."
+          : "تعذر الاتصال بالخادم لفتح الملف. تحقق من الإنترنت وحاول مجددًا.",
+        0
+      );
+    }
+    throw caught;
+  }
+
   if (response.status === 401 && retry) {
     const refreshedToken = await refreshAccessToken();
     if (refreshedToken) return fetchProtectedBlob(pathOrUrl, false);
@@ -275,6 +333,124 @@ export async function fetchProtectedBlob(pathOrUrl: string, retry = true): Promi
     });
   }
   return response.blob();
+}
+
+async function fetchWithMobileResilience(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+) {
+  const method = (init.method ?? "GET").toUpperCase();
+  const safeRead = method === "GET" || method === "HEAD";
+  const maxAttempts = safeRead ? 2 : 1;
+  const externalSignal = init.signal ?? undefined;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (externalSignal?.aborted) throw abortReason(externalSignal);
+
+    const controller = new AbortController();
+    let timedOut = false;
+    const onExternalAbort = () => controller.abort(externalSignal?.reason);
+    externalSignal?.addEventListener("abort", onExternalAbort, { once: true });
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, Math.max(1, timeoutMs));
+
+    let response: Response | null = null;
+    let caughtError: unknown;
+
+    try {
+      response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+      });
+    } catch (caught) {
+      caughtError = caught;
+    } finally {
+      clearTimeout(timeout);
+      externalSignal?.removeEventListener("abort", onExternalAbort);
+    }
+
+    if (response) {
+      const canRetryStatus =
+        safeRead &&
+        attempt + 1 < maxAttempts &&
+        RETRYABLE_READ_STATUSES.has(response.status);
+
+      if (!canRetryStatus) return response;
+
+      await response.body?.cancel().catch(() => undefined);
+      await waitForRetry(retryDelayMs(response), externalSignal);
+      continue;
+    }
+
+    if (externalSignal?.aborted) throw abortReason(externalSignal);
+
+    if (safeRead && attempt + 1 < maxAttempts) {
+      await waitForRetry(READ_RETRY_DELAY_MS, externalSignal);
+      continue;
+    }
+
+    if (timedOut) throw new RequestTransportError("timeout");
+    if (caughtError) throw new RequestTransportError("network");
+    throw new RequestTransportError("network");
+  }
+
+  throw new RequestTransportError("network");
+}
+
+function defaultTimeoutForMethod(method: string) {
+  return method === "GET" || method === "HEAD"
+    ? READ_TIMEOUT_MS
+    : MUTATION_TIMEOUT_MS;
+}
+
+function retryDelayMs(response: Response) {
+  const raw = response.headers.get("Retry-After")?.trim();
+  if (!raw) return READ_RETRY_DELAY_MS;
+
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(MAX_RETRY_AFTER_MS, Math.round(seconds * 1000));
+  }
+
+  const dateMs = Date.parse(raw);
+  if (Number.isFinite(dateMs)) {
+    return Math.min(
+      MAX_RETRY_AFTER_MS,
+      Math.max(0, dateMs - Date.now())
+    );
+  }
+
+  return READ_RETRY_DELAY_MS;
+}
+
+function waitForRetry(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortReason(signal));
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, Math.max(0, ms));
+
+    const onAbort = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", onAbort);
+      reject(signal ? abortReason(signal) : new DOMException("Aborted", "AbortError"));
+    };
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function abortReason(signal: AbortSignal) {
+  if (signal.reason instanceof Error) return signal.reason;
+  return new DOMException("Aborted", "AbortError");
 }
 
 function readRetryAfterSeconds(response: Response, body: unknown) {
