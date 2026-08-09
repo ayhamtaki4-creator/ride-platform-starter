@@ -18,11 +18,11 @@ test.describe("Mobile API network resilience", () => {
       await route.continue();
     });
 
-    await page.goto("/");
-    await page.getByRole("link", { name: /احجز رحلتك الآن/ }).click();
+    await page.goto("/booking");
 
     await expect.poll(() => routeCalls, { timeout: 10_000 }).toBe(2);
-    await expect(page.getByText("اختر مسار الرحلة")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("#booking-card")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(".route-choice-card").first()).toBeVisible({ timeout: 15_000 });
   });
 
   test("retries one browser network failure for a safe GET", async ({ page }) => {
@@ -37,11 +37,11 @@ test.describe("Mobile API network resilience", () => {
       await route.continue();
     });
 
-    await page.goto("/");
-    await page.getByRole("link", { name: /احجز رحلتك الآن/ }).click();
+    await page.goto("/booking");
 
     await expect.poll(() => routeCalls, { timeout: 10_000 }).toBe(2);
-    await expect(page.getByText("اختر مسار الرحلة")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("#booking-card")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(".route-choice-card").first()).toBeVisible({ timeout: 15_000 });
   });
 
   test("does not automatically retry a failed login POST", async ({ page }) => {

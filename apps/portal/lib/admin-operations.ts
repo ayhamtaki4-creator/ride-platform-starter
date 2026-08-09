@@ -8,6 +8,18 @@ export type MediaStatus = "PENDING" | "APPROVED" | "REJECTED" | "DELETED";
 export type MediaPurpose = "DRIVER_AVATAR" | "VEHICLE_IMAGE" | "DRIVER_DOCUMENT" | "VEHICLE_DOCUMENT" | "FLIGHT_TICKET" | "OTHER";
 export type MediaVisibility = "PUBLIC" | "PRIVATE";
 
+export type HomeShowcaseItem = {
+  id: string;
+  titleAr: string;
+  subtitleAr: string;
+  sortOrder: number;
+  isActive: boolean;
+  imageUrl: string;
+  status?: MediaStatus;
+  originalName?: string;
+  adminFileUrl?: string;
+};
+
 export type ServiceRegion = {
   id: string;
   code: string;

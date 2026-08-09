@@ -99,7 +99,7 @@ export default function RiderBookingsPage() {
           actions={
             <div className="actions">
               <Link className="button" href="/rider/completed-bookings"><Icon name="check" size={18} /> الحجوزات المنتهية</Link>
-              <Link className="button primary" href="/#booking"><Icon name="calendar" size={18} /> حجز جديد</Link>
+              <Link className="button primary" href="/booking"><Icon name="calendar" size={18} /> حجز جديد</Link>
             </div>
           }
         />
@@ -203,7 +203,7 @@ export default function RiderBookingsPage() {
                   </button>
                 ) : null}
                 <Link className="button" href="/rider/completed-bookings">الحجوزات المنتهية</Link>
-                <Link className="button primary" href="/#booking">حجز رحلة جديدة</Link>
+                <Link className="button primary" href="/booking">حجز رحلة جديدة</Link>
               </div>
             </div>
           )}
