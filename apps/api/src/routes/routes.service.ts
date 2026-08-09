@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, ServiceRunStatus, VehicleClass } from '@prisma/client';
 import { ComplianceService } from '../compliance/compliance.service';
+import { parseDateOnly, utcDayBounds } from '../common/service-date';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -65,7 +66,9 @@ export class RoutesService {
       this.vehicleClassConfigs()
     ]);
 
-    return routes.map((route) => this.serializeRoute(route, true, vehicleClasses));
+    return routes
+      .map((route) => this.serializeRoute(route, true, vehicleClasses))
+      .filter((route) => route.bookable);
   }
 
   async publicDetail(id: string) {
@@ -77,7 +80,11 @@ export class RoutesService {
       this.vehicleClassConfigs()
     ]);
     if (!route) throw new NotFoundException('المسار غير موجود أو غير فعال.');
-    return this.serializeRoute(route, true, vehicleClasses);
+    const serialized = this.serializeRoute(route, true, vehicleClasses);
+    if (!serialized.bookable) {
+      throw new NotFoundException('المسار غير متاح للحجز بسيارة خاصة حاليًا.');
+    }
+    return serialized;
   }
 
   adminRegions() {
@@ -352,9 +359,9 @@ export class RoutesService {
     });
     if (!route || !route.isActive) throw new NotFoundException('المسار غير موجود أو غير فعال.');
 
-    const travelDate = new Date(query.travelDate);
-    if (Number.isNaN(travelDate.getTime())) {
-      throw new BadRequestException('تاريخ الرحلة غير صالح.');
+    const travelDate = parseDateOnly(query.travelDate);
+    if (!travelDate) {
+      throw new BadRequestException('تاريخ الرحلة غير صالح. استخدم YYYY-MM-DD.');
     }
 
     const requiredRegionIds = route.requiredRegions.map((entry) => entry.regionId);
@@ -434,7 +441,7 @@ export class RoutesService {
       }
     });
 
-    const { gte, lt } = this.dayBounds(travelDate);
+    const { start: gte, end: lt } = utcDayBounds(travelDate);
     const conflicts = await this.prisma.serviceRun.findMany({
       where: {
         driverId: { in: profiles.map((profile) => profile.userId) },
@@ -575,7 +582,9 @@ export class RoutesService {
     publicView: boolean,
     vehicleClasses: readonly VehicleClassCapacity[] = DEFAULT_VEHICLE_CLASS_CONFIGS
   ) {
-    const activeRules = route.pricingRules.filter((rule) => rule.isActive);
+    const activeRules = route.pricingRules.filter(
+      (rule) => rule.isActive && (!publicView || rule.bookingType === 'PRIVATE_CAR')
+    );
     const pricingRules = publicView
       ? activeRules.map((rule) => ({
           id: rule.id,
@@ -605,14 +614,6 @@ export class RoutesService {
       luggageCapacity:
         byClass.get(fallback.vehicleClass)?.luggageCapacity ?? fallback.luggageCapacity
     }));
-  }
-
-  private dayBounds(value: Date) {
-    const gte = new Date(value);
-    gte.setHours(0, 0, 0, 0);
-    const lt = new Date(gte);
-    lt.setDate(lt.getDate() + 1);
-    return { gte, lt };
   }
 
   private normalizeCode(value: string) {
