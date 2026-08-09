@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { utcDayBounds } from '../common/service-date';
 import { PrismaService } from '../prisma/prisma.service';
 
 type EligibleDriverRow = {
@@ -25,7 +26,7 @@ export class DriverSchedulePolicyService {
     });
     if (!requestedRoute) return rows;
 
-    const { gte, lt } = this.dayBounds(travelDate);
+    const { start: gte, end: lt } = utcDayBounds(travelDate);
     const runs = await this.prisma.serviceRun.findMany({
       where: {
         driverId: { in: rows.map((row) => row.driverId) },
@@ -69,13 +70,5 @@ export class DriverSchedulePolicyService {
         conflictRunReference: driverRuns[0]?.runReference ?? row.conflictRunReference
       };
     });
-  }
-
-  private dayBounds(value: Date) {
-    const gte = new Date(value);
-    gte.setHours(0, 0, 0, 0);
-    const lt = new Date(gte);
-    lt.setDate(lt.getDate() + 1);
-    return { gte, lt };
   }
 }

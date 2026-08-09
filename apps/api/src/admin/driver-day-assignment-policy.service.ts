@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { utcDayBounds } from '../common/service-date';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -20,10 +21,7 @@ export class DriverDayAssignmentPolicyService {
     if (!trip) throw new NotFoundException('الحجز غير موجود.');
     if (trip.bookingType !== 'PRIVATE_CAR' || !trip.travelDate) return;
 
-    const start = new Date(trip.travelDate);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
+    const { start, end } = utcDayBounds(trip.travelDate);
 
     const [runs, requestedRoute] = await Promise.all([
       this.prisma.serviceRun.findMany({

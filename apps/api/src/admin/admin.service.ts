@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { randomInt } from 'crypto';
 import { ComplianceService } from '../compliance/compliance.service';
+import { currentServiceDate, utcDayBounds } from '../common/service-date';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { minimumVehicleCapacity } from '../pricing/vehicle-class';
@@ -182,6 +183,7 @@ export class AdminService {
   }
 
   async availableDrivers() {
+    const serviceToday = currentServiceDate();
     const profiles = await this.prisma.driverProfile.findMany({
       where: {
         status: 'APPROVED',
@@ -219,7 +221,7 @@ export class AdminService {
             },
             driverServiceRuns: {
               where: {
-                travelDate: { gte: new Date() },
+                travelDate: { gte: serviceToday },
                 status: { in: ACTIVE_RUN_STATUSES }
               },
               select: {
@@ -651,7 +653,7 @@ export class AdminService {
       );
     }
 
-    const { start, end } = this.dayBounds(trip.travelDate);
+    const { start, end } = utcDayBounds(trip.travelDate);
 
     const [activeRuns, requestedRoute] = await Promise.all([
       tx.serviceRun.findMany({
@@ -799,14 +801,6 @@ export class AdminService {
     }
 
     throw new ConflictException('تعذر إنشاء رقم تشغيل فريد.');
-  }
-
-  private dayBounds(value: Date) {
-    const start = new Date(value);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    return { start, end };
   }
 
   private sanitizeTrip<T extends { startPinHash: string | null }>(
