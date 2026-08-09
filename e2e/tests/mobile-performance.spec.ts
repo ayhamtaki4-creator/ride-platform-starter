@@ -11,5 +11,8 @@ test.describe("Mobile performance boundaries", () => {
     await expect(page).toHaveURL(/#booking$/);
     await expect(boundary).toHaveAttribute("data-booking-lazy-state", "active");
     await expect(page.getByText("اختر مسار الرحلة")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('link[href="/vendor/react-datepicker.css"]')).toHaveCount(1);
+    await expect(page.locator('link[href="/vendor/leaflet.css"]')).toHaveCount(1);
+    await expect(page.locator('link[href="/vendor/booking-mobile.css"]')).toHaveCount(1);
   });
 });
