@@ -1,4 +1,4 @@
-const CACHE_NAME = "route-sham-shell-v3";
+const CACHE_NAME = "route-sham-shell-v4";
 const OFFLINE_URL = "/offline.html";
 const NOTIFICATIONS_URL = "/notifications";
 const STATIC_ASSETS = [
@@ -32,11 +32,11 @@ self.addEventListener("push", (event) => {
       type: "window",
       includeUncontrolled: true,
     });
-    const visibleWindow = windows.find((client) => client.visibilityState === "visible");
 
-    if (visibleWindow) {
-      visibleWindow.postMessage({ type: "route-sham.push-received" });
-      return;
+    for (const client of windows) {
+      if (client.visibilityState === "visible") {
+        client.postMessage({ type: "route-sham.push-received" });
+      }
     }
 
     let payload = null;
@@ -46,6 +46,9 @@ self.addEventListener("push", (event) => {
       payload = null;
     }
 
+    // A PushSubscription is created with userVisibleOnly=true. Safari/WebKit also
+    // requires every push event to immediately produce a user-visible notification,
+    // even when a window is already visible, or notification permission can be revoked.
     await self.registration.showNotification(payload?.title || "طريق الشام", {
       body: payload?.body || "لديك تحديث جديد على حجزك أو رحلتك. افتح طريق الشام لمراجعة التفاصيل.",
       icon: "/icons/route-sham-192.png",
