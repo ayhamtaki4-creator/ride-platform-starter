@@ -9,6 +9,7 @@ import {
   Prisma,
   TripStatus
 } from '@prisma/client';
+import { parseDateOnly, utcDayBounds } from '../common/service-date';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
@@ -93,14 +94,11 @@ export class DriversService {
     };
 
     if (date) {
-      const parsed = new Date(date);
-      if (Number.isNaN(parsed.getTime())) {
-        throw new ConflictException('صيغة التاريخ غير صحيحة.');
+      const parsed = parseDateOnly(date);
+      if (!parsed) {
+        throw new ConflictException('صيغة التاريخ غير صحيحة. استخدم YYYY-MM-DD.');
       }
-      const start = new Date(parsed);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 1);
+      const { start, end } = utcDayBounds(parsed);
       where.travelDate = { gte: start, lt: end };
     }
 
