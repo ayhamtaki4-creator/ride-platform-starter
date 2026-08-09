@@ -233,9 +233,85 @@ export type EligibleDriver = {
   vehicles: EligibleVehicle[];
 };
 
+export type AdminUserRecord = {
+  id: string;
+  email: string;
+  phone?: string | null;
+  firstName: string;
+  lastName: string;
+  status: string;
+  createdAt: string;
+  roles: Array<{ role: { code: string; name: string } }>;
+  bookingCount: number;
+  completedBookings: number;
+  totalSpent: number;
+  currency: string;
+  latestBookingAt?: string | null;
+};
+
+export const REGION_KIND_LABELS: Record<RegionKind, string> = {
+  COUNTRY_ACCESS: "صلاحية دخول دولة",
+  OPERATING_HUB: "مركز تشغيل",
+};
+
+export const LOCATION_TYPE_LABELS: Record<LocationType, string> = {
+  CITY: "مدينة",
+  AIRPORT: "مطار",
+  GOVERNORATE: "محافظة",
+  BORDER: "معبر حدودي",
+  STATION: "محطة",
+};
+
 export const ROUTE_TYPE_LABELS: Record<RouteType, string> = {
   INTERCITY: "بين المدن",
   INTERNATIONAL: "دولي",
-  AIRPORT_TRANSFER: "مطار",
+  AIRPORT_TRANSFER: "نقل مطار",
   PRIVATE_TRANSFER: "نقل خاص",
 };
+
+export const DOCUMENT_STATUS_LABELS: Record<DocumentStatus, string> = {
+  PENDING: "بانتظار المراجعة",
+  APPROVED: "معتمدة",
+  REJECTED: "مرفوضة",
+  EXPIRED: "منتهية",
+  SUSPENDED: "موقوفة",
+};
+
+export const MEDIA_STATUS_LABELS: Record<MediaStatus, string> = {
+  PENDING: "بانتظار الاعتماد",
+  APPROVED: "معتمد",
+  REJECTED: "مرفوض",
+  DELETED: "محذوف",
+};
+
+export const MEDIA_PURPOSE_LABELS: Record<MediaPurpose, string> = {
+  DRIVER_AVATAR: "صورة سائق",
+  VEHICLE_IMAGE: "صورة مركبة",
+  DRIVER_DOCUMENT: "وثيقة سائق",
+  VEHICLE_DOCUMENT: "وثيقة مركبة",
+  FLIGHT_TICKET: "تذكرة طيران",
+  OTHER: "ملف آخر",
+};
+
+export const DOCUMENT_TYPE_OPTIONS = [
+  { value: "DRIVING_LICENSE", label: "رخصة القيادة" },
+  { value: "PASSPORT", label: "جواز السفر" },
+  { value: "IDENTITY_CARD", label: "الهوية الشخصية" },
+  { value: "REGION_ENTRY_PERMIT", label: "تصريح دخول الدولة" },
+  { value: "PASSENGER_TRANSPORT_PERMIT", label: "تصريح نقل الركاب" },
+  { value: "VEHICLE_REGISTRATION", label: "رخصة المركبة" },
+  { value: "VEHICLE_INSURANCE", label: "تأمين المركبة" },
+  { value: "TECHNICAL_INSPECTION", label: "الفحص الفني" },
+  { value: "OWNERSHIP_PROOF", label: "إثبات الملكية أو الوكالة" },
+];
+
+export function documentTypeLabel(value: string) {
+  return DOCUMENT_TYPE_OPTIONS.find((option) => option.value === value)?.label ?? value;
+}
+
+export function statusClass(status: string) {
+  if (["APPROVED", "ACTIVE", "ONLINE", "COMPLETED"].includes(status)) return "success";
+  if (["REJECTED", "EXPIRED", "SUSPENDED", "DELETED"].includes(status)) return "danger";
+  if (["PENDING", "PENDING_REVIEW", "OFFLINE"].includes(status)) return "warning";
+  return "neutral";
+}
