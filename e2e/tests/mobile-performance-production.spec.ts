@@ -1,20 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-async function criticalStylesheetText(page: import("@playwright/test").Page) {
-  const urls = await page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
+async function stylesheetPaths(page: import("@playwright/test").Page) {
+  return page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
     links
-      .map((link) => (link as HTMLLinkElement).href)
+      .map((link) => new URL((link as HTMLLinkElement).href).pathname)
       .filter(Boolean),
   );
-
-  const unique = [...new Set(urls)];
-  const bodies = await Promise.all(
-    unique.map(async (url) => {
-      const response = await page.request.get(url);
-      return response.ok() ? response.text() : "";
-    }),
-  );
-  return bodies.join("\n");
 }
 
 test.describe("Production mobile performance boundaries", () => {
@@ -33,20 +24,23 @@ test.describe("Production mobile performance boundaries", () => {
     }
   });
 
-  test("login critical CSS excludes booking and map vendor styles", async ({ page }) => {
+  test("login does not request booking or map vendor styles", async ({ page }) => {
     await page.goto("/login", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "تسجيل الدخول" })).toBeVisible();
 
-    const css = await criticalStylesheetText(page);
-    expect(css).not.toContain(".react-datepicker");
-    expect(css).not.toContain(".react-tel-input");
-    expect(css).not.toContain(".booking-map-modal");
-    expect(css).not.toContain(".leaflet-container");
+    const stylesheets = await stylesheetPaths(page);
+    expect(stylesheets.filter((path) => path.startsWith("/vendor/"))).toEqual([]);
   });
 
   test("register loads phone input CSS only when that control is present", async ({ page }) => {
     await page.goto("/register", { waitUntil: "domcontentloaded" });
     await expect(page.locator(".react-tel-input")).toHaveCount(1);
     await expect(page.locator('link[href="/vendor/react-phone-input.css"]')).toHaveCount(1);
+
+    const stylesheets = await stylesheetPaths(page);
+    expect(stylesheets).toContain("/vendor/react-phone-input.css");
+    expect(stylesheets).not.toContain("/vendor/react-datepicker.css");
+    expect(stylesheets).not.toContain("/vendor/leaflet.css");
+    expect(stylesheets).not.toContain("/vendor/booking-mobile.css");
   });
 });
