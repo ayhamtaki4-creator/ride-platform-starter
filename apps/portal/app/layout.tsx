@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
 import { AuthProvider } from "@/components/auth-provider";
+import { ConnectionStatusBanner } from "@/components/connection-status-banner";
 import { PwaRegistration } from "@/components/pwa-registration";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { SITE_URL } from "@/lib/site";
@@ -78,6 +79,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
         <AuthProvider>
           <ToastProvider>{children}</ToastProvider>
         </AuthProvider>
+        <ConnectionStatusBanner />
         <PwaRegistration />
       </body>
     </html>
