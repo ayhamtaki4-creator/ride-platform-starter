@@ -20,6 +20,7 @@ const adminItems: NavItem[] = [
   { href: "/admin/route-templates", label: "قوالب المسارات", icon: "route" },
   { href: "/admin/route-policies", label: "سياسات الحجز والطيران", icon: "route" },
   { href: "/admin/drivers", label: "السائقون والمركبات", icon: "drivers" },
+  { href: "/admin/homepage", label: "الصفحة الرئيسية", icon: "home" },
   { href: "/admin/media-branding", label: "حماية الصور والشعار", icon: "shield" },
   { href: "/admin/compliance", label: "الامتثال والملفات", icon: "shield" },
   { href: "/admin/users", label: "الحسابات", icon: "users" },
@@ -28,7 +29,7 @@ const adminItems: NavItem[] = [
 ];
 
 const publicMobileItems: NavItem[] = [
-  { href: "/#booking", label: "احجز رحلتك", icon: "bookings" },
+  { href: "/booking", label: "احجز رحلتك", icon: "bookings" },
   { href: "/#how-it-works", label: "كيف تعمل المنصة", icon: "route" },
   { href: "/#services", label: "خدماتنا", icon: "car" },
   { href: "/#faq", label: "الأسئلة الشائعة", icon: "shield" },
@@ -46,7 +47,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [publicMenuOpen, setPublicMenuOpen] = useState(false);
 
-  const isPublic = pathname === "/" || pathname === "/login" || pathname.startsWith("/register");
+  const isPublic = pathname === "/" || pathname === "/booking" || pathname === "/login" || pathname.startsWith("/register");
   const isAdmin = Boolean(user?.roles.some((role) => ["SUPER_ADMIN", "ADMIN", "OPERATIONS_MANAGER"].includes(role)));
   const isDriver = Boolean(user?.roles.includes("DRIVER"));
   const isPassenger = Boolean(user?.roles.includes("PASSENGER"));
@@ -88,7 +89,7 @@ export function Shell({ children }: { children: ReactNode }) {
       return [
         { href: "/rider", label: "الرئيسية", icon: "dashboard" },
         { href: "/rider/bookings", label: "حجوزاتي", icon: "bookings" },
-        { href: "/#booking", label: "حجز جديد", icon: "car" },
+        { href: "/booking", label: "حجز جديد", icon: "car" },
         { href: "/rider/profile", label: "حسابي", icon: "user" },
       ];
     }
@@ -128,7 +129,7 @@ export function Shell({ children }: { children: ReactNode }) {
               <span><strong>طريق الشام</strong><small>دمشق · بيروت · عمّان</small></span>
             </Link>
             <nav className="public-nav" aria-label="التنقل الرئيسي">
-              <Link href="/#booking">احجز رحلتك</Link>
+              <Link href="/booking">احجز رحلتك</Link>
               <Link href="/#how-it-works">كيف تعمل المنصة</Link>
               <Link href="/#services">خدماتنا</Link>
               <Link href="/#faq">الأسئلة الشائعة</Link>
@@ -172,7 +173,7 @@ export function Shell({ children }: { children: ReactNode }) {
               </Link>
               <p>منصة موثوقة للحجز والمتابعة على خطوط سوريا ولبنان والأردن، بإشراف مركز عمليات وسائقين ومركبات معتمدين.</p>
             </div>
-            <div><strong>روابط سريعة</strong><Link href="/#booking">الحجز</Link><Link href="/#how-it-works">طريقة العمل</Link><Link href="/login">تسجيل الدخول</Link></div>
+            <div><strong>روابط سريعة</strong><Link href="/booking">الحجز</Link><Link href="/#how-it-works">طريقة العمل</Link><Link href="/login">تسجيل الدخول</Link></div>
             <div><strong>الدعم</strong><span>خدمة ومتابعة على مدار الساعة</span><a href="tel:+96100000000">+961 / +963</a><a href="mailto:info@tareeqalsham.example">info@tareeqalsham.example</a></div>
           </div>
           <div className="public-footer-bottom"><span>© 2026 طريق الشام — جميع الحقوق محفوظة</span><span>دمشق · بيروت · عمّان</span></div>
