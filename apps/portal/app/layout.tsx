@@ -5,11 +5,8 @@ import { PwaRegistration } from "@/components/pwa-registration";
 import { ToastProvider } from "@/components/ui/toast-provider";
 import { SITE_URL } from "@/lib/site";
 import "leaflet/dist/leaflet.css";
-import "react-datepicker/dist/react-datepicker.css";
-import "react-phone-input-2/lib/style.css";
 import "./globals.css";
 import "./tracking.css";
-import "./booking-mobile.css";
 import "./mobile-shell.css";
 
 export const metadata: Metadata = {
@@ -77,7 +74,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar" dir="rtl" data-scroll-behavior="smooth">
       <body>
         <AuthProvider>
           <ToastProvider>{children}</ToastProvider>
