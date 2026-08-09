@@ -7,6 +7,7 @@ test.describe("PWA and SEO foundation", () => {
     const manifestResponse = await request.get("/manifest.webmanifest");
     expect(manifestResponse.status()).toBe(200);
     const manifest = (await manifestResponse.json()) as {
+      id?: string;
       name?: string;
       short_name?: string;
       start_url?: string;
@@ -16,6 +17,7 @@ test.describe("PWA and SEO foundation", () => {
       icons?: Array<{ src?: string; sizes?: string; type?: string; purpose?: string }>;
     };
 
+    expect(manifest.id).toBe("/");
     expect(manifest.name).toBe("طريق الشام");
     expect(manifest.short_name).toBe("طريق الشام");
     expect(manifest.start_url).toBe("/");
@@ -54,6 +56,9 @@ test.describe("PWA and SEO foundation", () => {
     const workerText = await worker.text();
     expect(workerText).toContain("offline.html");
     expect(workerText).toContain("route-sham-192.png");
+    expect(workerText).toContain('addEventListener("push"');
+    expect(workerText).toContain('addEventListener("notificationclick"');
+    expect(workerText).toContain("route-sham.push-received");
 
     const offline = await request.get("/offline.html");
     expect(offline.status()).toBe(200);
