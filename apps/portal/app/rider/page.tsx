@@ -40,7 +40,7 @@ export default function RiderPage() {
           title={`مرحبًا ${user?.firstName ?? "بك"}`}
           subtitle="تابع رحلتك القادمة، راجع حجوزاتك، واستلم التحديثات فور حدوثها."
           actions={
-            <Link className="button primary" href="/#booking">
+            <Link className="button primary" href="/booking">
               <Icon name="calendar" size={18} /> حجز رحلة جديدة
             </Link>
           }
@@ -106,7 +106,7 @@ export default function RiderPage() {
                 <span><Icon name="plane" size={32} /></span>
                 <h3>لا توجد رحلة قادمة</h3>
                 <p>أنشئ حجزًا جديدًا وسيظهر هنا مع حالته وبيانات السائق.</p>
-                <Link className="button primary" href="/#booking">ابدأ الحجز</Link>
+                <Link className="button primary" href="/booking">ابدأ الحجز</Link>
               </div>
             )}
           </section>
