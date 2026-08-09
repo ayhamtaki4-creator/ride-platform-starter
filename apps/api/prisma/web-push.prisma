@@ -1,0 +1,15 @@
+model WebPushSubscription {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  endpoint      String   @unique
+  p256dh        String
+  auth          String
+  expiresAt     DateTime?
+  userAgent     String?
+  lastSuccessAt DateTime?
+  failureCount  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, createdAt])
+}
