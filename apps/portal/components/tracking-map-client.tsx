@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import "leaflet/dist/leaflet.css";
 import type { TrackingMapProps } from "./tracking-map";
 
 const DynamicTrackingMap = dynamic(() => import("./tracking-map"), {
