@@ -50,6 +50,7 @@
     "@types/multer": "latest"
   },
   "prisma": {
+    "schema": "prisma",
     "seed": "tsx prisma/seed.ts"
   }
 }
