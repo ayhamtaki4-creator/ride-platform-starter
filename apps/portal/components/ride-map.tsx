@@ -11,6 +11,7 @@ import {
   useMap,
   useMapEvents,
 } from "react-leaflet";
+import { MAP_TILE_ATTRIBUTION, MAP_TILE_URL } from "@/lib/map-tiles";
 
 export type MapPoint = {
   latitude: number;
@@ -142,11 +143,7 @@ export default function RideMap({
         className="ride-map"
         scrollWheelZoom
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          maxZoom={19}
-        />
+        <TileLayer attribution={MAP_TILE_ATTRIBUTION} url={MAP_TILE_URL} maxZoom={19} />
 
         <MapSelection enabled={editable} onSelect={onSelect} />
         <MapViewport

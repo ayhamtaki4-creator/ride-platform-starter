@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BookingDirection, BookingType, VehicleClass } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsUUID, Max, Min, ValidateIf } from 'class-validator';
+import { Equals, IsEnum, IsInt, IsOptional, IsUUID, Max, Min, ValidateIf } from 'class-validator';
 import {
   BOOKING_MAX_LUGGAGE,
   BOOKING_MAX_PASSENGERS,
@@ -20,8 +20,11 @@ export class BookingQuoteDto {
   @IsEnum(BookingDirection)
   direction?: BookingDirection;
 
-  @ApiProperty({ enum: BookingType })
+  @ApiProperty({ enum: [BookingType.PRIVATE_CAR], default: BookingType.PRIVATE_CAR })
   @IsEnum(BookingType)
+  @Equals(BookingType.PRIVATE_CAR, {
+    message: 'الحجز المتاح حاليًا هو سيارة خاصة فقط.'
+  })
   bookingType!: BookingType;
 
   @ApiPropertyOptional({ enum: VehicleClass, default: VehicleClass.SMALL })
@@ -34,7 +37,7 @@ export class BookingQuoteDto {
     minimum: BOOKING_MIN_PASSENGERS,
     maximum: BOOKING_MAX_PASSENGERS,
     default: 1,
-    description: 'للتوافق مع حجوزات المقاعد المشتركة والعملاء القدامى'
+    description: 'عدد الركاب ضمن السيارة الخاصة'
   })
   @IsOptional()
   @Type(() => Number)

@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { AuthProvider } from "@/components/auth-provider";
 import { PwaRegistration } from "@/components/pwa-registration";
 import { ToastProvider } from "@/components/ui/toast-provider";
+import { SITE_URL } from "@/lib/site";
 import "leaflet/dist/leaflet.css";
 import "react-datepicker/dist/react-datepicker.css";
 import "react-phone-input-2/lib/style.css";
@@ -11,10 +12,8 @@ import "./tracking.css";
 import "./booking-mobile.css";
 import "./mobile-shell.css";
 
-const siteUrl = "https://alnokhbaeducation.com";
-
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: new URL(SITE_URL),
   applicationName: "طريق الشام",
   title: {
     default: "طريق الشام | نقل مسبق بين سوريا ولبنان والأردن",
@@ -33,8 +32,15 @@ export const metadata: Metadata = {
   ],
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [{ url: "/icons/route-sham.svg", type: "image/svg+xml" }],
-    shortcut: "/icons/route-sham.svg",
+    icon: [
+      { url: "/icons/route-sham-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/route-sham-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icons/route-sham.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/icons/route-sham-192.png",
+    apple: [
+      { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
   },
   appleWebApp: {
     capable: true,
@@ -44,7 +50,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "ar_SY",
-    url: siteUrl,
+    url: SITE_URL,
     siteName: "طريق الشام",
     title: "طريق الشام | نقل مسبق بين سوريا ولبنان والأردن",
     description:

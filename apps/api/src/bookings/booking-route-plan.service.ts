@@ -60,31 +60,10 @@ export class BookingRoutePlanService {
       `;
 
       const persisted = await this.prisma.$transaction(async (tx) => {
-        const updatedPlans = await tx.$executeRaw(Prisma.sql`
-          UPDATE "TripRoutePlan" plan
-          SET "geometry" = ${geometry}::jsonb,
-              "waypoints" = '[]'::jsonb,
-              "distanceKm" = ${distanceKm},
-              "durationMinutes" = ${durationMinutes},
-              "version" = plan."version" + 1,
-              "updatedAt" = CURRENT_TIMESTAMP
-          WHERE plan."tripId" = ${trip.id}::uuid
-            AND plan."lockedAt" IS NULL
-            AND EXISTS (
-              SELECT 1
-              FROM "Trip" current_trip
-              WHERE current_trip."id" = plan."tripId"
-                AND current_trip."status"::text = 'PENDING_DISPATCH'
-                AND current_trip."bookingReviewStatus"::text = 'NEW'
-                AND current_trip."driverAssignmentStatus"::text = 'UNASSIGNED'
-                AND current_trip."driverId" IS NULL
-                AND current_trip."serviceRunId" IS NULL
-                AND ${endpointGuard}
-            )
-        `);
-
-        if (updatedPlans === 0) return false;
-
+        // Keep the lock order consistent with trip status/assignment updates and
+        // the database trigger: Trip first, then TripRoutePlan. The previous
+        // reverse order could deadlock when an operator assigned a driver while
+        // asynchronous route enrichment was finishing.
         const updatedTrips = await tx.$executeRaw(Prisma.sql`
           UPDATE "Trip" current_trip
           SET "estimatedDistanceKm" = ${distanceKm},
@@ -98,8 +77,22 @@ export class BookingRoutePlanService {
             AND ${endpointGuard}
         `);
 
-        if (updatedTrips === 0) {
-          throw new Error('Booking endpoints changed before route enrichment completed');
+        if (updatedTrips === 0) return false;
+
+        const updatedPlans = await tx.$executeRaw(Prisma.sql`
+          UPDATE "TripRoutePlan" plan
+          SET "geometry" = ${geometry}::jsonb,
+              "waypoints" = '[]'::jsonb,
+              "distanceKm" = ${distanceKm},
+              "durationMinutes" = ${durationMinutes},
+              "version" = plan."version" + 1,
+              "updatedAt" = CURRENT_TIMESTAMP
+          WHERE plan."tripId" = ${trip.id}::uuid
+            AND plan."lockedAt" IS NULL
+        `);
+
+        if (updatedPlans === 0) {
+          throw new Error('Managed route plan became unavailable before enrichment completed');
         }
         return true;
       });

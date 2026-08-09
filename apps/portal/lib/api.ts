@@ -1,3 +1,5 @@
+import { optimizeMobileImageUpload } from "./mobile-image-upload";
+
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 
@@ -239,6 +241,14 @@ export async function apiUpload<T>(
   formData: FormData,
   options: Omit<ApiOptions, "body" | "method"> = {}
 ): Promise<T> {
+  if (path.startsWith("/bookings/flight-ticket")) {
+    const candidate = formData.get("file");
+    if (typeof File !== "undefined" && candidate instanceof File) {
+      const optimized = await optimizeMobileImageUpload(candidate);
+      if (optimized.optimized) formData.set("file", optimized.file);
+    }
+  }
+
   return apiFetch<T>(path, { ...options, method: "POST", body: formData });
 }
 

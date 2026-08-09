@@ -1,11 +1,10 @@
 import type { MetadataRoute } from "next";
-
-const siteUrl = "https://alnokhbaeducation.com";
+import { SITE_URL } from "@/lib/site";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {
-      url: siteUrl,
+      url: SITE_URL,
       changeFrequency: "weekly",
       priority: 1,
     },
