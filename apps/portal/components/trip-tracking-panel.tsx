@@ -29,14 +29,15 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResult, setSearchResult] = useState<GeocodingResult | null>(null);
-  const draftDirty = useRef(false);
+  const [draftIsDirty, setDraftIsDirty] = useState(false);
+  const draftDirtyRef = useRef(false);
   const autoRouteKey = useRef("");
 
   const load = useCallback(async () => {
     try {
       const result = await apiFetch<TripTrackingPayload>(`/tracking/trips/${tripId}`);
       setData(result);
-      if (!draftDirty.current) {
+      if (!draftDirtyRef.current) {
         setDraftWaypoints(
           (result.routePlan?.waypoints ?? []).map((point) => ({
             latitude: point.latitude,
@@ -103,7 +104,8 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
             durationMinutes: routed.durationMinutes,
           }),
         });
-        draftDirty.current = false;
+        draftDirtyRef.current = false;
+        setDraftIsDirty(false);
         setDraftWaypoints([]);
         setData((current) => current ? { ...current, routePlan: saved } : current);
         setMessage("تم حساب الطريق الفعلي وحفظه تلقائيًا لهذا الحجز.");
@@ -151,13 +153,13 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
     };
   }, [data, draftDestination, draftOrigin]);
 
-  const previewPlan = useMemo(() => {
-    if (!data?.routePlan) return null;
-    return { ...data.routePlan, waypoints: draftWaypoints };
-  }, [data?.routePlan, draftWaypoints]);
+  const previewPlan = data?.routePlan
+    ? { ...data.routePlan, waypoints: draftWaypoints }
+    : null;
 
   function markDirty() {
-    draftDirty.current = true;
+    draftDirtyRef.current = true;
+    setDraftIsDirty(true);
   }
 
   function addWaypoint(point: DraftWaypoint) {
@@ -215,7 +217,8 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
           durationMinutes: routed.durationMinutes,
         }),
       });
-      draftDirty.current = false;
+      draftDirtyRef.current = false;
+      setDraftIsDirty(false);
       setMessage(
         mode === "rider"
           ? "تم حفظ نقطة البداية والنهاية والمسار المعدّل لهذا الحجز."
@@ -297,7 +300,7 @@ export function TripTrackingPanel({ tripId, mode }: { tripId: string; mode: Mode
       <div className="tracking-summary-grid">
         <div><small>نقطة الانطلاق</small><strong>{previewTrip.pickupAddress}</strong></div>
         <div><small>نقطة الوصول</small><strong>{previewTrip.dropoffAddress}</strong></div>
-        <div><small>حالة التعديل</small><strong>{draftDirty.current ? "تعديلات غير محفوظة" : "محفوظ"}</strong></div>
+        <div><small>حالة التعديل</small><strong>{draftIsDirty ? "تعديلات غير محفوظة" : "محفوظ"}</strong></div>
       </div>
 
       {mode !== "driver" ? (
