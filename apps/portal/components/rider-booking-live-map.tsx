@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "./auth-provider";
 import { TrackingMapClient } from "./tracking-map-client";
 import { apiFetch } from "@/lib/api";
+import { trackingHealth } from "@/lib/tracking-health";
 import type { TrackingShare, TripTrackingPayload } from "@/lib/tracking";
 
 export function RiderBookingLiveMap({ tripId }: { tripId: string }) {
@@ -64,6 +65,8 @@ export function RiderBookingLiveMap({ tripId }: { tripId: string }) {
     }
   }
 
+  const health = trackingHealth(data?.liveLocation);
+
   return (
     <section className="panel rider-detail-panel" aria-label="الخريطة والموقع المباشر">
       <div className="section-heading rider-section-heading">
@@ -72,8 +75,8 @@ export function RiderBookingLiveMap({ tripId }: { tripId: string }) {
           <h2>موقع الرحلة والسيارة</h2>
           <p className="subtitle">
             {isRealtimeConnected
-              ? "الخريطة متصلة بالتحديث المباشر لموقع السائق."
-              : "يتم تحديث الموقع دوريًا إلى حين عودة الاتصال المباشر."}
+              ? "قناة التحديث المباشر متصلة. حالة GPS الفعلية تظهر أسفل الخريطة."
+              : "قناة الاتصال المباشر غير متاحة؛ يتم جلب آخر موقع معروف دوريًا."}
           </p>
         </div>
         <div className="actions">
@@ -93,8 +96,8 @@ export function RiderBookingLiveMap({ tripId }: { tripId: string }) {
             <div><small>موقع الالتقاط المحدد</small><strong>{data.trip.pickupAddress}</strong></div>
             <div><small>نقطة الوصول</small><strong>{data.trip.dropoffAddress}</strong></div>
             <div>
-              <small>آخر موقع للسائق</small>
-              <strong>{data.liveLocation ? new Date(data.liveLocation.recordedAt).toLocaleTimeString("ar") : "لم يبدأ التتبع بعد"}</strong>
+              <small>حالة موقع السائق</small>
+              <strong>{health.label} · {health.ageLabel}</strong>
             </div>
           </div>
           <TrackingMapClient
