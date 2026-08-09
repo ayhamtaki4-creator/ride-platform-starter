@@ -44,6 +44,9 @@ test.describe("Private-car-only public booking policy", () => {
 
     expect(quote.status()).toBe(400);
     const body = (await quote.json()) as { message?: string | string[] };
-    expect(JSON.stringify(body.message ?? body)).toContain("PRIVATE_CAR");
+    const message = Array.isArray(body.message)
+      ? body.message.join(" ")
+      : String(body.message ?? "");
+    expect(message).toContain("سيارة خاصة فقط");
   });
 });
