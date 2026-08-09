@@ -31,10 +31,17 @@ export class HomeShowcaseService {
       take: 120
     });
 
-    return assets
-      .map((asset) => ({ asset, config: this.readShowcase(asset.metadata) }))
-      .filter((entry): entry is typeof entry & { config: ShowcaseConfig } => Boolean(entry.config?.isActive))
-      .sort((a, b) => a.config.sortOrder - b.config.sortOrder || a.asset.createdAt.getTime() - b.asset.createdAt.getTime())
+    const entries = assets.flatMap((asset) => {
+      const config = this.readShowcase(asset.metadata);
+      return config?.isActive ? [{ asset, config }] : [];
+    });
+
+    return entries
+      .sort(
+        (a, b) =>
+          a.config.sortOrder - b.config.sortOrder ||
+          a.asset.createdAt.getTime() - b.asset.createdAt.getTime()
+      )
       .map(({ asset, config }) => this.serialize(asset.id, config));
   }
 
@@ -49,10 +56,17 @@ export class HomeShowcaseService {
       take: 200
     });
 
-    return assets
-      .map((asset) => ({ asset, config: this.readShowcase(asset.metadata) }))
-      .filter((entry): entry is typeof entry & { config: ShowcaseConfig } => Boolean(entry.config))
-      .sort((a, b) => a.config.sortOrder - b.config.sortOrder || a.asset.createdAt.getTime() - b.asset.createdAt.getTime())
+    const entries = assets.flatMap((asset) => {
+      const config = this.readShowcase(asset.metadata);
+      return config ? [{ asset, config }] : [];
+    });
+
+    return entries
+      .sort(
+        (a, b) =>
+          a.config.sortOrder - b.config.sortOrder ||
+          a.asset.createdAt.getTime() - b.asset.createdAt.getTime()
+      )
       .map(({ asset, config }) => ({
         ...this.serialize(asset.id, config),
         status: asset.status,
@@ -92,16 +106,23 @@ export class HomeShowcaseService {
       sortOrder: dto.sortOrder ?? current?.sortOrder ?? 0,
       isActive: dto.isActive ?? current?.isActive ?? true
     };
+    const showcaseMetadata: Prisma.InputJsonObject = {
+      titleAr: next.titleAr,
+      subtitleAr: next.subtitleAr,
+      sortOrder: next.sortOrder,
+      isActive: next.isActive
+    };
+    const combinedMetadata = {
+      ...existingRoot,
+      homeShowcase: showcaseMetadata
+    } as Prisma.InputJsonObject;
 
     await this.prisma.$transaction([
       this.prisma.mediaAsset.update({
         where: { id },
         data: {
           visibility: MediaVisibility.PUBLIC,
-          metadata: {
-            ...existingRoot,
-            homeShowcase: next
-          }
+          metadata: combinedMetadata
         }
       }),
       this.prisma.auditLog.create({
@@ -110,7 +131,7 @@ export class HomeShowcaseService {
           action: isNew ? 'home_showcase.attach' : 'home_showcase.update',
           entityType: 'MediaAsset',
           entityId: id,
-          metadata: next
+          metadata: showcaseMetadata
         }
       })
     ]);
@@ -147,7 +168,10 @@ export class HomeShowcaseService {
     const value = candidate as Prisma.JsonObject;
     const titleAr = typeof value.titleAr === 'string' ? value.titleAr.trim() : '';
     const subtitleAr = typeof value.subtitleAr === 'string' ? value.subtitleAr.trim() : '';
-    const sortOrder = typeof value.sortOrder === 'number' && Number.isFinite(value.sortOrder) ? value.sortOrder : 0;
+    const sortOrder =
+      typeof value.sortOrder === 'number' && Number.isFinite(value.sortOrder)
+        ? value.sortOrder
+        : 0;
     const isActive = typeof value.isActive === 'boolean' ? value.isActive : true;
     return {
       titleAr: titleAr || 'سيارة من أسطول طريق الشام',
