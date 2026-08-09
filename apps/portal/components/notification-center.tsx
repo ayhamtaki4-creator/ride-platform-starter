@@ -11,6 +11,7 @@ import {
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/ui/icon";
 import { useToast } from "@/components/ui/toast-provider";
+import { WebPushControl } from "@/components/web-push-control";
 import { apiFetch } from "@/lib/api";
 import {
   AppNotification,
@@ -65,6 +66,22 @@ export function NotificationCenter() {
     }, 45_000);
 
     return () => window.clearInterval(timer);
+  }, [load, user]);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator) || !user) return;
+
+    const handlePushMessage = (event: MessageEvent) => {
+      if (event.data?.type !== "route-sham.push-received") return;
+      void load();
+    };
+
+    navigator.serviceWorker.addEventListener("message", handlePushMessage);
+    return () =>
+      navigator.serviceWorker.removeEventListener(
+        "message",
+        handlePushMessage,
+      );
   }, [load, user]);
 
   useEffect(() => {
@@ -232,6 +249,8 @@ export function NotificationCenter() {
               </button>
             ) : null}
           </div>
+
+          <WebPushControl />
 
           <div className="notification-popover-list">
             {isLoading && items.length === 0 ? (
