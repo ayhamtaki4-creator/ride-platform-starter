@@ -68,4 +68,17 @@ test.describe("Mobile API network resilience", () => {
     await page.waitForTimeout(1_000);
     expect(loginCalls).toBe(1);
   });
+
+  test("shows immediate offline feedback and confirms reconnection", async ({ page, context }) => {
+    await page.goto("/login");
+    await expect(page.locator('[data-connection-state="offline"]')).toHaveCount(0);
+
+    await context.setOffline(true);
+    await expect(page.locator('[data-connection-state="offline"]')).toBeVisible();
+    await expect(page.getByText(/لا يوجد اتصال بالإنترنت/)).toBeVisible();
+
+    await context.setOffline(false);
+    await expect(page.locator('[data-connection-state="restored"]')).toBeVisible();
+    await expect(page.getByText("عاد الاتصال بالإنترنت.")).toBeVisible();
+  });
 });
