@@ -1,9 +1,14 @@
-const CACHE_NAME = "route-sham-shell-v1";
+const CACHE_NAME = "route-sham-shell-v2";
 const OFFLINE_URL = "/offline.html";
 const STATIC_ASSETS = [
   OFFLINE_URL,
   "/icons/route-sham.svg",
   "/icons/route-sham-maskable.svg",
+  "/icons/route-sham-192.png",
+  "/icons/route-sham-512.png",
+  "/icons/route-sham-maskable-192.png",
+  "/icons/route-sham-maskable-512.png",
+  "/icons/apple-touch-icon.png",
 ];
 
 self.addEventListener("install", (event) => {
