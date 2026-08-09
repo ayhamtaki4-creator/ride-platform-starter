@@ -18,7 +18,7 @@ async function criticalStylesheetText(page: import("@playwright/test").Page) {
 }
 
 test.describe("Production mobile performance boundaries", () => {
-  test("login critical CSS excludes booking-only vendor styles", async ({ page }) => {
+  test("login critical CSS excludes booking and map vendor styles", async ({ page }) => {
     await page.goto("/login", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { name: "تسجيل الدخول" })).toBeVisible();
 
@@ -26,5 +26,6 @@ test.describe("Production mobile performance boundaries", () => {
     expect(css).not.toContain(".react-datepicker");
     expect(css).not.toContain(".react-tel-input");
     expect(css).not.toContain(".booking-map-modal");
+    expect(css).not.toContain(".leaflet-container");
   });
 });
