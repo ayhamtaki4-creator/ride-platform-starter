@@ -1,7 +1,7 @@
 "use client";
 
 import L, { LatLngBoundsExpression, LatLngExpression } from "leaflet";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   Marker,
@@ -11,6 +11,8 @@ import {
   useMap,
   useMapEvents,
 } from "react-leaflet";
+import { MAP_TILE_ATTRIBUTION, MAP_TILE_URL } from "@/lib/map-tiles";
+import { trackingHealth } from "@/lib/tracking-health";
 import type { TripLiveLocation, TripRoutePlan, TrackingTrip } from "@/lib/tracking";
 
 export type TrackingMapProps = {
@@ -93,8 +95,16 @@ export default function TrackingMap({
   searchPoint,
   height = 440,
 }: TrackingMapProps) {
+  const [now, setNow] = useState(() => Date.now());
   const pickup: LatLngExpression = [trip.pickupLatitude, trip.pickupLongitude];
   const dropoff: LatLngExpression = [trip.dropoffLatitude, trip.dropoffLongitude];
+
+  useEffect(() => {
+    setNow(Date.now());
+    if (!liveLocation) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 10_000);
+    return () => window.clearInterval(timer);
+  }, [liveLocation?.recordedAt]);
 
   const route = useMemo<LatLngExpression[]>(() => {
     const coordinates = routePlan?.geometry?.coordinates;
@@ -102,44 +112,57 @@ export default function TrackingMap({
     return coordinates.map(([longitude, latitude]) => [latitude, longitude] as LatLngExpression);
   }, [routePlan, trip.pickupLatitude, trip.pickupLongitude, trip.dropoffLatitude, trip.dropoffLongitude]);
 
+  const health = trackingHealth(liveLocation, now);
   const fitKey = `${routePlan?.version ?? "fallback"}:${trip.pickupLatitude}:${trip.pickupLongitude}:${trip.dropoffLatitude}:${trip.dropoffLongitude}`;
 
   return (
-    <div className="ride-map-frame tracking-map-frame" style={{ height }}>
-      <MapContainer center={pickup} zoom={12} className="ride-map" scrollWheelZoom>
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          maxZoom={19}
-        />
-        <Viewport points={route} fitKey={fitKey} />
-        <SearchViewport point={searchPoint} />
-        <ClickEditor enabled={editable} onAddWaypoint={onAddWaypoint} />
+    <div className="tracking-map-stack">
+      <div className="ride-map-frame tracking-map-frame" style={{ height }}>
+        <MapContainer center={pickup} zoom={12} className="ride-map" scrollWheelZoom>
+          <TileLayer attribution={MAP_TILE_ATTRIBUTION} url={MAP_TILE_URL} maxZoom={19} />
+          <Viewport points={route} fitKey={fitKey} />
+          <SearchViewport point={searchPoint} />
+          <ClickEditor enabled={editable} onAddWaypoint={onAddWaypoint} />
 
-        <Marker position={pickup} icon={pickupIcon}><Popup><div dir="rtl"><strong>الانطلاق</strong><br />{trip.pickupAddress}</div></Popup></Marker>
-        <Marker position={dropoff} icon={dropoffIcon}><Popup><div dir="rtl"><strong>الوصول</strong><br />{trip.dropoffAddress}</div></Popup></Marker>
+          <Marker position={pickup} icon={pickupIcon}><Popup><div dir="rtl"><strong>الانطلاق</strong><br />{trip.pickupAddress}</div></Popup></Marker>
+          <Marker position={dropoff} icon={dropoffIcon}><Popup><div dir="rtl"><strong>الوصول</strong><br />{trip.dropoffAddress}</div></Popup></Marker>
 
-        {(routePlan?.waypoints ?? []).map((point, index) => (
-          <Marker key={`${point.latitude}-${point.longitude}-${index}`} position={[point.latitude, point.longitude]} icon={waypointIcon}>
-            <Popup><div dir="rtl"><strong>نقطة مرور {index + 1}</strong>{point.label ? <><br />{point.label}</> : null}</div></Popup>
-          </Marker>
-        ))}
+          {(routePlan?.waypoints ?? []).map((point, index) => (
+            <Marker key={`${point.latitude}-${point.longitude}-${index}`} position={[point.latitude, point.longitude]} icon={waypointIcon}>
+              <Popup><div dir="rtl"><strong>نقطة مرور {index + 1}</strong>{point.label ? <><br />{point.label}</> : null}</div></Popup>
+            </Marker>
+          ))}
 
-        {searchPoint ? (
-          <Marker position={[searchPoint.latitude, searchPoint.longitude]} icon={searchIcon}>
-            <Popup><div dir="rtl"><strong>نتيجة البحث</strong>{searchPoint.label ? <><br />{searchPoint.label}</> : null}</div></Popup>
-          </Marker>
-        ) : null}
+          {searchPoint ? (
+            <Marker position={[searchPoint.latitude, searchPoint.longitude]} icon={searchIcon}>
+              <Popup><div dir="rtl"><strong>نتيجة البحث</strong>{searchPoint.label ? <><br />{searchPoint.label}</> : null}</div></Popup>
+            </Marker>
+          ) : null}
 
-        {liveLocation ? (
-          <Marker position={[liveLocation.latitude, liveLocation.longitude]} icon={driverIcon}>
-            <Popup><div dir="rtl"><strong>موقع السيارة الآن</strong><br />آخر تحديث {new Date(liveLocation.recordedAt).toLocaleTimeString("ar")}</div></Popup>
-          </Marker>
-        ) : null}
+          {liveLocation ? (
+            <Marker position={[liveLocation.latitude, liveLocation.longitude]} icon={driverIcon}>
+              <Popup>
+                <div dir="rtl">
+                  <strong>آخر موقع معروف للسيارة</strong>
+                  <br />{health.label} · {health.ageLabel}
+                  <br />آخر تحديث {new Date(liveLocation.recordedAt).toLocaleTimeString("ar")}
+                </div>
+              </Popup>
+            </Marker>
+          ) : null}
 
-        <Polyline positions={route} pathOptions={{ weight: 6, opacity: 0.9 }} />
-      </MapContainer>
-      {editable ? <div className="map-selection-hint">انقر على الخريطة لإضافة نقطة مرور للمسار</div> : null}
+          <Polyline positions={route} pathOptions={{ weight: 6, opacity: 0.9 }} />
+        </MapContainer>
+        {editable ? <div className="map-selection-hint">انقر على الخريطة لإضافة نقطة مرور للمسار</div> : null}
+      </div>
+
+      <div className={`tracking-health-card tracking-health-${health.level}`} aria-live="polite">
+        <div>
+          <strong>{health.label}</strong>
+          <small>{health.description}</small>
+        </div>
+        <span>{health.ageLabel}</span>
+      </div>
     </div>
   );
 }
