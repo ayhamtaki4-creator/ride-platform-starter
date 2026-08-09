@@ -9,6 +9,12 @@ import { createHttpObservabilityMiddleware } from './common/http-observability';
 import { RetryAfterInterceptor } from './common/retry-after.interceptor';
 import { RedisIoAdapter } from './realtime/redis-io.adapter';
 
+// Service dates are business-calendar dates, not server-local timestamps.
+// Pin Node's local timezone before any request work so legacy date-boundary
+// code behaves consistently on Render, local development, and CI. New code
+// should still prefer the explicit helpers in common/service-date.ts.
+process.env.TZ = process.env.SERVICE_TIME_ZONE?.trim() || 'Asia/Damascus';
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
