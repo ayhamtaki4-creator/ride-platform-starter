@@ -3,6 +3,7 @@
 import { ROUTE_TYPE_LABELS, ServiceRoute, VehicleClassConfig } from "@/lib/admin-operations";
 import { apiFetch, apiUpload } from "@/lib/api";
 import { reverseGeocode } from "@/lib/geocoding";
+import { formatUploadSize, optimizeMobileImageUpload } from "@/lib/mobile-image-upload";
 import {
   clearPendingBooking,
   createPendingBookingId,
@@ -42,6 +43,8 @@ tomorrowDate.setDate(tomorrowDate.getDate() + 1);
 tomorrowDate.setHours(0, 0, 0, 0);
 const tomorrow = format(tomorrowDate, "yyyy-MM-dd");
 const stepTitles = ["المسار", "الموعد والسيارة", "بيانات المسافر", "المراجعة"];
+const MAX_TICKET_BYTES = 10 * 1024 * 1024;
+const MAX_SOURCE_IMAGE_BYTES = 30 * 1024 * 1024;
 const DEFAULT_VEHICLE_CLASSES: VehicleClassConfig[] = [
   { vehicleClass: "SMALL", passengerCapacity: 3, luggageCapacity: 4 },
   { vehicleClass: "MEDIUM", passengerCapacity: 4, luggageCapacity: 5 },
@@ -557,29 +560,57 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       setError("إرفاق تذكرة الطيران غير متاح لهذا المسار حاليًا.");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setError("حجم تذكرة الطيران يجب ألا يتجاوز 10 ميغابايت.");
-      return;
-    }
     if (!["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(file.type)) {
       setError("صيغة التذكرة غير مدعومة. ارفع JPG أو PNG أو WEBP أو PDF.");
       return;
     }
+    if (file.type === "application/pdf" && file.size > MAX_TICKET_BYTES) {
+      setError("حجم ملف PDF يجب ألا يتجاوز 10 ميغابايت.");
+      return;
+    }
+    if (file.type !== "application/pdf" && file.size > MAX_SOURCE_IMAGE_BYTES) {
+      setError("صورة التذكرة كبيرة جدًا. اختر صورة لا تتجاوز 30 ميغابايت.");
+      return;
+    }
 
     setTicketExtraction(null);
-    const candidate: BookingFormState = { ...form, flightTicketFileName: file.name, flightTicketMediaId: "" };
-    setForm(candidate);
+    setTicketWorking(true);
+    setError("");
 
     try {
-      await storePendingTicket(draftId, file);
+      let preparedFile = file;
+      if (file.type !== "application/pdf") {
+        const optimized = await optimizeMobileImageUpload(file);
+        preparedFile = optimized.file;
+        if (optimized.optimized) {
+          showToast(
+            `تم تصغير صورة التذكرة من ${formatUploadSize(optimized.originalBytes)} إلى ${formatUploadSize(preparedFile.size)} لتسريع الرفع.`,
+            "info",
+          );
+        }
+      }
+
+      if (preparedFile.size > MAX_TICKET_BYTES) {
+        setError("تعذر تصغير التذكرة إلى أقل من 10 ميغابايت. التقط صورة أوضح بحجم أصغر.");
+        return;
+      }
+
+      const candidate: BookingFormState = {
+        ...form,
+        flightTicketFileName: preparedFile.name,
+        flightTicketMediaId: "",
+      };
+      setForm(candidate);
+
+      await storePendingTicket(draftId, preparedFile);
       savePendingBooking({ id: draftId, form: candidate, step, submitAfterAuth: false });
       if (isPassenger) {
-        const upload = await uploadTicketFile(file, candidate.routeId);
+        const upload = await uploadTicketFile(preparedFile, candidate.routeId);
         const extracted = withExtraction(candidate, upload);
         setForm(extracted);
         savePendingBooking({ id: draftId, form: extracted, step, submitAfterAuth: false });
       } else {
-        const extraction = await analyzeTicketFile(file, candidate.routeId);
+        const extraction = await analyzeTicketFile(preparedFile, candidate.routeId);
         const extracted = withPublicExtraction(candidate, extraction);
         setForm(extracted);
         savePendingBooking({ id: draftId, form: extracted, step, submitAfterAuth: false });
@@ -588,6 +619,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       const message = caught instanceof Error ? caught.message : "تعذر حفظ أو تحليل التذكرة.";
       setError(message);
       showToast(message, "error");
+    } finally {
+      setTicketWorking(false);
     }
   }
 
@@ -756,10 +789,10 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
 
             {isTicketUploadEnabled ? (
               <section className={`flight-ticket-upload ${form.flightTicketFileName ? "has-file" : ""}`}>
-                <div className="flight-ticket-upload-copy"><span className="flight-ticket-icon"><Icon name="plane" size={24} /></span><div><strong>أرفق تذكرة الطيران (إختياري)</strong><small>سنقرأ تاريخ ووقت الرحلة ورقم الرحلة تلقائيًا حتى قبل تسجيل الدخول. الصيغ: JPG، PNG، WEBP أو PDF حتى 10 MB.</small></div></div>
+                <div className="flight-ticket-upload-copy"><span className="flight-ticket-icon"><Icon name="plane" size={24} /></span><div><strong>أرفق تذكرة الطيران (إختياري)</strong><small>سنقرأ بيانات الرحلة تلقائيًا. PDF حتى 10 MB، وصور JPG/PNG/WEBP الكبيرة تُصغّر تلقائيًا قبل الرفع لتناسب شبكة الهاتف.</small></div></div>
                 <label className={`button ${form.flightTicketFileName ? "" : "primary"}`}>
                   <input hidden type="file" accept="image/jpeg,image/png,image/webp,application/pdf" disabled={ticketWorking} onChange={(event) => void handleTicketSelected(event.target.files?.[0])} />
-                  {ticketWorking ? "جارٍ تحليل التذكرة..." : form.flightTicketFileName ? "استبدال التذكرة" : "اختيار التذكرة"}
+                  {ticketWorking ? "جارٍ تجهيز وتحليل التذكرة..." : form.flightTicketFileName ? "استبدال التذكرة" : "اختيار التذكرة"}
                 </label>
                 {form.flightTicketFileName ? <div className="flight-ticket-result"><Icon name="check" size={18} /><span><strong>{form.flightTicketFileName}</strong><small>{form.flightTicketMediaId ? "تم رفعها وحفظها بصورة خاصة" : "تم تحليلها ومحفوظة مؤقتًا حتى تسجيل الدخول"}</small></span></div> : null}
                 {ticketExtraction ? <div className={`ticket-extraction-status ${ticketExtraction.status === "EXTRACTED" ? "success" : "warning"}`}><strong>{ticketExtraction.status === "EXTRACTED" ? "تمت تعبئة البيانات تلقائيًا" : "تحتاج البيانات إلى مراجعة"}</strong><span>دقة القراءة التقريبية: {Math.round(ticketExtraction.confidence * 100)}%</span>{ticketExtraction.warning ? <small>{ticketExtraction.warning}</small> : null}</div> : null}
