@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/",
     name: "طريق الشام",
     short_name: "طريق الشام",
     description: "منصة حجز ومتابعة نقل منظم وآمن بين سوريا ولبنان والأردن.",

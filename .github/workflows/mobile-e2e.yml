@@ -60,6 +60,10 @@ jobs:
       MAPBOX_ACCESS_TOKEN: mobile-e2e-mapbox-token
       MAPBOX_GEOCODING_BASE_URL: http://127.0.0.1:4199/geocode
       MAPBOX_DIRECTIONS_BASE_URL: http://127.0.0.1:4199/directions
+      WEB_PUSH_ENABLED: "true"
+      WEB_PUSH_PUBLIC_KEY: BOeEgIs4pVqcHNpQbKpvtzbDQzphJo9Udx5-iU_Ujk4CDLMcuksk3NedDYSF6t0iCdnLySBRTLYmD1vEtxwNw6M
+      WEB_PUSH_PRIVATE_KEY: xhXrlGhmyD8W-icr3_rBeuruXL96R-j0nMDs_EIBmUw
+      WEB_PUSH_SUBJECT: mailto:mobile-e2e@example.com
       PUBLIC_API_URL: http://127.0.0.1:4100
       PORTAL_URL: http://127.0.0.1:3000
       NEXT_PUBLIC_API_URL: http://127.0.0.1:4100/api
@@ -113,8 +117,8 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run mobile, booking, dispatch, contact, fleet, health, PWA, auth, maps, and security Playwright suites
-        run: pnpm exec playwright test e2e/tests/mobile-shell.spec.ts e2e/tests/pwa-seo.spec.ts e2e/tests/health.spec.ts e2e/tests/auth-rate-limit.spec.ts e2e/tests/auth-refresh-legacy.spec.ts e2e/tests/private-car-public.spec.ts e2e/tests/mobile-ticket-upload.spec.ts e2e/tests/booking-location.spec.ts e2e/tests/booking-template-endpoint-regression.spec.ts e2e/tests/booking-route-plan-enrichment.spec.ts e2e/tests/gps-server-throttle.spec.ts e2e/tests/r2-presigned-url.spec.ts e2e/tests/vehicle-image-variants.spec.ts e2e/tests/public-ticket-analysis.spec.ts e2e/tests/rider-booking-details.spec.ts e2e/tests/driver-round-trip-day.spec.ts e2e/tests/assigned-driver-contact.spec.ts e2e/tests/vehicle-primary-image.spec.ts e2e/tests/maps-api.spec.ts --project=chromium
+      - name: Run mobile, booking, dispatch, contact, fleet, health, PWA, auth, maps, push, and security Playwright suites
+        run: pnpm exec playwright test e2e/tests/mobile-shell.spec.ts e2e/tests/pwa-seo.spec.ts e2e/tests/health.spec.ts e2e/tests/auth-rate-limit.spec.ts e2e/tests/auth-refresh-legacy.spec.ts e2e/tests/private-car-public.spec.ts e2e/tests/mobile-ticket-upload.spec.ts e2e/tests/web-push.spec.ts e2e/tests/booking-location.spec.ts e2e/tests/booking-template-endpoint-regression.spec.ts e2e/tests/booking-route-plan-enrichment.spec.ts e2e/tests/gps-server-throttle.spec.ts e2e/tests/r2-presigned-url.spec.ts e2e/tests/vehicle-image-variants.spec.ts e2e/tests/public-ticket-analysis.spec.ts e2e/tests/rider-booking-details.spec.ts e2e/tests/driver-round-trip-day.spec.ts e2e/tests/assigned-driver-contact.spec.ts e2e/tests/vehicle-primary-image.spec.ts e2e/tests/maps-api.spec.ts --project=chromium
 
       - name: Upload Playwright report on failure
         if: failure()

@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma, WhatsAppDeliveryStatus } from '@prisma/client';
 import { toWhatsAppRecipient } from '../common/phone';
 import { PrismaService } from '../prisma/prisma.service';
+import { WebPushService } from '../web-push/web-push.service';
 
 type TemplateParameters = {
   recipientName: string;
@@ -34,7 +35,8 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly webPush: WebPushService
   ) {
     this.enabled = this.config.get<string>('WHATSAPP_ENABLED') === 'true';
     this.token = this.config.get<string>('WHATSAPP_ACCESS_TOKEN') ?? '';
@@ -113,8 +115,9 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
   }
 
   async enqueueNotification(notificationId: string) {
-    if (!this.enabled) return;
-
+    // This is the existing post-notification fan-out hook used by RealtimeEventsService.
+    // Web Push is triggered here before WhatsApp-specific opt-in/config checks so users
+    // can receive browser notifications even when WhatsApp delivery is disabled.
     const notification = await this.prisma.notification.findUnique({
       where: { id: notificationId },
       include: {
@@ -131,9 +134,14 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
       }
     });
 
+    if (!notification || notification.user.status !== 'ACTIVE') {
+      return;
+    }
+
+    void this.webPush.sendToUser(notification.userId);
+
     if (
-      !notification ||
-      notification.user.status !== 'ACTIVE' ||
+      !this.enabled ||
       !notification.user.whatsappOptIn ||
       !notification.user.phone
     ) {
