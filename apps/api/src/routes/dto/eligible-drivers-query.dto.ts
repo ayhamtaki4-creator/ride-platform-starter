@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { VehicleClass } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsDateString, IsEnum, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { normalizeServiceDateInput } from '../../common/service-date';
 import {
   BOOKING_MAX_LUGGAGE,
   BOOKING_MAX_PASSENGERS,
@@ -10,7 +11,14 @@ import {
 } from '../../pricing/vehicle-class';
 
 export class EligibleDriversQueryDto {
-  @ApiProperty({ example: '2026-08-15T08:00:00.000Z' })
+  @ApiProperty({
+    example: '2026-08-15',
+    description: 'تاريخ خدمة بصيغة YYYY-MM-DD. يتم تطبيع قيم ISO القديمة إلى تاريخ خدمة دمشق للتوافق مع العملاء السابقين.'
+  })
+  @Transform(({ value }) => {
+    if (typeof value !== 'string') return value;
+    return normalizeServiceDateInput(value) ?? value;
+  })
   @IsDateString()
   travelDate!: string;
 

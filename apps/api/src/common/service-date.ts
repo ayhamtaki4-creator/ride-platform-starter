@@ -45,6 +45,21 @@ export function zonedDateKey(
   return `${values.get('year')}-${values.get('month')}-${values.get('day')}`;
 }
 
+export function normalizeServiceDateInput(
+  value: string,
+  timeZone = SERVICE_TIME_ZONE
+) {
+  const trimmed = value.trim();
+  const direct = parseDateOnly(trimmed);
+  if (direct) return dateOnlyKey(direct);
+
+  const instant = new Date(trimmed);
+  if (Number.isNaN(instant.getTime())) return null;
+
+  const key = zonedDateKey(instant, timeZone);
+  return parseDateOnly(key) ? key : null;
+}
+
 export function currentServiceDate(value = new Date()) {
   const parsed = parseDateOnly(zonedDateKey(value));
   if (!parsed) {
