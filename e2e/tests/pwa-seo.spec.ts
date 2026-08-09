@@ -6,6 +6,7 @@ test.describe("PWA and SEO foundation", () => {
   test("serves an installable Arabic manifest and offline shell", async ({ request }) => {
     const manifestResponse = await request.get("/manifest.webmanifest");
     expect(manifestResponse.status()).toBe(200);
+    expect(manifestResponse.headers()["cache-control"]).toContain("no-cache");
     const manifest = (await manifestResponse.json()) as {
       id?: string;
       name?: string;
@@ -53,6 +54,9 @@ test.describe("PWA and SEO foundation", () => {
 
     const worker = await request.get("/sw.js");
     expect(worker.status()).toBe(200);
+    expect(worker.headers()["cache-control"]).toContain("no-cache");
+    expect(worker.headers()["cache-control"]).toContain("no-store");
+    expect(worker.headers()["service-worker-allowed"]).toBe("/");
     const workerText = await worker.text();
     expect(workerText).toContain("offline.html");
     expect(workerText).toContain("route-sham-192.png");
@@ -63,6 +67,7 @@ test.describe("PWA and SEO foundation", () => {
 
     const offline = await request.get("/offline.html");
     expect(offline.status()).toBe(200);
+    expect(offline.headers()["cache-control"]).toContain("no-cache");
     expect(await offline.text()).toContain("لا يوجد اتصال بالإنترنت");
   });
 
