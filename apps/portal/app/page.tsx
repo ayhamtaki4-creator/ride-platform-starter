@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookingForm } from "@/components/booking-form";
+import { LazyBookingForm } from "@/components/lazy-booking-form";
 import { Shell } from "@/components/shell";
 import { Icon } from "@/components/ui/icon";
 
@@ -77,7 +77,7 @@ export default function Home() {
           <h2>احجز رحلتك خلال دقائق</h2>
           <p>اتبع الخطوات، راجع بياناتك والسعر، ثم أرسل الطلب مباشرة إلى مركز العمليات.</p>
         </div>
-        <BookingForm />
+        <LazyBookingForm />
       </section>
 
       <section id="how-it-works" className="content-section how-section-v2">
@@ -129,7 +129,7 @@ export default function Home() {
 
       <section className="home-cta">
         <div><div className="eyebrow-v2 light-eyebrow">جاهز للانطلاق؟</div><h2>أرسل حجزك وسيتولى مركز العمليات الباقي</h2><p>احتفظ برقم الحجز لمتابعة التأكيد والسائق وتفاصيل الرحلة.</p></div>
-        <div><a className="button light-button button-lg" href="#booking">احجز الآن <Icon name="arrow-left" size={19} /></a><Link className="button cta-outline button-lg" href="/login">متابعة حجوزاتي</Link></div>
+        <div><a className="button light-button button-lg" href="#booking">احجز الآن <Icon name="arrow-left" size={18} /></a><Link className="button cta-outline button-lg" href="/login">متابعة حجوزاتي</Link></div>
       </section>
     </Shell>
   );

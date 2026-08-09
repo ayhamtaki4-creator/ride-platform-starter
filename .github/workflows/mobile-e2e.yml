@@ -49,7 +49,7 @@ jobs:
       SERVICE_TIME_ZONE: Asia/Damascus
       AUTH_REFRESH_COOKIE_ENABLED: "false"
       PORT: 4100
-      WEB_ORIGINS: http://127.0.0.1:3000,http://localhost:3000
+      WEB_ORIGINS: http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:3100
       TRUST_PROXY_HOPS: "0"
       AUTH_RATE_LIMIT_ENABLED: "true"
       AUTH_LOGIN_IDENTITY_MAX: "3"
@@ -117,8 +117,29 @@ jobs:
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run mobile, booking, dispatch, contact, fleet, health, PWA, auth, maps, push, and security Playwright suites
-        run: pnpm exec playwright test e2e/tests/mobile-shell.spec.ts e2e/tests/pwa-seo.spec.ts e2e/tests/health.spec.ts e2e/tests/auth-rate-limit.spec.ts e2e/tests/auth-refresh-legacy.spec.ts e2e/tests/private-car-public.spec.ts e2e/tests/mobile-ticket-upload.spec.ts e2e/tests/web-push.spec.ts e2e/tests/booking-location.spec.ts e2e/tests/booking-template-endpoint-regression.spec.ts e2e/tests/booking-route-plan-enrichment.spec.ts e2e/tests/gps-server-throttle.spec.ts e2e/tests/r2-presigned-url.spec.ts e2e/tests/vehicle-image-variants.spec.ts e2e/tests/public-ticket-analysis.spec.ts e2e/tests/rider-booking-details.spec.ts e2e/tests/driver-round-trip-day.spec.ts e2e/tests/assigned-driver-contact.spec.ts e2e/tests/vehicle-primary-image.spec.ts e2e/tests/maps-api.spec.ts --project=chromium
+      - name: Run mobile, performance, booking, dispatch, contact, fleet, health, PWA, auth, maps, push, and security Playwright suites
+        run: pnpm exec playwright test e2e/tests/mobile-shell.spec.ts e2e/tests/mobile-performance.spec.ts e2e/tests/pwa-seo.spec.ts e2e/tests/health.spec.ts e2e/tests/auth-rate-limit.spec.ts e2e/tests/auth-refresh-legacy.spec.ts e2e/tests/private-car-public.spec.ts e2e/tests/mobile-ticket-upload.spec.ts e2e/tests/web-push.spec.ts e2e/tests/booking-location.spec.ts e2e/tests/booking-template-endpoint-regression.spec.ts e2e/tests/booking-route-plan-enrichment.spec.ts e2e/tests/gps-server-throttle.spec.ts e2e/tests/r2-presigned-url.spec.ts e2e/tests/vehicle-image-variants.spec.ts e2e/tests/public-ticket-analysis.spec.ts e2e/tests/rider-booking-details.spec.ts e2e/tests/driver-round-trip-day.spec.ts e2e/tests/assigned-driver-contact.spec.ts e2e/tests/vehicle-primary-image.spec.ts e2e/tests/maps-api.spec.ts --project=chromium
+
+      - name: Build production portal for critical CSS guard
+        run: pnpm --filter portal build
+
+      - name: Start production portal
+        run: |
+          PORT=3100 nohup pnpm --filter portal start >/tmp/portal-production.log 2>&1 &
+          for attempt in {1..80}; do
+            if curl --fail --silent http://127.0.0.1:3100/login >/dev/null; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          cat /tmp/portal-production.log
+          exit 1
+
+      - name: Verify production critical CSS boundary
+        env:
+          E2E_SKIP_WEBSERVER: "1"
+          E2E_BASE_URL: http://127.0.0.1:3100
+        run: pnpm exec playwright test e2e/tests/mobile-performance-production.spec.ts --project=chromium
 
       - name: Upload Playwright report on failure
         if: failure()

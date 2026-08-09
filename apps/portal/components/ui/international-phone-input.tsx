@@ -25,35 +25,38 @@ export function InternationalPhoneInput({
   ariaLabel = "رقم الهاتف مع رمز الدولة",
 }: InternationalPhoneInputProps) {
   return (
-    <PhoneInput
-      country="sy"
-      preferredCountries={["sy", "lb", "jo"]}
-      value={value.replace(/\D/g, "")}
-      onChange={(digits) => {
-        const normalized = digits.replace(/\D/g, "");
-        onChange(normalized ? `+${normalized}` : "");
-      }}
-      localization={arabicCountries}
-      enableSearch
-      autocompleteSearch
-      searchPlaceholder="ابحث عن الدولة أو الرمز"
-      searchNotFound="لا توجد دولة مطابقة"
-      countryCodeEditable={false}
-      specialLabel=""
-      placeholder={placeholder}
-      containerClass="international-phone-input"
-      inputClass="input international-phone-field"
-      buttonClass="international-phone-country-button"
-      dropdownClass="international-phone-dropdown"
-      searchClass="international-phone-search"
-      inputProps={{
-        id,
-        name,
-        required,
-        autoComplete,
-        "aria-label": ariaLabel,
-        dir: "ltr",
-      }}
-    />
+    <>
+      <link rel="stylesheet" href="/vendor/react-phone-input.css" precedence="route-vendor" />
+      <PhoneInput
+        country="sy"
+        preferredCountries={["sy", "lb", "jo"]}
+        value={value.replace(/\D/g, "")}
+        onChange={(digits) => {
+          const normalized = digits.replace(/\D/g, "");
+          onChange(normalized ? `+${normalized}` : "");
+        }}
+        localization={arabicCountries}
+        enableSearch
+        autocompleteSearch
+        searchPlaceholder="ابحث عن الدولة أو الرمز"
+        searchNotFound="لا توجد دولة مطابقة"
+        countryCodeEditable={false}
+        specialLabel=""
+        placeholder={placeholder}
+        containerClass="international-phone-input"
+        inputClass="input international-phone-field"
+        buttonClass="international-phone-country-button"
+        dropdownClass="international-phone-dropdown"
+        searchClass="international-phone-search"
+        inputProps={{
+          id,
+          name,
+          required,
+          autoComplete,
+          "aria-label": ariaLabel,
+          dir: "ltr",
+        }}
+      />
+    </>
   );
 }

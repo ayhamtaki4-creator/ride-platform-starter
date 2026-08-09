@@ -13,5 +13,10 @@ const DynamicRideMap = dynamic(() => import("./ride-map"), {
 });
 
 export function RideMapClient(props: RideMapProps) {
-  return <DynamicRideMap {...props} />;
+  return (
+    <>
+      <link rel="stylesheet" href="/vendor/leaflet.css" precedence="route-vendor" />
+      <DynamicRideMap {...props} />
+    </>
+  );
 }
