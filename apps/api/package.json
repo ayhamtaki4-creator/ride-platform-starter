@@ -49,9 +49,5 @@
     "tsx": "latest",
     "typescript": "6.0.2",
     "@types/multer": "latest"
-  },
-  "prisma": {
-    "schema": "prisma",
-    "seed": "tsx prisma/seed.ts"
   }
 }
