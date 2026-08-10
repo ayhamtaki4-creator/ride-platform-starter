@@ -10,6 +10,7 @@ import { HealthController } from './health.controller';
 import { MediaModule } from './media/media.module';
 import { MapsModule } from './maps/maps.module';
 import { PermissionsGuard } from './iam/permissions.guard';
+import { PaymentsModule } from './payments/payments.module';
 import { PricingModule } from './pricing/pricing.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RealtimeModule } from './realtime/realtime.module';
@@ -39,6 +40,7 @@ import { WebPushModule } from './web-push/web-push.module';
     DriversModule,
     TripsModule,
     BookingsModule,
+    PaymentsModule,
     PricingModule,
     RoutesModule,
     TrackingModule,

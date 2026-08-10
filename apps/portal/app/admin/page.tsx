@@ -15,6 +15,9 @@ type Dashboard = {
   activeTrips: number;
   availableDrivers: number;
   revenue: number;
+  completedBookingValue: number;
+  outstandingRevenue: number;
+  unpaidCompletedBookings: number;
   latest: Trip[];
 };
 
@@ -39,7 +42,7 @@ export default function AdminPage() {
   }, [load, socket]);
 
   return <ProtectedRoute roles={["SUPER_ADMIN", "ADMIN", "OPERATIONS_MANAGER"]}><Shell>
-    <DashboardHeader eyebrow="الإدارة" title="نظرة عامة" subtitle="ملخص الحجوزات والتشغيل والإيرادات." />
+    <DashboardHeader eyebrow="الإدارة" title="نظرة عامة" subtitle="ملخص الحجوزات والتشغيل والتحصيل النقدي." />
     <div className={`connection-badge ${isRealtimeConnected ? "is-online" : "is-offline"}`}>{isRealtimeConnected ? "مركز العمليات متصل مباشرًا" : "جارٍ استعادة الاتصال"}</div>
     {error ? <div className="notice error">{error}</div> : null}
     <section className="grid admin-stats">
@@ -47,7 +50,8 @@ export default function AdminPage() {
       <div className="card"><div className="label">طلبات جديدة</div><div className="value">{data?.newBookings ?? 0}</div></div>
       <div className="card"><div className="label">رحلات جارية</div><div className="value">{data?.activeTrips ?? 0}</div></div>
       <div className="card"><div className="label">سائقون متاحون</div><div className="value">{data?.availableDrivers ?? 0}</div></div>
-      <div className="card"><div className="label">الإيرادات</div><div className="value">${data?.revenue ?? 0}</div></div>
+      <div className="card"><div className="label">المحصل نقدًا</div><div className="value">${data?.revenue ?? 0}</div></div>
+      <div className="card"><div className="label">غير محصل</div><div className="value">${data?.outstandingRevenue ?? 0}</div><small>{data?.unpaidCompletedBookings ?? 0} حجز مكتمل يحتاج مراجعة دفع</small></div>
     </section>
     <section className="operations-shortcuts">
       <Link className="panel operations-shortcut" href="/admin/routes"><span>المسارات</span><strong>إدارة المدن والمطارات والخطوط</strong><small>إضافة دمشق–عمّان أو أي محافظة وتسعيرها.</small></Link>

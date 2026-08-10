@@ -18,6 +18,12 @@ const TERMINAL_TRIP_STATUSES = [
   'DRIVER_NO_SHOW'
 ] as const;
 
+type FinanceSummaryRow = {
+  bookedValue: Prisma.Decimal;
+  collectedValue: Prisma.Decimal;
+  unpaidCompleted: bigint;
+};
+
 const bookingInclude = {
   route: {
     include: {
@@ -109,39 +115,57 @@ export class AdminBookingsService {
   ) {}
 
   async dashboard() {
-    const [totalBookings, newBookings, activeTrips, availableDrivers, revenue, latest] =
-      await Promise.all([
-        this.prisma.trip.count({ where: { bookingReference: { not: null } } }),
-        this.prisma.trip.count({
-          where: { bookingReference: { not: null }, bookingReviewStatus: 'NEW' }
-        }),
-        this.prisma.trip.count({
-          where: {
-            bookingReference: { not: null },
-            status: { in: ['DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'DRIVER_ARRIVED', 'IN_PROGRESS'] }
-          }
-        }),
-        this.prisma.driverProfile.count({
-          where: { status: 'APPROVED', availability: 'ONLINE', user: { status: 'ACTIVE' } }
-        }),
-        this.prisma.trip.aggregate({
-          where: { bookingReference: { not: null }, status: 'COMPLETED' },
-          _sum: { finalFare: true, estimatedFare: true }
-        }),
-        this.prisma.trip.findMany({
-          where: { bookingReference: { not: null } },
-          orderBy: { requestedAt: 'desc' },
-          take: 6,
-          include: bookingInclude
-        })
-      ]);
+    const [
+      totalBookings,
+      newBookings,
+      activeTrips,
+      availableDrivers,
+      financeRows,
+      latest
+    ] = await Promise.all([
+      this.prisma.trip.count({ where: { bookingReference: { not: null } } }),
+      this.prisma.trip.count({
+        where: { bookingReference: { not: null }, bookingReviewStatus: 'NEW' }
+      }),
+      this.prisma.trip.count({
+        where: {
+          bookingReference: { not: null },
+          status: { in: ['DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'DRIVER_ARRIVED', 'IN_PROGRESS'] }
+        }
+      }),
+      this.prisma.driverProfile.count({
+        where: { status: 'APPROVED', availability: 'ONLINE', user: { status: 'ACTIVE' } }
+      }),
+      this.prisma.$queryRaw<FinanceSummaryRow[]>`
+        SELECT
+          COALESCE(SUM(COALESCE("finalFare", "estimatedFare")), 0) AS "bookedValue",
+          COALESCE(SUM("amountPaid"), 0) AS "collectedValue",
+          COUNT(*) FILTER (WHERE "paymentStatus" <> 'PAID') AS "unpaidCompleted"
+        FROM "Trip"
+        WHERE "bookingReference" IS NOT NULL
+          AND "status" = 'COMPLETED'
+      `,
+      this.prisma.trip.findMany({
+        where: { bookingReference: { not: null } },
+        orderBy: { requestedAt: 'desc' },
+        take: 6,
+        include: bookingInclude
+      })
+    ]);
+
+    const finance = financeRows[0];
+    const completedBookingValue = Number(finance?.bookedValue ?? 0);
+    const revenue = Number(finance?.collectedValue ?? 0);
 
     return {
       totalBookings,
       newBookings,
       activeTrips,
       availableDrivers,
-      revenue: Number(revenue._sum.finalFare ?? revenue._sum.estimatedFare ?? 0),
+      revenue,
+      completedBookingValue,
+      outstandingRevenue: Math.max(0, completedBookingValue - revenue),
+      unpaidCompletedBookings: Number(finance?.unpaidCompleted ?? 0),
       latest: latest.map((item) => this.sanitize(item))
     };
   }

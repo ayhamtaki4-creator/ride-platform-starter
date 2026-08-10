@@ -9,15 +9,19 @@ import { StatusPill } from "@/components/admin/status-pill";
 import { apiFetch } from "@/lib/api";
 import { sortRunsNewestFirst, sortTripsNewestFirst } from "@/lib/completed-bookings";
 import {
+  PAYMENT_RECEIVER_LABELS,
+  PAYMENT_STATUS_LABELS,
+  type PaymentAwareTrip,
+} from "@/lib/payments";
+import {
   BOOKING_TYPE_LABELS,
   SERVICE_RUN_STATUS_LABELS,
   ServiceRun,
-  Trip,
   TRIP_STATUS_LABELS,
 } from "@/lib/types";
 
 export default function AdminCompletedBookingsPage() {
-  const [bookings, setBookings] = useState<Trip[]>([]);
+  const [bookings, setBookings] = useState<PaymentAwareTrip[]>([]);
   const [runs, setRuns] = useState<ServiceRun[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -26,10 +30,10 @@ export default function AdminCompletedBookingsPage() {
     setLoading(true);
     try {
       const [bookingRows, runRows] = await Promise.all([
-        apiFetch<Trip[]>("/admin/bookings?history=true"),
+        apiFetch<PaymentAwareTrip[]>("/admin/bookings?history=true"),
         apiFetch<ServiceRun[]>("/admin/runs?history=true"),
       ]);
-      setBookings(sortTripsNewestFirst(bookingRows));
+      setBookings(sortTripsNewestFirst(bookingRows) as PaymentAwareTrip[]);
       setRuns(sortRunsNewestFirst(runRows));
       setError("");
     } catch (caught) {
@@ -47,7 +51,7 @@ export default function AdminCompletedBookingsPage() {
         <DashboardHeader
           eyebrow="الإدارة / السجل"
           title="الحجوزات المنتهية"
-          subtitle="الحجوزات والرحلات التشغيلية المكتملة أو الملغاة، مرتبة من الأحدث إلى الأقدم."
+          subtitle="الحجوزات والرحلات التشغيلية المكتملة أو الملغاة، مع حالة التحصيل النقدي لكل حجز."
           actions={<div className="actions"><Link className="button" href="/admin/bookings">الحجوزات الحالية</Link><Link className="button" href="/admin/runs">الرحلات الحالية</Link></div>}
         />
 
@@ -60,9 +64,15 @@ export default function AdminCompletedBookingsPage() {
               {bookings.map((booking) => (
                 <article className="booking-card" key={booking.id}>
                   <div className="booking-card-head"><div><strong>{booking.bookingReference}</strong><small>{booking.contactName} · {booking.contactPhone}</small></div><StatusPill status={booking.status} label={TRIP_STATUS_LABELS[booking.status]} /></div>
-                  <div className="booking-meta"><span>{booking.route?.nameAr || `${booking.pickupAddress} ← ${booking.dropoffAddress}`}</span><span>{booking.travelDate ? new Date(booking.travelDate).toLocaleDateString("ar") : "—"}</span><span>{Number(booking.finalFare ?? booking.estimatedFare).toLocaleString("ar")} {booking.currency}</span></div>
+                  <div className="booking-meta">
+                    <span>{booking.route?.nameAr || `${booking.pickupAddress} ← ${booking.dropoffAddress}`}</span>
+                    <span>{booking.travelDate ? new Date(booking.travelDate).toLocaleDateString("ar") : "—"}</span>
+                    <span>{Number(booking.finalFare ?? booking.estimatedFare).toLocaleString("ar")} {booking.currency}</span>
+                    <span>{PAYMENT_STATUS_LABELS[booking.paymentStatus]} · {Number(booking.amountPaid).toLocaleString("ar")} {booking.currency}</span>
+                    {booking.paymentReceiver ? <span>استلم: {PAYMENT_RECEIVER_LABELS[booking.paymentReceiver]}</span> : null}
+                  </div>
                   <div className="detail-list compact-detail-list"><div><span>الالتقاط</span><strong>{booking.pickupAddress}</strong></div><div><span>الوصول</span><strong>{booking.dropoffAddress}</strong></div></div>
-                  <div className="actions"><Link className="button" href={`/admin/bookings/${booking.id}`}>التفاصيل</Link></div>
+                  <div className="actions"><Link className="button" href={`/admin/bookings/${booking.id}`}>التفاصيل والتحصيل</Link></div>
                 </article>
               ))}
             </div>

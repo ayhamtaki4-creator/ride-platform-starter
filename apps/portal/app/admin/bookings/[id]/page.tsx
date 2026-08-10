@@ -7,12 +7,19 @@ import { InternationalPhoneInput } from "@/components/ui/international-phone-inp
 import { apiFetch, fetchProtectedBlob } from "@/lib/api";
 import { EligibleDriver } from "@/lib/admin-operations";
 import {
+  bookingTotal,
+  outstandingAmount,
+  PAYMENT_RECEIVER_LABELS,
+  PAYMENT_STATUS_LABELS,
+  type PaymentAwareTrip,
+  type PaymentReceiver,
+} from "@/lib/payments";
+import {
   BOOKING_REVIEW_LABELS,
   BOOKING_TYPE_LABELS,
   DIRECTION_LABELS,
   DRIVER_ASSIGNMENT_LABELS,
   SERVICE_RUN_STATUS_LABELS,
-  Trip,
   TRIP_STATUS_LABELS,
   VEHICLE_CLASS_LABELS,
   VehicleClass,
@@ -41,7 +48,7 @@ function toDateInput(value?: string | null) {
   return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
 }
 
-function bookingForm(booking: Trip): BookingEditForm {
+function bookingForm(booking: PaymentAwareTrip): BookingEditForm {
   return {
     contactName: booking.contactName ?? "",
     contactPhone: booking.contactPhone ?? "",
@@ -63,10 +70,13 @@ function mapPointUrl(latitude: number, longitude: number) {
 
 export default function AdminBookingDetailPage() {
   const params = useParams<{ id: string }>();
-  const [booking, setBooking] = useState<Trip | null>(null);
+  const [booking, setBooking] = useState<PaymentAwareTrip | null>(null);
   const [edit, setEdit] = useState<BookingEditForm | null>(null);
   const [eligible, setEligible] = useState<EligibleDriver[]>([]);
   const [selection, setSelection] = useState<{ driverId: string; vehicleId: string } | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentReceiver, setPaymentReceiver] = useState<PaymentReceiver>("ADMIN");
+  const [paymentNote, setPaymentNote] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [openingTicket, setOpeningTicket] = useState(false);
@@ -74,9 +84,12 @@ export default function AdminBookingDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const data = await apiFetch<Trip>(`/admin/bookings/${params.id}`);
+      const data = await apiFetch<PaymentAwareTrip>(`/admin/bookings/${params.id}`);
       setBooking(data);
       setEdit(bookingForm(data));
+      setPaymentAmount(Number(data.amountPaid ?? 0));
+      setPaymentReceiver(data.paymentReceiver ?? "ADMIN");
+      setPaymentNote(data.paymentNote ?? "");
       setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "تعذر تحميل تفاصيل الحجز.");
@@ -100,6 +113,30 @@ export default function AdminBookingDetailPage() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "تعذر تنفيذ العملية.");
       return false;
+    } finally {
+      setWorking("");
+    }
+  }
+
+  async function savePayment(event: FormEvent) {
+    event.preventDefault();
+    if (!booking) return;
+    setWorking("payment");
+    setMessage("");
+    setError("");
+    try {
+      await apiFetch(`/admin/bookings/${booking.id}/payment`, {
+        method: "POST",
+        body: JSON.stringify({
+          amountPaid: paymentAmount,
+          receiver: paymentReceiver,
+          note: paymentNote.trim() || undefined,
+        }),
+      });
+      setMessage("تم تحديث التحصيل النقدي للحجز.");
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "تعذر تحديث بيانات الدفع.");
     } finally {
       setWorking("");
     }
@@ -196,7 +233,7 @@ export default function AdminBookingDetailPage() {
         <DashboardHeader
           eyebrow="تفاصيل الحجز"
           title={booking?.bookingReference || "تحميل الحجز"}
-          subtitle="مركز التحكم الكامل بالحجز والتعيين والسعر والمعلومات التشغيلية."
+          subtitle="مركز التحكم الكامل بالحجز والتعيين والسعر والمعلومات التشغيلية والتحصيل."
         />
 
         <div className="actions">
@@ -214,8 +251,35 @@ export default function AdminBookingDetailPage() {
               <div className="card"><div className="label">مراجعة الإدارة</div><div className="value compact-value">{booking.bookingReviewStatus ? BOOKING_REVIEW_LABELS[booking.bookingReviewStatus] : "—"}</div></div>
               <div className="card"><div className="label">حالة التشغيل</div><div className="value compact-value">{TRIP_STATUS_LABELS[booking.status]}</div></div>
               <div className="card"><div className="label">رد السائق</div><div className="value compact-value">{booking.driverAssignmentStatus ? DRIVER_ASSIGNMENT_LABELS[booking.driverAssignmentStatus] : "—"}</div></div>
-              <div className="card"><div className="label">السعر</div><div className="value compact-value">{Number(booking.estimatedFare).toLocaleString("ar")} {booking.currency}</div></div>
+              <div className="card"><div className="label">السعر</div><div className="value compact-value">{bookingTotal(booking).toLocaleString("ar")} {booking.currency}</div></div>
+              <div className="card"><div className="label">الدفع</div><div className="value compact-value">{PAYMENT_STATUS_LABELS[booking.paymentStatus]}</div><small>{Number(booking.amountPaid).toLocaleString("ar")} {booking.currency} محصل</small></div>
             </section>
+
+            {booking.status === "COMPLETED" ? (
+              <section className="panel">
+                <div className="section-heading">
+                  <div>
+                    <span className="eyebrow">المحاسبة</span>
+                    <h2>التحصيل النقدي</h2>
+                    <p className="subtitle">السعر النهائي {bookingTotal(booking).toLocaleString("ar")} {booking.currency} · المتبقي {outstandingAmount(booking).toLocaleString("ar")} {booking.currency}</p>
+                  </div>
+                  <span className="status">{PAYMENT_STATUS_LABELS[booking.paymentStatus]}</span>
+                </div>
+                <div className="detail-list compact-detail-list">
+                  <div><span>المبلغ المحصل</span><strong>{Number(booking.amountPaid).toLocaleString("ar")} {booking.currency}</strong></div>
+                  <div><span>طريقة الدفع</span><strong>{booking.paymentMethod === "CASH" ? "نقدي" : "—"}</strong></div>
+                  <div><span>مستلم المبلغ</span><strong>{booking.paymentReceiver ? PAYMENT_RECEIVER_LABELS[booking.paymentReceiver] : "—"}</strong></div>
+                  <div><span>وقت التسجيل</span><strong>{booking.paymentReceivedAt ? new Date(booking.paymentReceivedAt).toLocaleString("ar") : "—"}</strong></div>
+                </div>
+                <form className="admin-form-grid" onSubmit={savePayment}>
+                  <label><span className="label">إجمالي المبلغ المستلم</span><input className="input" type="number" min={0} max={bookingTotal(booking)} step="0.001" value={paymentAmount} onChange={(event) => setPaymentAmount(Number(event.target.value))} required /></label>
+                  <label><span className="label">من استلم النقد</span><select className="input" value={paymentReceiver} onChange={(event) => setPaymentReceiver(event.target.value as PaymentReceiver)}><option value="ADMIN">الإدارة</option><option value="DRIVER">السائق</option></select></label>
+                  <label className="full-width"><span className="label">ملاحظة الدفع</span><textarea className="input" rows={3} maxLength={500} value={paymentNote} onChange={(event) => setPaymentNote(event.target.value)} placeholder="مثال: تم استلام المبلغ كاملًا نقدًا" /></label>
+                  <button className="button primary full-width" type="submit" disabled={working === "payment"}>{working === "payment" ? "جارٍ الحفظ..." : "حفظ حالة التحصيل"}</button>
+                </form>
+                <p className="subtitle">إدخال 0 يعيد الحجز إلى «غير مدفوع». كل تعديل مالي يُسجل في سجل التدقيق.</p>
+              </section>
+            ) : null}
 
             <section className="panel">
               <div className="section-heading">
