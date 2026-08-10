@@ -1,0 +1,38 @@
+name: Production Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-smoke
+  cancel-in-progress: true
+
+jobs:
+  production-smoke:
+    name: public production smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PRODUCTION_API_URL: https://ride-platform-starter.onrender.com/api
+      PRODUCTION_PORTAL_URL: https://alnokhbaeducation.com
+      PRODUCTION_SMOKE_TIMEOUT_MS: "45000"
+      PRODUCTION_SMOKE_SLOW_MS: "8000"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify production API, portal, CORS, routes, and metadata
+        run: node scripts/production-smoke.mjs
