@@ -61,16 +61,12 @@ class ApiClient {
   final Dio _dio;
   Future<bool>? _refreshInFlight;
 
-  Future<Map<String, dynamic>> login({
-    required String email,
-    required String password,
-  }) async {
+  Future<Map<String, dynamic>> login({required String email, required String password}) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/auth/login',
       data: {'email': email.trim(), 'password': password},
       options: Options(extra: {'retriedAfterRefresh': true}),
     );
-
     final data = response.data ?? <String, dynamic>{};
     final accessToken = data['accessToken']?.toString();
     final refreshToken = data['refreshToken']?.toString();
@@ -78,31 +74,18 @@ class ApiClient {
     if (accessToken == null || accessToken.isEmpty || rawUser is! Map) {
       throw StateError('استجابة تسجيل الدخول غير مكتملة.');
     }
-
     final user = Map<String, dynamic>.from(rawUser);
     final roles = (user['roles'] as List?)?.map((item) => item.toString()).toSet() ?? <String>{};
-    if (!roles.contains('DRIVER')) {
-      throw StateError('هذا الحساب ليس حساب سائق.');
-    }
-
-    await SessionStore.instance.saveSession(
-      accessToken: accessToken,
-      refreshToken: refreshToken,
-      user: user,
-    );
+    if (!roles.contains('DRIVER')) throw StateError('هذا الحساب ليس حساب سائق.');
+    await SessionStore.instance.saveSession(accessToken: accessToken, refreshToken: refreshToken, user: user);
     return user;
   }
 
   Future<void> logout() async {
     final refreshToken = await SessionStore.instance.refreshToken;
     try {
-      await _dio.post<void>(
-        '/auth/logout',
-        data: {'refreshToken': refreshToken},
-        options: Options(extra: {'retriedAfterRefresh': true}),
-      );
+      await _dio.post<void>('/auth/logout', data: {'refreshToken': refreshToken}, options: Options(extra: {'retriedAfterRefresh': true}));
     } catch (_) {
-      // Local logout must still succeed when the network is unavailable.
     } finally {
       await SessionStore.instance.clear();
     }
@@ -115,6 +98,11 @@ class ApiClient {
 
   Future<T> postJson<T>(String path, {Object? data}) async {
     final response = await _dio.post<T>(path, data: data);
+    return response.data as T;
+  }
+
+  Future<T> patchJson<T>(String path, {Object? data}) async {
+    final response = await _dio.patch<T>(path, data: data);
     return response.data as T;
   }
 
@@ -132,32 +120,15 @@ class ApiClient {
       await SessionStore.instance.clear();
       return false;
     }
-
-    final bareDio = Dio(
-      BaseOptions(
-        baseUrl: AppConfig.apiBaseUrl,
-        connectTimeout: const Duration(seconds: 20),
-        receiveTimeout: const Duration(seconds: 25),
-        headers: const {'Content-Type': 'application/json'},
-      ),
-    );
-
+    final bareDio = Dio(BaseOptions(baseUrl: AppConfig.apiBaseUrl, connectTimeout: const Duration(seconds: 20), receiveTimeout: const Duration(seconds: 25), headers: const {'Content-Type': 'application/json'}));
     try {
-      final response = await bareDio.post<Map<String, dynamic>>(
-        '/auth/refresh',
-        data: {'refreshToken': refreshToken},
-      );
+      final response = await bareDio.post<Map<String, dynamic>>('/auth/refresh', data: {'refreshToken': refreshToken});
       final data = response.data ?? <String, dynamic>{};
       final accessToken = data['accessToken']?.toString();
       final nextRefreshToken = data['refreshToken']?.toString();
       final rawUser = data['user'];
       if (accessToken == null || rawUser is! Map) return false;
-
-      await SessionStore.instance.saveSession(
-        accessToken: accessToken,
-        refreshToken: nextRefreshToken ?? refreshToken,
-        user: Map<String, dynamic>.from(rawUser),
-      );
+      await SessionStore.instance.saveSession(accessToken: accessToken, refreshToken: nextRefreshToken ?? refreshToken, user: Map<String, dynamic>.from(rawUser));
       return true;
     } catch (_) {
       await SessionStore.instance.clear();
@@ -174,14 +145,10 @@ String apiErrorMessage(Object error) {
       if (message is List) return message.join('\n');
       return message.toString();
     }
-    if (error.type == DioExceptionType.connectionTimeout ||
-        error.type == DioExceptionType.receiveTimeout ||
-        error.type == DioExceptionType.sendTimeout) {
+    if (error.type == DioExceptionType.connectionTimeout || error.type == DioExceptionType.receiveTimeout || error.type == DioExceptionType.sendTimeout) {
       return 'انتهت مهلة الاتصال بالخادم. حاول مرة أخرى.';
     }
-    if (error.type == DioExceptionType.connectionError) {
-      return 'تعذر الاتصال بالخادم. تحقق من الإنترنت.';
-    }
+    if (error.type == DioExceptionType.connectionError) return 'تعذر الاتصال بالخادم. تحقق من الإنترنت.';
   }
   if (error is StateError) return error.message;
   return 'حدث خطأ غير متوقع.';
