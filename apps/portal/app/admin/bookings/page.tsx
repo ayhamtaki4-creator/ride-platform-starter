@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AdminGpsMonitor } from "@/components/admin/admin-gps-monitor";
+import { StatusPill } from "@/components/admin/status-pill";
+import { useAuth } from "@/components/auth-provider";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Shell } from "@/components/shell";
-import { StatusPill } from "@/components/admin/status-pill";
-import { useAuth } from "@/components/auth-provider";
 import { apiFetch } from "@/lib/api";
 import { EligibleDriver } from "@/lib/admin-operations";
 import {
@@ -103,6 +104,8 @@ export default function AdminBookingsPage() {
         <section className="panel filters"><input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="رقم الحجز أو اسم المسافر أو الهاتف" /><select className="input" value={status} onChange={(e) => setStatus(e.target.value as "" | BookingReviewStatus)}><option value="">كل الحالات</option>{Object.entries(BOOKING_REVIEW_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><button className="button" type="button" onClick={() => void load()}>بحث</button></section>
         {message ? <div className="notice success">{message}</div> : null}
         {error ? <div className="notice error">{error}</div> : null}
+
+        <AdminGpsMonitor />
 
         <section className="booking-list admin-booking-list">
           {bookings.map((booking) => {
