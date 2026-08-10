@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   Injectable,
-  Logger
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { sign } from 'node:crypto';
@@ -9,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const MAX_DEVICES_PER_USER = 6;
 const MAX_DELIVERY_FAILURES = 5;
+const MAX_PUSH_ATTEMPTS = 4;
 const FIREBASE_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
 const DEFAULT_TOKEN_URI = 'https://oauth2.googleapis.com/token';
 
@@ -29,10 +32,12 @@ type MobilePushPayload = {
 };
 
 @Injectable()
-export class MobilePushService {
+export class MobilePushService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MobilePushService.name);
   private readonly account?: FirebaseServiceAccount;
   private accessToken?: { value: string; expiresAtMs: number };
+  private timer?: NodeJS.Timeout;
+  private polling = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -54,6 +59,17 @@ export class MobilePushService {
         }`
       );
     }
+  }
+
+  onModuleInit() {
+    if (!this.account) return;
+    this.timer = setInterval(() => void this.pollNotifications(), 5000);
+    this.timer.unref?.();
+    void this.pollNotifications();
+  }
+
+  onModuleDestroy() {
+    if (this.timer) clearInterval(this.timer);
   }
 
   clientConfig() {
@@ -117,6 +133,7 @@ export class MobilePushService {
       });
     }
 
+    void this.pollNotifications();
     return device;
   }
 
@@ -129,32 +146,121 @@ export class MobilePushService {
     return { deleted: true };
   }
 
-  async sendToUser(userId: string, payload: MobilePushPayload) {
-    if (!this.account) return;
+  private async pollNotifications() {
+    if (!this.account || this.polling) return;
+    this.polling = true;
+    try {
+      const devices = await this.prisma.mobilePushDevice.findMany({
+        where: { failureCount: { lt: MAX_DELIVERY_FAILURES } },
+        select: { id: true, userId: true, token: true }
+      });
+      if (devices.length === 0) return;
 
-    const devices = await this.prisma.mobilePushDevice.findMany({
-      where: {
-        userId,
-        failureCount: { lt: MAX_DELIVERY_FAILURES }
-      },
-      select: { id: true, token: true }
+      const userIds = Array.from(new Set(devices.map((item) => item.userId)));
+      const notifications = await this.prisma.notification.findMany({
+        where: {
+          userId: { in: userIds },
+          createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) }
+        },
+        orderBy: { createdAt: 'asc' },
+        take: 100,
+        select: {
+          id: true,
+          userId: true,
+          type: true,
+          title: true,
+          message: true,
+          entityType: true,
+          entityId: true,
+          link: true
+        }
+      });
+
+      for (const notification of notifications) {
+        const targets = devices.filter((device) => device.userId === notification.userId);
+        for (const device of targets) {
+          await this.deliverNotification(device, notification);
+        }
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Mobile push poll failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      this.polling = false;
+    }
+  }
+
+  private async deliverNotification(
+    device: { id: string; token: string },
+    notification: {
+      id: string;
+      type: string;
+      title: string;
+      message: string;
+      entityType: string | null;
+      entityId: string | null;
+      link: string | null;
+    }
+  ) {
+    const key = {
+      notificationId_deviceId: {
+        notificationId: notification.id,
+        deviceId: device.id
+      }
+    } as const;
+    const existing = await this.prisma.mobilePushDelivery.findUnique({
+      where: key,
+      select: { id: true, status: true, attempts: true }
     });
-    if (devices.length === 0) return;
+    if (existing?.status === 'SENT' || (existing?.attempts ?? 0) >= MAX_PUSH_ATTEMPTS) {
+      return;
+    }
 
-    await Promise.allSettled(
-      devices.map((device) => this.sendToDevice(device.id, device.token, payload))
-    );
+    const delivery = existing ?? await this.prisma.mobilePushDelivery.create({
+      data: {
+        notificationId: notification.id,
+        deviceId: device.id
+      },
+      select: { id: true, status: true, attempts: true }
+    });
+
+    const payload: MobilePushPayload = {
+      title: notification.title,
+      message: notification.message,
+      type: notification.type,
+      entityType: notification.entityType,
+      entityId: notification.entityId,
+      link: notification.link
+    };
+
+    const result = await this.sendToDevice(device.id, device.token, payload);
+    await this.prisma.mobilePushDelivery.updateMany({
+      where: { id: delivery.id },
+      data: result.ok
+        ? {
+            status: 'SENT',
+            attempts: { increment: 1 },
+            deliveredAt: new Date(),
+            lastError: null
+          }
+        : {
+            status: 'FAILED',
+            attempts: { increment: 1 },
+            lastError: result.error?.slice(0, 1000) ?? 'FCM delivery failed'
+          }
+    });
   }
 
   private async sendToDevice(
     id: string,
     token: string,
     payload: MobilePushPayload
-  ) {
+  ): Promise<{ ok: boolean; error?: string }> {
     try {
       const accessToken = await this.getAccessToken();
       const account = this.account;
-      if (!account) return;
+      if (!account) return { ok: false, error: 'Firebase disabled' };
 
       const response = await fetch(
         `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(account.project_id)}/messages:send`,
@@ -202,7 +308,7 @@ export class MobilePushService {
           where: { id },
           data: { failureCount: 0, lastSeenAt: new Date() }
         });
-        return;
+        return { ok: true };
       }
 
       const body = await response.text();
@@ -212,22 +318,23 @@ export class MobilePushService {
         body.includes('registration-token-not-registered')
       ) {
         await this.prisma.mobilePushDevice.deleteMany({ where: { id } });
-        return;
+        return { ok: false, error: 'FCM token is no longer registered' };
       }
 
       await this.prisma.mobilePushDevice.updateMany({
         where: { id },
         data: { failureCount: { increment: 1 } }
       });
-      this.logger.warn(`FCM delivery failed with ${response.status}: ${body.slice(0, 500)}`);
+      return { ok: false, error: `FCM ${response.status}: ${body}` };
     } catch (error) {
       await this.prisma.mobilePushDevice.updateMany({
         where: { id },
         data: { failureCount: { increment: 1 } }
       });
-      this.logger.warn(
-        `FCM delivery failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
     }
   }
 
