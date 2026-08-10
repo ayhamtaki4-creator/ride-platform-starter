@@ -19,13 +19,22 @@ import {
   BOOKING_TYPE_LABELS,
   DRIVER_ASSIGNMENT_LABELS,
   TRIP_STATUS_LABELS,
+  type Trip,
   VEHICLE_CLASS_LABELS,
 } from "@/lib/types";
 import { whatsappUrl } from "@/lib/whatsapp";
+import styles from "./payment-dialog.module.css";
 
 function mapPointUrl(latitude: number, longitude: number) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`;
 }
+
+type CompletionPaymentPrompt = {
+  tripId: string;
+  bookingReference: string;
+  amount: number;
+  currency: string;
+};
 
 export default function DriverBookingsPage() {
   const { socket } = useAuth();
@@ -34,6 +43,7 @@ export default function DriverBookingsPage() {
   const [working, setWorking] = useState("");
   const [message, setMessage] = useState("");
   const [localError, setLocalError] = useState("");
+  const [completionPaymentPrompt, setCompletionPaymentPrompt] = useState<CompletionPaymentPrompt | null>(null);
 
   const activeSchedule = useMemo(
     () => sortTripsNewestFirst(schedule.filter((trip) => !isTripEnded(trip))),
@@ -93,13 +103,56 @@ export default function DriverBookingsPage() {
     );
   }
 
-  async function completeTrip(tripId: string) {
-    const completed = await request(
-      `/trips/${tripId}/complete`,
-      { note: "Completed from driver bookings page" },
-      "تم إنهاء الرحلة.",
-    );
-    if (completed) stopDriverLiveLocation(tripId, true);
+  async function completeTrip(trip: Trip) {
+    const path = `/trips/${trip.id}/complete`;
+    setWorking(path);
+    setMessage("");
+    setLocalError("");
+    try {
+      const completed = await apiFetch<Trip>(path, {
+        method: "POST",
+        body: JSON.stringify({ note: "Completed from driver bookings page" }),
+      });
+      stopDriverLiveLocation(trip.id, true);
+      setCompletionPaymentPrompt({
+        tripId: trip.id,
+        bookingReference: trip.bookingReference || "الرحلة",
+        amount: Number(completed.finalFare ?? completed.estimatedFare ?? trip.finalFare ?? trip.estimatedFare ?? 0),
+        currency: completed.currency || trip.currency || "USD",
+      });
+      await reload();
+    } catch (caught) {
+      setLocalError(caught instanceof Error ? caught.message : "تعذر إنهاء الرحلة.");
+    } finally {
+      setWorking("");
+    }
+  }
+
+  async function answerCashReceived(received: boolean) {
+    const prompt = completionPaymentPrompt;
+    if (!prompt) return;
+
+    if (!received) {
+      setCompletionPaymentPrompt(null);
+      setLocalError("");
+      setMessage("تم إنهاء الرحلة. لم يتم تسجيل استلام المبلغ وسيبقى الحجز غير مدفوع للمتابعة.");
+      return;
+    }
+
+    const path = `/drivers/me/bookings/${prompt.tripId}/cash-payment`;
+    setWorking(path);
+    setMessage("");
+    setLocalError("");
+    try {
+      await apiFetch(path, { method: "POST" });
+      setCompletionPaymentPrompt(null);
+      setMessage("تم إنهاء الرحلة وتسجيل استلام المبلغ نقدًا بنجاح.");
+      await reload();
+    } catch (caught) {
+      setLocalError(caught instanceof Error ? caught.message : "تم إنهاء الرحلة، لكن تعذر تسجيل استلام المبلغ. أعد المحاولة من هذه النافذة.");
+    } finally {
+      setWorking("");
+    }
   }
 
   return (
@@ -180,13 +233,53 @@ export default function DriverBookingsPage() {
                     {trip.driverAssignmentStatus === "ACCEPTED" && trip.status === "DRIVER_ASSIGNED" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void request(`/trips/${trip.id}/arriving`, undefined, "تم إبلاغ المسافر أنك في الطريق.")}>أنا في الطريق</button> : null}
                     {trip.status === "DRIVER_ARRIVING" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void arrivedAndStartTracking(trip.id)}>وصلت إلى المسافر</button> : null}
                     {trip.status === "DRIVER_ARRIVED" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void request(`/trips/${trip.id}/start`, undefined, "تم بدء الرحلة.")}>بدء الرحلة</button> : null}
-                    {trip.status === "IN_PROGRESS" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void completeTrip(trip.id)}>إنهاء الرحلة</button> : null}
+                    {trip.status === "IN_PROGRESS" ? <button className="button primary" disabled={requestBusy} type="button" onClick={() => void completeTrip(trip)}>إنهاء الرحلة</button> : null}
                   </article>
                 );
               })}
             </div>
           )}
         </section>
+
+        {completionPaymentPrompt ? (
+          <div className={styles.backdrop}>
+            <section
+              className={styles.dialog}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="driver-cash-payment-title"
+              aria-describedby="driver-cash-payment-description"
+              data-testid="driver-cash-payment-dialog"
+            >
+              <span className={styles.eyebrow}>تم إنهاء الرحلة</span>
+              <h2 id="driver-cash-payment-title">هل استلمت المبلغ من المسافر؟</h2>
+              <p id="driver-cash-payment-description">
+                الحجز {completionPaymentPrompt.bookingReference} · المبلغ {completionPaymentPrompt.amount.toLocaleString("ar")} {completionPaymentPrompt.currency}
+              </p>
+              <p className={styles.hint}>اختر الإجابة الصحيحة حتى تبقى حالة التحصيل في لوحة الإدارة دقيقة.</p>
+              <div className={styles.actions}>
+                <button
+                  className="button primary"
+                  type="button"
+                  disabled={Boolean(working)}
+                  data-testid="driver-cash-received-yes"
+                  onClick={() => void answerCashReceived(true)}
+                >
+                  {working ? "جارٍ التسجيل..." : "نعم، استلمت المبلغ"}
+                </button>
+                <button
+                  className="button"
+                  type="button"
+                  disabled={Boolean(working)}
+                  data-testid="driver-cash-received-no"
+                  onClick={() => void answerCashReceived(false)}
+                >
+                  لا، لم أستلم
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
       </Shell>
     </ProtectedRoute>
   );
