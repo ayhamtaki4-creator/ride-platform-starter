@@ -183,15 +183,28 @@ await run("Portal home identity and canonical metadata", async () => {
   return { elapsedMs, detail: new URL(response.url).origin };
 });
 
-await run("Portal booking page", async () => {
-  const { response, elapsedMs } = await fetchTimed(`${PORTAL_BASE_URL}/booking`);
-  assert(response.status === 200, `HTTP ${response.status}`);
-  const html = await responseText(response);
+await run("Portal booking registration gate", async () => {
+  const bookingResult = await fetchTimed(`${PORTAL_BASE_URL}/booking`);
+  assert(bookingResult.response.status === 200, `booking HTTP ${bookingResult.response.status}`);
+  const bookingHtml = await responseText(bookingResult.response);
   assert(
-    html.includes("احجز رحلتك") || html.includes("الحجز"),
-    "booking page does not contain expected ride booking content",
+    bookingHtml.includes("جارٍ التحقق من الجلسة") || bookingHtml.includes("جارٍ تحويلك إلى الصفحة المناسبة"),
+    "anonymous booking route does not expose the expected authentication gate",
   );
-  return { elapsedMs, detail: response.url };
+
+  const registerResult = await fetchTimed(`${PORTAL_BASE_URL}/register?next=%2Fbooking`);
+  assert(registerResult.response.status === 200, `register HTTP ${registerResult.response.status}`);
+  const registerHtml = await responseText(registerResult.response);
+  assert(registerHtml.includes("إنشاء حساب مسافر"), "registration page is missing passenger account content");
+  assert(
+    registerHtml.includes("أنشئ حسابك أولًا") || registerHtml.includes("صفحة الحجز"),
+    "registration page does not preserve the booking return flow",
+  );
+
+  return {
+    elapsedMs: bookingResult.elapsedMs + registerResult.elapsedMs,
+    detail: "anonymous booking is gated by passenger registration",
+  };
 });
 
 await run("Portal robots.txt", async () => {
