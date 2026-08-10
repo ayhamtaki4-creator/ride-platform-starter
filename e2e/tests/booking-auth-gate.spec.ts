@@ -15,7 +15,7 @@ test.describe("Booking authentication gate", () => {
 
     await expect(page).toHaveURL(/\/login\?next=%2Fbooking$/);
     await page.getByLabel("البريد الإلكتروني").fill(accounts.rider.email);
-    await page.getByLabel("كلمة المرور", { exact: true }).fill(accounts.rider.password);
+    await page.locator('input[type="password"]').fill(accounts.rider.password);
     await page.getByRole("button", { name: /تسجيل الدخول/ }).click();
 
     await expect(page).toHaveURL(/\/booking$/);
