@@ -3,15 +3,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def replace_once(path: Path, needle: str, replacement: str) -> None:
-    text = path.read_text(encoding="utf-8")
-    if replacement in text:
-        return
-    if needle not in text:
-        raise RuntimeError(f"Expected marker not found in {path}: {needle}")
-    path.write_text(text.replace(needle, replacement, 1), encoding="utf-8")
-
-
 def configure_android() -> None:
     manifest = ROOT / "android/app/src/main/AndroidManifest.xml"
     text = manifest.read_text(encoding="utf-8")
@@ -46,17 +37,22 @@ def configure_android() -> None:
 def configure_ios() -> None:
     plist = ROOT / "ios/Runner/Info.plist"
     text = plist.read_text(encoding="utf-8")
-    if "NSLocationWhenInUseUsageDescription" in text:
-        return
+    if "NSLocationWhenInUseUsageDescription" not in text:
+        insert = """\n\t<key>NSLocationWhenInUseUsageDescription</key>\n\t<string>نستخدم موقع السائق أثناء تنفيذ الرحلة لعرض موقع المركبة للمسافر.</string>\n\t<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>\n\t<string>نحتاج موقع السائق أثناء الرحلة حتى عند انتقال التطبيق إلى الخلفية.</string>\n\t<key>UIBackgroundModes</key>\n\t<array>\n\t\t<string>location</string>\n\t</array>\n"""
+        text = text.replace("</dict>\n</plist>", f"{insert}</dict>\n</plist>", 1)
+        plist.write_text(text, encoding="utf-8")
 
-    insert = """\n\t<key>NSLocationWhenInUseUsageDescription</key>\n\t<string>نستخدم موقع السائق أثناء تنفيذ الرحلة لعرض موقع المركبة للمسافر.</string>\n\t<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>\n\t<string>نحتاج موقع السائق أثناء الرحلة حتى عند انتقال التطبيق إلى الخلفية.</string>\n\t<key>UIBackgroundModes</key>\n\t<array>\n\t\t<string>location</string>\n\t</array>\n"""
-    text = text.replace("</dict>\n</plist>", f"{insert}</dict>\n</plist>", 1)
-    plist.write_text(text, encoding="utf-8")
+
+def remove_generated_test() -> None:
+    generated_test = ROOT / "test/widget_test.dart"
+    if generated_test.exists():
+        generated_test.unlink()
 
 
 def main() -> None:
     configure_android()
     configure_ios()
+    remove_generated_test()
     print("Configured Android/iOS permissions for Ride Platform Driver.")
 
 
