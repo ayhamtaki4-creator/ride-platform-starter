@@ -1,0 +1,24 @@
+.dart_tool/
+.packages
+.pub/
+build/
+coverage/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Android local files
+android/.gradle/
+android/local.properties
+android/key.properties
+
+# iOS generated files
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/ephemeral/
+ios/Runner.xcworkspace/xcuserdata/
+ios/Runner.xcodeproj/xcuserdata/
