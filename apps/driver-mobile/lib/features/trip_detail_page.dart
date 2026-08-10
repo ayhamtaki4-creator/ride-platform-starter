@@ -14,7 +14,7 @@ class TripDetailPage extends StatefulWidget {
 }
 
 class _TripDetailPageState extends State<TripDetailPage> {
-  late DriverTrip _trip = widget.trip;
+  late DriverTrip _trip;
   bool _working = false;
   String? _message;
   String? _error;
@@ -22,6 +22,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
   @override
   void initState() {
     super.initState();
+    _trip = widget.trip;
     if (_trip.shouldTrackLocation) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _ensureTracking());
     }
