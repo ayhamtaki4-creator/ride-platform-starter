@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../core/api_client.dart';
+import '../core/driver_runtime_store.dart';
 
 class LocationTrackingService {
   LocationTrackingService._();
@@ -21,7 +22,7 @@ class LocationTrackingService {
 
   Future<void> start(String tripId) async {
     if (_tripId == tripId && _subscription != null) return;
-    await stop();
+    await stop(clearActiveTrip: false);
 
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -38,6 +39,8 @@ class LocationTrackingService {
     }
 
     _tripId = tripId;
+    await DriverRuntimeStore.instance.setActiveTrip(tripId);
+
     final settings = _settingsForPlatform();
     _subscription = Geolocator.getPositionStream(locationSettings: settings).listen(
       (position) {
@@ -45,7 +48,7 @@ class LocationTrackingService {
         unawaited(_send(position));
       },
       onError: (_) {
-        // The UI can inspect isRunning and restart after permissions/network recover.
+        // The app keeps the active trip id and will recover tracking on reopen.
       },
       cancelOnError: false,
     );
@@ -60,7 +63,7 @@ class LocationTrackingService {
     await _send(initial);
   }
 
-  Future<void> stop() async {
+  Future<void> stop({bool clearActiveTrip = true}) async {
     _heartbeat?.cancel();
     _heartbeat = null;
     await _subscription?.cancel();
@@ -68,6 +71,9 @@ class LocationTrackingService {
     _tripId = null;
     _lastPosition = null;
     _sending = false;
+    if (clearActiveTrip) {
+      await DriverRuntimeStore.instance.clearActiveTrip();
+    }
   }
 
   LocationSettings _settingsForPlatform() {
@@ -104,28 +110,50 @@ class LocationTrackingService {
     );
   }
 
+  Map<String, dynamic> _payload(Position position) {
+    return {
+      'latitude': position.latitude,
+      'longitude': position.longitude,
+      'accuracy': position.accuracy,
+      'heading': position.heading,
+      'speed': position.speed,
+      'recordedAt': position.timestamp.toUtc().toIso8601String(),
+    };
+  }
+
   Future<void> _send(Position position) async {
     final tripId = _tripId;
     if (tripId == null || _sending) return;
     _sending = true;
+    final payload = _payload(position);
 
     try {
-      await ApiClient.instance.postJson<Map<String, dynamic>>(
-        '/tracking/trips/$tripId/location',
-        data: {
-          'latitude': position.latitude,
-          'longitude': position.longitude,
-          'accuracy': position.accuracy,
-          'heading': position.heading,
-          'speed': position.speed,
-          'recordedAt': position.timestamp.toUtc().toIso8601String(),
-        },
-      );
+      await _flushPending(tripId);
+      await _postLocation(tripId, payload);
     } catch (_) {
-      // Keep the most recent device position in memory. The stream or heartbeat
-      // will retry after connectivity returns; the API already rejects stale data.
+      await DriverRuntimeStore.instance.enqueueLocation(payload);
     } finally {
       _sending = false;
     }
+  }
+
+  Future<void> _flushPending(String tripId) async {
+    final queued = await DriverRuntimeStore.instance.pendingLocations();
+    if (queued.isEmpty) return;
+
+    // The backend stores one live point per trip, so replaying only the newest
+    // offline point restores continuity without sending stale historical points.
+    await _postLocation(tripId, queued.last);
+    await DriverRuntimeStore.instance.replacePendingLocations(const []);
+  }
+
+  Future<void> _postLocation(
+    String tripId,
+    Map<String, dynamic> payload,
+  ) async {
+    await ApiClient.instance.postJson<Map<String, dynamic>>(
+      '/tracking/trips/$tripId/location',
+      data: payload,
+    );
   }
 }
