@@ -2,15 +2,17 @@ name: ride_driver
 
 description: Driver mobile application for Ride Platform.
 publish_to: "none"
-version: 0.3.0+3
+version: 0.4.0+4
 
 environment:
-  sdk: ">=3.5.0 <4.0.0"
+  sdk: ">=3.6.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
   dio: ^5.11.0
+  firebase_core: ^4.12.1
+  firebase_messaging: ^16.4.3
   flutter_map: ^8.3.1
   flutter_secure_storage: ^10.3.1
   geolocator: ^14.0.3
