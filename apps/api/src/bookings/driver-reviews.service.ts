@@ -134,6 +134,21 @@ export class DriverReviewsService {
     }
   }
 
+  async listForPassenger(user: AuthUser) {
+    return this.prisma.driverReview.findMany({
+      where: { passengerId: user.sub },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        tripId: true,
+        driverId: true,
+        rating: true,
+        comment: true,
+        createdAt: true
+      }
+    });
+  }
+
   async listForDriver(user: AuthUser, limitValue?: string) {
     const parsedLimit = Number.parseInt(limitValue ?? '20', 10);
     const limit = Number.isFinite(parsedLimit)
