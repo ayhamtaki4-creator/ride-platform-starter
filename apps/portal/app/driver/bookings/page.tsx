@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ProtectedRoute } from "@/components/protected-route";
@@ -10,7 +10,11 @@ import { Icon } from "@/components/ui/icon";
 import { useDriverData } from "@/hooks/use-driver-data";
 import { apiFetch } from "@/lib/api";
 import { isTripEnded, sortTripsNewestFirst } from "@/lib/completed-bookings";
-import { startDriverLiveLocation, stopDriverLiveLocation } from "@/lib/driver-live-location";
+import {
+  shouldDriverAutoTrack,
+  startDriverLiveLocation,
+  stopDriverLiveLocation,
+} from "@/lib/driver-live-location";
 import {
   BOOKING_TYPE_LABELS,
   DRIVER_ASSIGNMENT_LABELS,
@@ -36,6 +40,23 @@ export default function DriverBookingsPage() {
     [schedule],
   );
 
+  useEffect(() => {
+    for (const trip of activeSchedule) {
+      if (
+        !["DRIVER_ARRIVED", "IN_PROGRESS"].includes(trip.status) ||
+        !shouldDriverAutoTrack(trip.id)
+      ) {
+        continue;
+      }
+
+      startDriverLiveLocation(
+        trip.id,
+        socket,
+        (gpsError) => setLocalError(gpsError),
+      );
+    }
+  }, [activeSchedule, socket]);
+
   async function request(path: string, body?: object, success?: string) {
     setWorking(path);
     setMessage("");
@@ -57,13 +78,19 @@ export default function DriverBookingsPage() {
   }
 
   async function arrivedAndStartTracking(tripId: string) {
+    const arrived = await request(
+      `/trips/${tripId}/arrived`,
+      undefined,
+      "تم تسجيل وصولك.",
+    );
+    if (!arrived) return;
+
     startDriverLiveLocation(
       tripId,
       socket,
       (gpsError) => setLocalError(gpsError),
-      () => setMessage("تم تشغيل مشاركة الموقع تلقائيًا."),
+      () => setMessage("تم تسجيل وصولك وبدأ التتبع المباشر تلقائيًا."),
     );
-    await request(`/trips/${tripId}/arrived`, undefined, "تم تسجيل وصولك وبدأ التتبع المباشر تلقائيًا.");
   }
 
   async function completeTrip(tripId: string) {
