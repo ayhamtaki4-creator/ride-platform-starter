@@ -1,0 +1,16 @@
+.international-phone-input.react-tel-input .flag.sy {
+  width: 20px;
+  height: 14px;
+  margin-top: -7px;
+  background-image: url("/flags/sy.svg") !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: 20px 14px !important;
+  background-color: transparent !important;
+  box-shadow: 0 0 0 1px rgba(16, 33, 26, 0.12);
+  border-radius: 2px;
+}
+
+.international-phone-input.react-tel-input .country-list .country .flag.sy {
+  margin-top: 0;
+}
