@@ -16,6 +16,7 @@ type Booking = { id: string };
 type LiveLocation = {
   latitude: number;
   longitude: number;
+  recordedAt?: Date;
 };
 
 function futureDate(days = 5) {
@@ -25,7 +26,7 @@ function futureDate(days = 5) {
 }
 
 test.describe("Server-side driver GPS throttling", () => {
-  test("drops rapid duplicate ingress before it can overwrite the stored location", async ({ request }) => {
+  test("drops rapid and stale ingress before it can overwrite the stored location", async ({ request }) => {
     const riderToken = await apiLogin(request, "rider");
     const driverToken = await apiLogin(request, "driver");
 
@@ -85,6 +86,8 @@ test.describe("Server-side driver GPS throttling", () => {
       expect(firstResponse.status(), await firstResponse.text()).toBe(201);
       const firstBody = await firstResponse.json();
       expect(firstBody.throttled).toBe(false);
+      expect(firstBody.accepted).toBe(true);
+      expect(firstBody.ignoredStale).toBe(false);
 
       const rapidResponse = await request.post(`${apiBaseURL}/tracking/trips/${booking.id}/location`, {
         headers: bearer(driverToken),
@@ -101,7 +104,7 @@ test.describe("Server-side driver GPS throttling", () => {
       expect(rapidBody.retryAfterMs).toBeGreaterThan(0);
 
       const rowsAfterRapid = await prisma.$queryRaw<LiveLocation[]>`
-        SELECT "latitude", "longitude"
+        SELECT "latitude", "longitude", "recordedAt"
         FROM "TripLiveLocation"
         WHERE "tripId" = ${booking.id}::uuid
         LIMIT 1
@@ -111,27 +114,57 @@ test.describe("Server-side driver GPS throttling", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1700));
 
+      const laterRecordedAt = new Date().toISOString();
       const laterResponse = await request.post(`${apiBaseURL}/tracking/trips/${booking.id}/location`, {
         headers: bearer(driverToken),
         data: {
           latitude: 33.7101,
           longitude: 36.4911,
           accuracy: 6,
-          recordedAt: new Date().toISOString(),
+          recordedAt: laterRecordedAt,
         },
       });
       expect(laterResponse.status(), await laterResponse.text()).toBe(201);
       const laterBody = await laterResponse.json();
       expect(laterBody.throttled).toBe(false);
+      expect(laterBody.accepted).toBe(true);
+      expect(laterBody.ignoredStale).toBe(false);
 
       const rowsAfterLater = await prisma.$queryRaw<LiveLocation[]>`
-        SELECT "latitude", "longitude"
+        SELECT "latitude", "longitude", "recordedAt"
         FROM "TripLiveLocation"
         WHERE "tripId" = ${booking.id}::uuid
         LIMIT 1
       `;
       expect(rowsAfterLater[0]?.latitude).toBeCloseTo(33.7101, 5);
       expect(rowsAfterLater[0]?.longitude).toBeCloseTo(36.4911, 5);
+
+      await new Promise((resolve) => setTimeout(resolve, 1700));
+
+      const staleResponse = await request.post(`${apiBaseURL}/tracking/trips/${booking.id}/location`, {
+        headers: bearer(driverToken),
+        data: {
+          latitude: 34.1101,
+          longitude: 37.0911,
+          accuracy: 5,
+          recordedAt: firstRecordedAt,
+        },
+      });
+      expect(staleResponse.status(), await staleResponse.text()).toBe(201);
+      const staleBody = await staleResponse.json();
+      expect(staleBody.throttled).toBe(false);
+      expect(staleBody.accepted).toBe(false);
+      expect(staleBody.ignoredStale).toBe(true);
+
+      const rowsAfterStale = await prisma.$queryRaw<LiveLocation[]>`
+        SELECT "latitude", "longitude", "recordedAt"
+        FROM "TripLiveLocation"
+        WHERE "tripId" = ${booking.id}::uuid
+        LIMIT 1
+      `;
+      expect(rowsAfterStale[0]?.latitude).toBeCloseTo(33.7101, 5);
+      expect(rowsAfterStale[0]?.longitude).toBeCloseTo(36.4911, 5);
+      expect(rowsAfterStale[0]?.recordedAt?.toISOString()).toBe(laterRecordedAt);
     } finally {
       await prisma.$disconnect();
     }

@@ -39,6 +39,9 @@ const TERMINAL_TRIP_STATUSES = [
   'DRIVER_NO_SHOW'
 ] as const;
 
+const MAX_LOCATION_AGE_MS = 5 * 60 * 1000;
+const MAX_LOCATION_FUTURE_MS = 2 * 60 * 1000;
+
 @Injectable()
 export class TrackingService {
   constructor(private readonly prisma: PrismaService) {}
@@ -150,16 +153,17 @@ export class TrackingService {
 
     const latitude = this.coordinate(input.latitude, 90, 'خط العرض');
     const longitude = this.coordinate(input.longitude, 180, 'خط الطول');
-    const recordedAt = input.recordedAt ? new Date(input.recordedAt) : new Date();
-    if (Number.isNaN(recordedAt.getTime())) throw new BadRequestException('وقت الموقع غير صالح.');
+    const recordedAt = this.locationRecordedAt(input.recordedAt);
+    const accuracy = this.nullableFinite(input.accuracy);
+    const heading = this.nullableFinite(input.heading);
+    const speed = this.nullableFinite(input.speed);
 
-    await this.prisma.$executeRaw`
+    const written = await this.prisma.$queryRaw<LiveLocationRow[]>`
       INSERT INTO "TripLiveLocation" (
         "tripId", "driverId", "latitude", "longitude", "accuracy", "heading", "speed", "recordedAt", "updatedAt"
       ) VALUES (
         ${tripId}::uuid, ${user.sub}::uuid, ${latitude}, ${longitude},
-        ${this.nullableFinite(input.accuracy)}, ${this.nullableFinite(input.heading)}, ${this.nullableFinite(input.speed)},
-        ${recordedAt}, CURRENT_TIMESTAMP
+        ${accuracy}, ${heading}, ${speed}, ${recordedAt}, CURRENT_TIMESTAMP
       )
       ON CONFLICT ("tripId") DO UPDATE SET
         "driverId" = EXCLUDED."driverId",
@@ -170,17 +174,22 @@ export class TrackingService {
         "speed" = EXCLUDED."speed",
         "recordedAt" = EXCLUDED."recordedAt",
         "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "TripLiveLocation"."recordedAt" < EXCLUDED."recordedAt"
+      RETURNING "tripId", "driverId", "latitude", "longitude", "accuracy", "heading", "speed", "recordedAt"
     `;
 
+    const accepted = written.length > 0;
     return {
       tripId,
       driverId: user.sub,
       latitude,
       longitude,
-      accuracy: this.nullableFinite(input.accuracy),
-      heading: this.nullableFinite(input.heading),
-      speed: this.nullableFinite(input.speed),
-      recordedAt: recordedAt.toISOString()
+      accuracy,
+      heading,
+      speed,
+      recordedAt: recordedAt.toISOString(),
+      accepted,
+      ignoredStale: !accepted
     };
   }
 
@@ -381,6 +390,20 @@ export class TrackingService {
   private coordinate(value: number, limit: number, label: string) {
     if (!Number.isFinite(value) || Math.abs(value) > limit) throw new BadRequestException(`${label} غير صالح.`);
     return value;
+  }
+
+  private locationRecordedAt(value?: string) {
+    const now = Date.now();
+    const recordedAt = value ? new Date(value) : new Date(now);
+    const timestamp = recordedAt.getTime();
+    if (Number.isNaN(timestamp)) throw new BadRequestException('وقت الموقع غير صالح.');
+    if (timestamp < now - MAX_LOCATION_AGE_MS) {
+      throw new BadRequestException('وقت الموقع قديم جدًا. أعد تشغيل GPS وأرسل موقعًا حديثًا.');
+    }
+    if (timestamp > now + MAX_LOCATION_FUTURE_MS) {
+      throw new BadRequestException('وقت الموقع متقدم عن وقت الخادم بشكل غير صالح.');
+    }
+    return recordedAt;
   }
 
   private optionalPositive(value: number | undefined, label: string) {
