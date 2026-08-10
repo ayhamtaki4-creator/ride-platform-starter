@@ -17,7 +17,7 @@ test.describe("Read-only API contracts", () => {
     expect(response.ok()).toBeTruthy();
   });
 
-  test("legacy trip creation endpoints stay retired", async ({ request }) => {
+  test("legacy trip request surface stays retired", async ({ request }) => {
     const token = await apiLogin(request, "rider");
     const headers = bearer(token);
 
@@ -32,6 +32,16 @@ test.describe("Read-only API contracts", () => {
       data: {},
     });
     expect(estimateResponse.status()).toBe(404);
+
+    const ownTripsResponse = await request.get(`${apiBaseURL}/trips/me`, {
+      headers,
+    });
+    expect(ownTripsResponse.status()).toBe(404);
+
+    const allTripsResponse = await request.get(`${apiBaseURL}/trips`, {
+      headers,
+    });
+    expect(allTripsResponse.status()).toBe(404);
   });
 
   test("rider booking responses do not expose start PIN fields", async ({
