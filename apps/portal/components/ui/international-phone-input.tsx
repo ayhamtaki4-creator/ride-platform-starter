@@ -27,6 +27,7 @@ export function InternationalPhoneInput({
   return (
     <>
       <link rel="stylesheet" href="/vendor/react-phone-input.css" precedence="route-vendor" />
+      <link rel="stylesheet" href="/vendor/syrian-flag-override.css" precedence="route-phone-overrides" />
       <PhoneInput
         country="sy"
         preferredCountries={["sy", "lb", "jo"]}
