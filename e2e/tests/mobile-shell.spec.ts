@@ -88,6 +88,28 @@ test.describe("Mobile shell", () => {
     });
   }
 
+  test("driver tracking page shows GPS, network, and server health cards", async ({ page }) => {
+    await loginAs(page, "driver");
+    await page.goto("/driver/bookings");
+    await page.waitForLoadState("domcontentloaded");
+    await page.waitForTimeout(600);
+
+    const trackingLinks = page.locator('a[href^="/driver/bookings/"][href$="/tracking"]');
+    const count = await trackingLinks.count();
+    test.skip(count === 0, "No active driver tracking task exists in the E2E seed.");
+
+    const href = await trackingLinks.first().getAttribute("href");
+    expect(href).toBeTruthy();
+    await page.goto(href as string);
+
+    const statusGrid = page.locator(".driver-tracking-status-grid");
+    await expect(statusGrid).toBeVisible();
+    await expect(statusGrid.getByText("GPS", { exact: true })).toBeVisible();
+    await expect(statusGrid.getByText("الإنترنت", { exact: true })).toBeVisible();
+    await expect(statusGrid.getByText("الخادم", { exact: true })).toBeVisible();
+    expect(await hasHorizontalOverflow(page)).toBe(false);
+  });
+
   test("admin keeps the drawer navigation instead of the passenger bottom bar", async ({ page }) => {
     await loginAs(page, "admin");
 

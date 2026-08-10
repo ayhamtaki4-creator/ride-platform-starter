@@ -33,6 +33,14 @@ function deliveryAge(timestamp: number | null, now: number) {
   return `آخر إرسال مؤكد منذ ${minutes} دقيقة`;
 }
 
+function statusLabel(level: "live" | "weak" | "stale" | "lost" | "waiting") {
+  if (level === "live") return "جيد";
+  if (level === "weak") return "ضعيف";
+  if (level === "stale") return "متأخر";
+  if (level === "lost") return "منقطع";
+  return "بانتظار";
+}
+
 export function DriverLocationBroadcaster({ tripId, active }: { tripId: string; active: boolean }) {
   const { socket, isRealtimeConnected } = useAuth();
   const [sharing, setSharing] = useState(() => isDriverLiveLocationActive(tripId));
@@ -41,6 +49,7 @@ export function DriverLocationBroadcaster({ tripId, active }: { tripId: string; 
   const [lastDeliveredAt, setLastDeliveredAt] = useState<number | null>(null);
   const [lastTransport, setLastTransport] = useState<DriverLocationDelivery["transport"] | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" ? true : navigator.onLine);
   const [wakeLockActive, setWakeLockActive] = useState(false);
   const [wakeLockSupported, setWakeLockSupported] = useState(false);
 
@@ -71,6 +80,7 @@ export function DriverLocationBroadcaster({ tripId, active }: { tripId: string; 
   const recover = useCallback(() => {
     if (!active || !shouldDriverAutoTrack(tripId)) return;
     setAutoRequested(true);
+    setError("");
     if (!isDriverLiveLocationActive(tripId)) start();
     if (isDriverLiveLocationActive(tripId)) {
       refreshDriverLiveLocation(tripId);
@@ -90,6 +100,17 @@ export function DriverLocationBroadcaster({ tripId, active }: { tripId: string; 
       setLastTransport(null);
     }
   }, [active, start, tripId]);
+
+  useEffect(() => {
+    const syncNetworkState = () => setOnline(navigator.onLine);
+    syncNetworkState();
+    window.addEventListener("online", syncNetworkState);
+    window.addEventListener("offline", syncNetworkState);
+    return () => {
+      window.removeEventListener("online", syncNetworkState);
+      window.removeEventListener("offline", syncNetworkState);
+    };
+  }, []);
 
   useEffect(() => {
     if (!active) return;
@@ -168,6 +189,20 @@ export function DriverLocationBroadcaster({ tripId, active }: { tripId: string; 
     now,
   );
   const serverConfirmed = sharing && ["live", "weak"].includes(deliveryState.level);
+  const gpsLevel = !autoRequested
+    ? "waiting"
+    : sharing
+      ? deliveryState.level === "lost" ? "weak" : "live"
+      : "lost";
+  const networkLevel = online ? "live" : "lost";
+  const serverLevel = !online
+    ? "lost"
+    : sharing
+      ? deliveryState.level
+      : autoRequested
+        ? "lost"
+        : "waiting";
+  const needsRecovery = active && autoRequested && (!serverConfirmed || Boolean(error));
 
   const sharingLabel = !sharing
     ? autoRequested
@@ -189,35 +224,64 @@ export function DriverLocationBroadcaster({ tripId, active }: { tripId: string; 
         {sharingLabel}
       </div>
 
-      {sharing ? (
+      <div className="driver-tracking-status-grid" aria-live="polite">
+        <div className={`driver-tracking-status tracking-health-${gpsLevel}`}>
+          <small>GPS</small>
+          <strong>{sharing ? "يعمل" : autoRequested ? "يحتاج استعادة" : "بانتظار بدء التتبع"}</strong>
+          <span>{statusLabel(gpsLevel)}</span>
+        </div>
+        <div className={`driver-tracking-status tracking-health-${networkLevel}`}>
+          <small>الإنترنت</small>
+          <strong>{online ? "متصل" : "غير متصل"}</strong>
+          <span>{statusLabel(networkLevel)}</span>
+        </div>
+        <div className={`driver-tracking-status tracking-health-${serverLevel}`}>
+          <small>الخادم</small>
+          <strong>
+            {serverConfirmed
+              ? lastTransport === "realtime"
+                ? "يستقبل الموقع مباشرة"
+                : "يستقبل عبر المسار الاحتياطي"
+              : deliveryState.level === "waiting"
+                ? "بانتظار أول تأكيد"
+                : "لا يوجد تأكيد حديث"}
+          </strong>
+          <span>{statusLabel(serverLevel)}</span>
+        </div>
+      </div>
+
+      {sharing || autoRequested ? (
         <div className={`tracking-delivery-health tracking-health-${deliveryState.level}`} aria-live="polite">
           <strong>{deliveryAge(lastDeliveredAt, now)}</strong>
           <small>{deliveryState.description}</small>
           <small>
             {lastTransport === "realtime"
-              ? "تم التأكيد عبر الاتصال المباشر"
+              ? "آخر موقع تم تأكيده عبر الاتصال المباشر."
               : lastTransport === "rest"
-                ? "تم التأكيد عبر الاتصال الاحتياطي"
-                : "سيظهر هنا تأكيد استلام الموقع من الخادم"}
+                ? "آخر موقع تم تأكيده عبر الاتصال الاحتياطي."
+                : "سيظهر هنا تأكيد استلام الموقع من الخادم."}
           </small>
           <small>يُعاد تحديث GPS تلقائيًا عند الرجوع للتطبيق أو عودة الإنترنت.</small>
           <small>
             {wakeLockSupported
               ? wakeLockActive
-                ? "إبقاء الشاشة مستيقظة مفعّل أثناء التتبع"
-                : "قد يوقف الهاتف التتبع إذا أُغلقت الشاشة؛ أبقِ الصفحة في الواجهة"
-              : "أبقِ الصفحة مفتوحة والشاشة قيد التشغيل لضمان استمرار GPS"}
+                ? "إبقاء الشاشة مستيقظة مفعّل أثناء التتبع."
+                : "إبقاء الشاشة مستيقظة غير فعال الآن؛ أبقِ الصفحة في الواجهة أثناء الرحلة."
+              : "أبقِ الصفحة مفتوحة والشاشة قيد التشغيل لضمان استمرار GPS."}
           </small>
         </div>
       ) : null}
 
-      {error ? (
-        <div className="notice error">
-          {error}
-          {active && autoRequested ? (
-            <button className="button" type="button" onClick={recover}>إعادة تشغيل GPS</button>
-          ) : null}
-        </div>
+      {!online && autoRequested ? (
+        <div className="notice error">الإنترنت منقطع. سيحاول النظام استعادة إرسال الموقع تلقائيًا فور عودة الشبكة.</div>
+      ) : null}
+
+      {error ? <div className="notice error">{error}</div> : null}
+
+      {needsRecovery ? (
+        <button className="button primary driver-tracking-recover" type="button" onClick={recover} disabled={!online}>
+          {online ? "استعادة التتبع الآن" : "بانتظار عودة الإنترنت"}
+        </button>
       ) : null}
     </div>
   );
