@@ -17,9 +17,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  analyze:
+  android:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: apps/driver-mobile
@@ -37,8 +37,27 @@ jobs:
       - name: Flutter version
         run: flutter --version
 
+      - name: Generate Android and iOS platform projects
+        run: flutter create --platforms=android,ios --project-name ride_driver --org com.rideplatform --no-pub .
+
+      - name: Configure background location permissions
+        run: python3 tool/configure_platforms.py
+
       - name: Install dependencies
         run: flutter pub get
 
       - name: Analyze
         run: flutter analyze
+
+      - name: Build debug APK
+        run: >-
+          flutter build apk --debug
+          --dart-define=API_BASE_URL=https://ride-platform-starter.onrender.com/api
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ride-platform-driver-android-${{ github.run_number }}
+          path: apps/driver-mobile/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
