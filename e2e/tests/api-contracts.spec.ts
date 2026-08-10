@@ -17,6 +17,23 @@ test.describe("Read-only API contracts", () => {
     expect(response.ok()).toBeTruthy();
   });
 
+  test("legacy trip creation endpoints stay retired", async ({ request }) => {
+    const token = await apiLogin(request, "rider");
+    const headers = bearer(token);
+
+    const createResponse = await request.post(`${apiBaseURL}/trips`, {
+      headers,
+      data: {},
+    });
+    expect(createResponse.status()).toBe(404);
+
+    const estimateResponse = await request.post(`${apiBaseURL}/trips/estimate`, {
+      headers,
+      data: {},
+    });
+    expect(estimateResponse.status()).toBe(404);
+  });
+
   test("rider booking responses do not expose start PIN fields", async ({
     request,
   }) => {
