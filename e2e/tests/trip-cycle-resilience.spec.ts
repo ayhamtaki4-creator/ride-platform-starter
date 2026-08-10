@@ -23,9 +23,10 @@ function futureDate(days = 45) {
 }
 
 test.describe("Driver trip lifecycle resilience", () => {
-  test("keeps the accepted private-car cycle ordered and synchronizes the service run", async ({ request }) => {
+  test("keeps the accepted private-car cycle ordered and synchronizes cash collection", async ({ request }) => {
     const riderToken = await apiLogin(request, "rider");
     const driverToken = await apiLogin(request, "driver");
+    const adminToken = await apiLogin(request, "admin");
 
     const routesResponse = await request.get(`${apiBaseURL}/routes`);
     expect(routesResponse.ok()).toBeTruthy();
@@ -133,6 +134,12 @@ test.describe("Driver trip lifecycle resilience", () => {
       const started = await startResponse.json();
       expect(started.status).toBe("IN_PROGRESS");
 
+      const earlyCash = await request.post(`${apiBaseURL}/drivers/me/bookings/${booking.id}/cash-payment`, {
+        headers: bearer(driverToken),
+        data: {},
+      });
+      expect(earlyCash.status()).toBe(409);
+
       const afterStart = await prisma.trip.findUniqueOrThrow({
         where: { id: booking.id },
         select: {
@@ -176,6 +183,8 @@ test.describe("Driver trip lifecycle resilience", () => {
           completedAt: true,
           droppedOffAt: true,
           finalFare: true,
+          paymentStatus: true,
+          amountPaid: true,
           statusHistory: {
             orderBy: { createdAt: "asc" },
             select: { to: true },
@@ -187,12 +196,92 @@ test.describe("Driver trip lifecycle resilience", () => {
       expect(afterComplete.completedAt).toBeTruthy();
       expect(afterComplete.droppedOffAt).toBeTruthy();
       expect(afterComplete.finalFare).not.toBeNull();
+      expect(afterComplete.paymentStatus).toBe("UNPAID");
+      expect(Number(afterComplete.amountPaid)).toBe(0);
       expect(afterComplete.statusHistory.map((entry) => entry.to)).toEqual(
         expect.arrayContaining([
           "DRIVER_ARRIVING",
           "DRIVER_ARRIVED",
           "IN_PROGRESS",
           "COMPLETED",
+        ]),
+      );
+
+      const totalFare = Number(afterComplete.finalFare);
+      const partialAmount = Number((totalFare / 2).toFixed(3));
+      const partialPayment = await request.post(`${apiBaseURL}/admin/bookings/${booking.id}/payment`, {
+        headers: bearer(adminToken),
+        data: {
+          amountPaid: partialAmount,
+          receiver: "ADMIN",
+          note: "E2E partial cash",
+        },
+      });
+      expect(partialPayment.status(), await partialPayment.text()).toBe(201);
+      const partial = await partialPayment.json();
+      expect(partial.paymentStatus).toBe("PARTIALLY_PAID");
+      expect(Number(partial.amountPaid)).toBe(partialAmount);
+      expect(partial.paymentReceiver).toBe("ADMIN");
+
+      const driverCannotOverwritePartial = await request.post(
+        `${apiBaseURL}/drivers/me/bookings/${booking.id}/cash-payment`,
+        {
+          headers: bearer(driverToken),
+          data: {},
+        },
+      );
+      expect(driverCannotOverwritePartial.status()).toBe(409);
+
+      const resetPayment = await request.post(`${apiBaseURL}/admin/bookings/${booking.id}/payment`, {
+        headers: bearer(adminToken),
+        data: { amountPaid: 0, receiver: "ADMIN", note: "Reset before driver collection" },
+      });
+      expect(resetPayment.status(), await resetPayment.text()).toBe(201);
+      const reset = await resetPayment.json();
+      expect(reset.paymentStatus).toBe("UNPAID");
+      expect(Number(reset.amountPaid)).toBe(0);
+      expect(reset.paymentReceiver).toBeNull();
+
+      const driverPayment = await request.post(`${apiBaseURL}/drivers/me/bookings/${booking.id}/cash-payment`, {
+        headers: bearer(driverToken),
+        data: {},
+      });
+      expect(driverPayment.status(), await driverPayment.text()).toBe(201);
+      const paid = await driverPayment.json();
+      expect(paid.paymentStatus).toBe("PAID");
+      expect(paid.paymentMethod).toBe("CASH");
+      expect(paid.paymentReceiver).toBe("DRIVER");
+      expect(Number(paid.amountPaid)).toBe(totalFare);
+
+      const duplicateDriverPayment = await request.post(
+        `${apiBaseURL}/drivers/me/bookings/${booking.id}/cash-payment`,
+        {
+          headers: bearer(driverToken),
+          data: {},
+        },
+      );
+      expect(duplicateDriverPayment.status(), await duplicateDriverPayment.text()).toBe(201);
+
+      const dashboardResponse = await request.get(`${apiBaseURL}/admin/dashboard`, {
+        headers: bearer(adminToken),
+      });
+      expect(dashboardResponse.status(), await dashboardResponse.text()).toBe(200);
+      const dashboard = await dashboardResponse.json();
+      expect(Number(dashboard.revenue)).toBeGreaterThanOrEqual(totalFare);
+      expect(Number(dashboard.completedBookingValue)).toBeGreaterThanOrEqual(totalFare);
+
+      const paymentAudit = await prisma.auditLog.findMany({
+        where: {
+          entityType: "Trip",
+          entityId: booking.id,
+          action: { startsWith: "booking.payment.cash" },
+        },
+        select: { action: true },
+      });
+      expect(paymentAudit.map((entry) => entry.action)).toEqual(
+        expect.arrayContaining([
+          "booking.payment.cash.update",
+          "booking.payment.cash.received_by_driver",
         ]),
       );
 
