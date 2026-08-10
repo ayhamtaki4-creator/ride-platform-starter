@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
 import '../models/driver_trip.dart';
+import '../services/external_navigation.dart';
 import '../services/location_tracking_service.dart';
+import 'trip_map_page.dart';
 
 class TripDetailPage extends StatefulWidget {
   const TripDetailPage({super.key, required this.trip});
@@ -79,6 +81,27 @@ class _TripDetailPageState extends State<TripDetailPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = apiErrorMessage(error));
+    }
+  }
+
+  Future<void> _openNavigation(double latitude, double longitude) async {
+    try {
+      await ExternalNavigation.openDestination(
+        latitude: latitude,
+        longitude: longitude,
+      );
+    } catch (error) {
+      if (mounted) setState(() => _error = apiErrorMessage(error));
+    }
+  }
+
+  Future<void> _callPassenger() async {
+    final phone = _trip.contactPhone;
+    if (phone == null || phone.isEmpty) return;
+    try {
+      await ExternalNavigation.call(phone);
+    } catch (error) {
+      if (mounted) setState(() => _error = apiErrorMessage(error));
     }
   }
 
@@ -176,6 +199,44 @@ class _TripDetailPageState extends State<TripDetailPage> {
                 ],
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => TripMapPage(trip: _trip),
+                  ),
+                ),
+                icon: const Icon(Icons.map_rounded),
+                label: const Text('خريطة الرحلة'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _openNavigation(
+                  _trip.pickupLatitude,
+                  _trip.pickupLongitude,
+                ),
+                icon: const Icon(Icons.navigation_rounded),
+                label: const Text('الملاحة إلى المسافر'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => _openNavigation(
+                  _trip.dropoffLatitude,
+                  _trip.dropoffLongitude,
+                ),
+                icon: const Icon(Icons.route_rounded),
+                label: const Text('الملاحة إلى الوجهة'),
+              ),
+              if (_trip.contactPhone?.isNotEmpty == true)
+                OutlinedButton.icon(
+                  onPressed: _callPassenger,
+                  icon: const Icon(Icons.phone_rounded),
+                  label: const Text('اتصال بالمسافر'),
+                ),
+            ],
           ),
           if (_message != null) ...[
             const SizedBox(height: 12),
