@@ -1,0 +1,15 @@
+model MobilePushDevice {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
+  token        String   @unique
+  platform     String
+  deviceId     String?
+  appVersion   String?
+  failureCount Int      @default(0)
+  lastSeenAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId, updatedAt])
+  @@index([userId, failureCount])
+}
