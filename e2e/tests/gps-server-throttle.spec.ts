@@ -19,6 +19,18 @@ type LiveLocation = {
   recordedAt?: Date;
 };
 
+type AdminTrackingTrip = {
+  tripId: string;
+  bookingReference: string | null;
+  status: string;
+  driverId: string;
+  liveLocation: {
+    latitude: number;
+    longitude: number;
+    recordedAt: string;
+  } | null;
+};
+
 function futureDate(days = 5) {
   const date = new Date();
   date.setUTCDate(date.getUTCDate() + days);
@@ -29,6 +41,7 @@ test.describe("Server-side driver GPS throttling", () => {
   test("drops rapid and stale ingress before it can overwrite the stored location", async ({ request }) => {
     const riderToken = await apiLogin(request, "rider");
     const driverToken = await apiLogin(request, "driver");
+    const adminToken = await apiLogin(request, "admin");
 
     const routesResponse = await request.get(`${apiBaseURL}/routes`);
     expect(routesResponse.ok()).toBeTruthy();
@@ -138,6 +151,19 @@ test.describe("Server-side driver GPS throttling", () => {
       `;
       expect(rowsAfterLater[0]?.latitude).toBeCloseTo(33.7101, 5);
       expect(rowsAfterLater[0]?.longitude).toBeCloseTo(36.4911, 5);
+
+      const adminTrackingResponse = await request.get(`${apiBaseURL}/admin/tracking/active-trips`, {
+        headers: bearer(adminToken),
+      });
+      expect(adminTrackingResponse.status(), await adminTrackingResponse.text()).toBe(200);
+      const adminTrackingTrips = (await adminTrackingResponse.json()) as AdminTrackingTrip[];
+      const monitoredTrip = adminTrackingTrips.find((trip) => trip.tripId === booking.id);
+      expect(monitoredTrip).toBeTruthy();
+      expect(monitoredTrip?.driverId).toBe(driver!.id);
+      expect(monitoredTrip?.status).toBe("DRIVER_ASSIGNED");
+      expect(monitoredTrip?.liveLocation?.latitude).toBeCloseTo(33.7101, 5);
+      expect(monitoredTrip?.liveLocation?.longitude).toBeCloseTo(36.4911, 5);
+      expect(monitoredTrip?.liveLocation?.recordedAt).toBe(laterRecordedAt);
 
       await new Promise((resolve) => setTimeout(resolve, 1700));
 
