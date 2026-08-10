@@ -87,8 +87,8 @@ class _TripsPageState extends State<TripsPage> {
 
   Widget _body() {
     if (_loading && _trips.isEmpty) {
-      return const ListView(
-        children: [
+      return ListView(
+        children: const [
           SizedBox(height: 240),
           Center(child: CircularProgressIndicator()),
         ],
@@ -110,9 +110,9 @@ class _TripsPageState extends State<TripsPage> {
     }
 
     if (_trips.isEmpty) {
-      return const ListView(
-        padding: EdgeInsets.all(24),
-        children: [
+      return ListView(
+        padding: const EdgeInsets.all(24),
+        children: const [
           SizedBox(height: 120),
           Icon(Icons.event_available_rounded, size: 64),
           SizedBox(height: 16),
