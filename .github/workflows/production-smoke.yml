@@ -2,9 +2,6 @@ name: Production Smoke
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
   push:
     branches:
       - main
@@ -15,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: production-smoke-${{ github.event.pull_request.number || github.ref }}
+  group: production-smoke
   cancel-in-progress: true
 
 jobs:
