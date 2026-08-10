@@ -13,6 +13,12 @@ export class PassengerDriverReviewsController {
   constructor(private readonly reviews: DriverReviewsService) {}
 
   @Permissions('booking:read:own')
+  @Get('me/driver-reviews')
+  mine(@CurrentUser() user: AuthUser) {
+    return this.reviews.listForPassenger(user);
+  }
+
+  @Permissions('booking:read:own')
   @Post(':id/driver-review')
   create(
     @CurrentUser() user: AuthUser,
