@@ -166,12 +166,20 @@ await run("Public routes API", async () => {
   return { elapsedMs, detail: `${body.length} bookable route(s)` };
 });
 
-await run("Portal home identity", async () => {
+await run("Portal home identity and canonical metadata", async () => {
   const { response, elapsedMs } = await fetchTimed(`${PORTAL_BASE_URL}/`);
   assert(response.status === 200, `HTTP ${response.status}`);
   const html = await responseText(response);
   assert(html.includes("طريق الشام"), "production home does not contain the ride-platform brand 'طريق الشام'");
   assert(!html.includes("منصة النخبة التعليمية"), "production home still serves the old education platform");
+  assert(
+    html.includes(PORTAL_BASE_URL),
+    "production home metadata does not reference the configured portal origin",
+  );
+  assert(
+    !html.includes("http://localhost:3000"),
+    "production home metadata still references localhost",
+  );
   return { elapsedMs, detail: new URL(response.url).origin };
 });
 
@@ -191,7 +199,12 @@ await run("Portal robots.txt", async () => {
   assert(response.status === 200, `HTTP ${response.status}`);
   const text = await responseText(response);
   assert(/user-agent:/i.test(text), "robots.txt has no User-agent directive");
-  return { elapsedMs, detail: "robots available" };
+  assert(
+    text.includes(`${PORTAL_BASE_URL}/sitemap.xml`),
+    "robots.txt sitemap points at the wrong portal origin",
+  );
+  assert(!text.includes("http://localhost:3000"), "robots.txt still references localhost");
+  return { elapsedMs, detail: "robots canonical origin is correct" };
 });
 
 await run("Portal sitemap.xml", async () => {
@@ -200,7 +213,9 @@ await run("Portal sitemap.xml", async () => {
   const text = await responseText(response);
   assert(text.includes("<urlset") || text.includes("<sitemapindex"), "sitemap.xml is not a sitemap document");
   assert(text.includes(PORTAL_BASE_URL), "sitemap does not use the configured production portal URL");
-  return { elapsedMs, detail: "sitemap available" };
+  assert(text.includes(`${PORTAL_BASE_URL}/booking`), "sitemap does not include the booking page");
+  assert(!text.includes("http://localhost:3000"), "sitemap still references localhost");
+  return { elapsedMs, detail: "home and booking URLs use production origin" };
 });
 
 console.log("\nProduction smoke summary");
