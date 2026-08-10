@@ -27,9 +27,24 @@ export type DriverProfile = {
   }>;
 };
 
+export type DriverReviewSummary = {
+  rating: number;
+  reviewCount: number;
+  reviews: Array<{
+    id: string;
+    tripId: string;
+    bookingReference?: string | null;
+    completedAt?: string | null;
+    rating: number;
+    comment?: string | null;
+    createdAt: string;
+  }>;
+};
+
 export function useDriverData() {
   const { socket, isRealtimeConnected } = useAuth();
   const [profile, setProfile] = useState<DriverProfile | null>(null);
+  const [reviewSummary, setReviewSummary] = useState<DriverReviewSummary | null>(null);
   const [schedule, setSchedule] = useState<Trip[]>([]);
   const [runs, setRuns] = useState<ServiceRun[]>([]);
   const [error, setError] = useState("");
@@ -37,14 +52,16 @@ export function useDriverData() {
 
   const loadData = useCallback(async () => {
     try {
-      const [driverProfile, trips, serviceRuns] = await Promise.all([
+      const [driverProfile, trips, serviceRuns, reviews] = await Promise.all([
         apiFetch<DriverProfile>("/drivers/me"),
         apiFetch<Trip[]>("/drivers/me/schedule"),
         apiFetch<ServiceRun[]>("/drivers/me/runs"),
+        apiFetch<DriverReviewSummary>("/drivers/me/reviews?limit=10"),
       ]);
       setProfile(driverProfile);
       setSchedule(trips);
       setRuns(serviceRuns);
+      setReviewSummary(reviews);
       setError("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "تعذر تحميل بيانات السائق.");
@@ -86,6 +103,7 @@ export function useDriverData() {
 
   return {
     profile,
+    reviewSummary,
     schedule,
     runs,
     error,
