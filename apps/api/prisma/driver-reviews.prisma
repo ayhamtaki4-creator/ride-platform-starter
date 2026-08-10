@@ -1,0 +1,12 @@
+model DriverReview {
+  id          String   @id @default(uuid()) @db.Uuid
+  tripId      String   @unique @db.Uuid
+  passengerId String   @db.Uuid
+  driverId    String   @db.Uuid
+  rating      Int
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  @@index([driverId, createdAt(sort: Desc)])
+  @@index([passengerId, createdAt(sort: Desc)])
+}

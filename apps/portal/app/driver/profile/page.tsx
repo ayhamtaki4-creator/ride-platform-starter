@@ -15,7 +15,7 @@ import { AuthUser } from "@/lib/types";
 
 export default function DriverProfilePage() {
   const { user, refreshUser } = useAuth();
-  const { profile, error, isLoading, reload } = useDriverData();
+  const { profile, reviewSummary, error, isLoading, reload } = useDriverData();
   const { showToast } = useToast();
   const [phone, setPhone] = useState("");
   const [whatsappOptIn, setWhatsappOptIn] = useState(false);
@@ -64,7 +64,7 @@ export default function DriverProfilePage() {
         <DashboardHeader
           eyebrow="السائق / الحساب"
           title="الحساب والمركبة"
-          subtitle="حالة التوفر وبيانات المركبة ورقم استقبال تحديثات WhatsApp."
+          subtitle="حالة التوفر وبيانات المركبة وتقييمات المسافرين ورقم استقبال تحديثات WhatsApp."
           actions={<Link className="button" href="/driver"><Icon name="arrow-right" size={17} /> لوحة السائق</Link>}
         />
 
@@ -78,6 +78,30 @@ export default function DriverProfilePage() {
                   <button className="button primary" type="button" disabled={Boolean(working) || profile?.availability === "ONLINE" || profile?.availability === "ON_TRIP"} onClick={() => void setAvailability("ONLINE")}>متصل</button>
                   <button className="button" type="button" disabled={Boolean(working) || profile?.availability === "OFFLINE" || profile?.availability === "ON_TRIP"} onClick={() => void setAvailability("OFFLINE")}>غير متصل</button>
                 </div>
+              </section>
+
+              <section className="panel">
+                <div className="section-heading"><div><span className="eyebrow">تقييمات المسافرين</span><h2>سمعتك على المنصة</h2><p className="subtitle">يُحتسب المتوسط من تقييم واحد موثّق لكل رحلة مكتملة.</p></div><span className="status">{reviewSummary?.reviewCount ? `${reviewSummary.rating.toFixed(2)} / 5` : "لا تقييمات"}</span></div>
+                {reviewSummary?.reviewCount ? (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+                      <strong style={{ fontSize: 30 }}>{reviewSummary.rating.toFixed(2)}</strong>
+                      <span aria-label={`${reviewSummary.rating.toFixed(2)} من 5`} style={{ fontSize: 24, letterSpacing: 2 }}>★★★★★</span>
+                      <small style={{ color: "var(--muted)" }}>من {reviewSummary.reviewCount} تقييم</small>
+                    </div>
+                    <div className="schedule-card-grid">
+                      {reviewSummary.reviews.map((review) => (
+                        <article className="booking-card" key={review.id}>
+                          <div className="booking-card-head">
+                            <div><strong>{review.rating} / 5</strong><small>{review.bookingReference ? `الحجز ${review.bookingReference}` : "رحلة مكتملة"}</small></div>
+                            <span className="status">{Array.from({ length: 5 }, (_, index) => index < review.rating ? "★" : "☆").join("")}</span>
+                          </div>
+                          <p className="subtitle" style={{ margin: 0 }}>{review.comment || "تقييم بدون تعليق."}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </>
+                ) : <div className="empty-state">لم تستلم أي تقييم حتى الآن. ستظهر التقييمات هنا بعد الرحلات المكتملة.</div>}
               </section>
 
               <section className="panel">

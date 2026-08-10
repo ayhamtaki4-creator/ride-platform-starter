@@ -10,6 +10,11 @@ import { BookingDriverContactService } from './booking-driver-contact.service';
 import { BookingRoutePlanService } from './booking-route-plan.service';
 import { BookingsController } from './bookings.controller';
 import { BookingsService } from './bookings.service';
+import {
+  DriverReviewsController,
+  PassengerDriverReviewsController
+} from './driver-reviews.controller';
+import { DriverReviewsService } from './driver-reviews.service';
 import { FlightTicketExtractorService } from './flight-ticket-extractor.service';
 import { FlightTicketsService } from './flight-tickets.service';
 
@@ -18,13 +23,16 @@ import { FlightTicketsService } from './flight-tickets.service';
   controllers: [
     BookingsController,
     BookingModificationController,
-    AdminBookingModificationController
+    AdminBookingModificationController,
+    PassengerDriverReviewsController,
+    DriverReviewsController
   ],
   providers: [
     BookingsService,
     BookingModificationService,
     BookingDriverContactService,
     BookingRoutePlanService,
+    DriverReviewsService,
     FlightTicketExtractorService,
     FlightTicketsService
   ],
