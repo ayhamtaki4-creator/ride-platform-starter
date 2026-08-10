@@ -8,18 +8,7 @@ import { Prisma, Trip, TripStatus } from '@prisma/client';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
-import { CreateTripDto } from './dto/create-trip.dto';
-import { EstimateTripDto } from './dto/estimate-trip.dto';
 import { TripStateMachine } from './trip-state-machine';
-
-const ACTIVE_PASSENGER_TRIP_STATUSES: TripStatus[] = [
-  'PENDING_DISPATCH',
-  'SEARCHING_DRIVER',
-  'DRIVER_ASSIGNED',
-  'DRIVER_ARRIVING',
-  'DRIVER_ARRIVED',
-  'IN_PROGRESS'
-];
 
 const DRIVER_RELEASE_STATUSES: TripStatus[] = [
   'COMPLETED',
@@ -35,89 +24,6 @@ export class TripsService {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeEventsService
   ) {}
-
-  estimate(dto: EstimateTripDto) {
-    const straightLineKm = this.haversineKm(
-      dto.pickupLatitude,
-      dto.pickupLongitude,
-      dto.dropoffLatitude,
-      dto.dropoffLongitude
-    );
-
-    const estimatedDistanceKm = Number(
-      Math.max(0.5, straightLineKm * 1.25).toFixed(2)
-    );
-    const estimatedDurationMinutes = Math.max(
-      5,
-      Math.ceil((estimatedDistanceKm / 30) * 60 + 3)
-    );
-
-    const baseFare = 2000;
-    const distanceFare = estimatedDistanceKm * 1000;
-    const timeFare = estimatedDurationMinutes * 100;
-    const estimatedFare =
-      Math.ceil(
-        Math.max(4000, baseFare + distanceFare + timeFare) / 250
-      ) * 250;
-
-    return {
-      estimatedDistanceKm,
-      estimatedDurationMinutes,
-      estimatedFare,
-      currency: 'IQD'
-    };
-  }
-
-  async create(user: AuthUser, dto: CreateTripDto) {
-    const activeTrip = await this.prisma.trip.findFirst({
-      where: {
-        passengerId: user.sub,
-        status: { in: ACTIVE_PASSENGER_TRIP_STATUSES }
-      },
-      select: { id: true, status: true }
-    });
-
-    if (activeTrip) {
-      throw new ConflictException('لديك رحلة نشطة بالفعل.');
-    }
-
-    const estimate = this.estimate(dto);
-
-    const trip = await this.prisma.trip.create({
-      data: {
-        passengerId: user.sub,
-        status: 'PENDING_DISPATCH',
-        pickupAddress: dto.pickupAddress.trim(),
-        pickupLatitude: dto.pickupLatitude,
-        pickupLongitude: dto.pickupLongitude,
-        dropoffAddress: dto.dropoffAddress.trim(),
-        dropoffLatitude: dto.dropoffLatitude,
-        dropoffLongitude: dto.dropoffLongitude,
-        estimatedDistanceKm: estimate.estimatedDistanceKm,
-        estimatedDurationMinutes: estimate.estimatedDurationMinutes,
-        estimatedFare: estimate.estimatedFare,
-        statusHistory: {
-          create: {
-            to: 'PENDING_DISPATCH',
-            actorId: user.sub,
-            note: 'Trip requested and sent to dispatch'
-          }
-        }
-      },
-      include: {
-        statusHistory: { orderBy: { createdAt: 'asc' } }
-      }
-    });
-
-    await this.audit(user.sub, 'trip.create', trip.id, {
-      ...estimate,
-      dispatchMode: 'ADMIN'
-    });
-
-    this.realtime.tripCreated(this.toRealtimeEvent(trip));
-
-    return this.sanitizeTrip(trip);
-  }
 
   async mine(user: AuthUser) {
     const isDriver = user.roles.includes('DRIVER');
@@ -547,44 +453,5 @@ export class TripsService {
       status: trip.status,
       occurredAt: new Date().toISOString()
     };
-  }
-
-  private audit(
-    actorId: string,
-    action: string,
-    entityId: string,
-    metadata?: Prisma.InputJsonValue
-  ) {
-    return this.prisma.auditLog.create({
-      data: {
-        actorId,
-        action,
-        entityType: 'Trip',
-        entityId,
-        metadata
-      }
-    });
-  }
-
-  private haversineKm(
-    latitude1: number,
-    longitude1: number,
-    latitude2: number,
-    longitude2: number
-  ) {
-    const earthRadiusKm = 6371;
-    const toRadians = (value: number) => (value * Math.PI) / 180;
-    const latitudeDelta = toRadians(latitude2 - latitude1);
-    const longitudeDelta = toRadians(longitude2 - longitude1);
-    const firstLatitude = toRadians(latitude1);
-    const secondLatitude = toRadians(latitude2);
-
-    const a =
-      Math.sin(latitudeDelta / 2) ** 2 +
-      Math.cos(firstLatitude) *
-        Math.cos(secondLatitude) *
-        Math.sin(longitudeDelta / 2) ** 2;
-
-    return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 }
