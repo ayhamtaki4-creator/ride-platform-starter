@@ -14,7 +14,9 @@
 - إرسال الموقع عبر Socket.IO مباشرة مع REST fallback إلى `POST /api/tracking/trips/:tripId/location`.
 - انتظار تأكيد `trip.location.accepted` من الخادم قبل اعتبار تحديث GPS ناجحًا.
 - استقبال أحداث تعيين وتحديث الرحلات مباشرة وتحديث قائمة مهام السائق تلقائيًا.
-- استقبال `notification.created` أثناء تشغيل التطبيق وعرضه للسائق.
+- شاشة إشعارات كاملة مع عداد غير المقروء وتحديد إشعار أو جميع الإشعارات كمقروءة.
+- Firebase Cloud Messaging اختياري لإشعارات Android/iOS عندما يكون التطبيق بالخلفية أو مغلقًا.
+- تسجيل FCM token في `POST /api/mobile-push/devices` وإزالته عند تسجيل الخروج.
 - Android foreground location notification أثناء التتبع.
 - iOS background location configuration.
 - حفظ الرحلة النشطة محليًا واستعادة GPS عند إعادة فتح التطبيق.
@@ -26,8 +28,6 @@
 
 ## توليد Android و iOS
 
-ملفات المنصات يتم توليدها من Flutter ثم يطبق السكربت إعدادات GPS والخلفية:
-
 ```bash
 cd apps/driver-mobile
 flutter create --platforms=android,ios --project-name ride_driver --org com.rideplatform --no-pub .
@@ -35,16 +35,7 @@ python3 tool/configure_platforms.py
 flutter pub get
 ```
 
-السكربت يضيف تلقائيًا صلاحيات Android التالية:
-
-- `ACCESS_COARSE_LOCATION`
-- `ACCESS_FINE_LOCATION`
-- `ACCESS_BACKGROUND_LOCATION`
-- `FOREGROUND_SERVICE`
-- `FOREGROUND_SERVICE_LOCATION`
-- `POST_NOTIFICATIONS`
-
-كما يضيف إلى iOS نصوص استخدام الموقع و`UIBackgroundModes = location`.
+السكربت يضيف صلاحيات Android الخاصة بالموقع والخلفية و`POST_NOTIFICATIONS`، كما يضيف إلى iOS نصوص استخدام الموقع و`UIBackgroundModes = location`.
 
 ## التشغيل
 
@@ -52,45 +43,65 @@ flutter pub get
 
 `https://ride-platform-starter.onrender.com/api`
 
-تشغيل على API المنشور:
+تشغيل بدون Firebase:
 
 ```bash
 flutter run --dart-define=API_BASE_URL=https://ride-platform-starter.onrender.com/api
 ```
 
-عنوان Socket.IO يُشتق تلقائيًا من عنوان الـAPI. ويمكن تحديده صراحةً عند الحاجة:
+تشغيل مع Firebase Cloud Messaging:
 
 ```bash
---dart-define=REALTIME_URL=https://ride-platform-starter.onrender.com/realtime
+flutter run \
+  --dart-define=API_BASE_URL=https://ride-platform-starter.onrender.com/api \
+  --dart-define=FIREBASE_API_KEY=... \
+  --dart-define=FIREBASE_APP_ID=... \
+  --dart-define=FIREBASE_MESSAGING_SENDER_ID=... \
+  --dart-define=FIREBASE_PROJECT_ID=...
 ```
 
-Android Emulator مع API محلي:
+إذا كانت إحدى قيم Firebase الأربع غير موجودة، يبقى FCM معطلاً ويستمر التطبيق طبيعيًا باستخدام Socket.IO وصندوق الإشعارات الداخلي.
 
-```bash
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:4000/api
-```
+عنوان Socket.IO يُشتق تلقائيًا من عنوان الـAPI ويمكن تحديده صراحةً عبر `REALTIME_URL`.
 
-يمكن تغيير مصدر map tiles عبر:
+## GitHub Actions + Firebase
 
-```bash
---dart-define=MAP_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png
-```
+لإنتاج APK يدعم FCM من `Driver Mobile CI` أضف Repository Secrets التالية:
+
+- `DRIVER_FIREBASE_API_KEY`
+- `DRIVER_FIREBASE_APP_ID`
+- `DRIVER_FIREBASE_MESSAGING_SENDER_ID`
+- `DRIVER_FIREBASE_PROJECT_ID`
+
+إذا لم تكن موجودة، يستمر الـworkflow ببناء APK بدون FCM.
+
+## إعداد السيرفر على Render
+
+الـAPI لا يحتاج Firebase Admin SDK dependency. الإرسال يتم عبر Firebase HTTP v1 باستخدام Service Account.
+
+أضف متغير البيئة التالي إلى خدمة الـAPI على Render:
+
+`FIREBASE_SERVICE_ACCOUNT_JSON`
+
+القيمة يمكن أن تكون JSON الخاص بحساب الخدمة مباشرة، أو نفس JSON بعد تحويله إلى Base64.
+
+بعد deploy وتشغيل migration الجديدة، يقوم التطبيق بتسجيل جهاز السائق تلقائيًا. خدمة الـAPI تلتقط سجلات `Notification` الجديدة وترسلها إلى الأجهزة المسجلة، مع جدول `MobilePushDelivery` لمنع التكرار وإعادة المحاولة عند الفشل.
 
 ## بناء APK
 
-محليًا:
-
 ```bash
-flutter build apk --debug --dart-define=API_BASE_URL=https://ride-platform-starter.onrender.com/api
+flutter build apk --debug \
+  --dart-define=API_BASE_URL=https://ride-platform-starter.onrender.com/api
 ```
 
-كما يقوم GitHub Actions workflow باسم `Driver Mobile CI` بتوليد ملفات Android/iOS، تشغيل `flutter analyze`، بناء APK تجريبي، ثم رفعه كـArtifact باسم يبدأ بـ:
+GitHub Actions يرفع الـAPK كـArtifact باسم يبدأ بـ:
 
 `ride-platform-driver-android-`
 
-## ما تبقى للمرحلة التالية
+## ما تبقى قبل الإنتاج
 
-- Firebase Cloud Messaging لإشعارات تعيين الرحلات عندما يكون التطبيق مغلقًا أو في الخلفية.
-- اختبار background tracking على أجهزة Android فعلية مع سياسات البطارية المختلفة.
-- اختبار iOS background location على جهاز فعلي وضبط Signing & Capabilities قبل النشر.
-- إضافة شاشة إشعارات كاملة إذا أردنا عرض سجل الإشعارات داخل التطبيق وليس Snackbar فقط.
+- إنشاء/اختيار Firebase project وإضافة قيم Android الفعلية إلى GitHub Secrets.
+- إضافة Service Account إلى Render وتشغيل Prisma migration في بيئة الإنتاج.
+- اختبار وصول Push على هاتف Android والتطبيق بالخلفية ثم مغلقًا بالكامل.
+- إعداد APNs وPush Notifications capability قبل تفعيل FCM على iOS.
+- إعداد Android release signing وبناء AAB للنشر.
