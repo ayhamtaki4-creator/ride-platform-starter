@@ -5,6 +5,7 @@ import { useAuth } from "./auth-provider";
 import {
   DriverLocationDelivery,
   isDriverLiveLocationActive,
+  refreshDriverLiveLocation,
   shouldDriverAutoTrack,
   startDriverLiveLocation,
   stopDriverLiveLocation,
@@ -67,6 +68,16 @@ export function DriverLocationBroadcaster({ tripId, active }: { tripId: string; 
     );
   }, [active, socket, tripId]);
 
+  const recover = useCallback(() => {
+    if (!active || !shouldDriverAutoTrack(tripId)) return;
+    setAutoRequested(true);
+    if (!isDriverLiveLocationActive(tripId)) start();
+    if (isDriverLiveLocationActive(tripId)) {
+      refreshDriverLiveLocation(tripId);
+      setSharing(true);
+    }
+  }, [active, start, tripId]);
+
   useEffect(() => {
     if (active && shouldDriverAutoTrack(tripId)) {
       setAutoRequested(true);
@@ -79,6 +90,31 @@ export function DriverLocationBroadcaster({ tripId, active }: { tripId: string; 
       setLastTransport(null);
     }
   }, [active, start, tripId]);
+
+  useEffect(() => {
+    if (!active) return;
+
+    const recoverVisibleTracking = () => {
+      if (document.visibilityState === "visible") recover();
+    };
+    const recoverTracking = () => recover();
+
+    document.addEventListener("visibilitychange", recoverVisibleTracking);
+    window.addEventListener("focus", recoverTracking);
+    window.addEventListener("pageshow", recoverTracking);
+    window.addEventListener("online", recoverTracking);
+
+    return () => {
+      document.removeEventListener("visibilitychange", recoverVisibleTracking);
+      window.removeEventListener("focus", recoverTracking);
+      window.removeEventListener("pageshow", recoverTracking);
+      window.removeEventListener("online", recoverTracking);
+    };
+  }, [active, recover]);
+
+  useEffect(() => {
+    if (active && isRealtimeConnected) recover();
+  }, [active, isRealtimeConnected, recover]);
 
   useEffect(() => {
     if (!sharing) return;
@@ -144,8 +180,8 @@ export function DriverLocationBroadcaster({ tripId, active }: { tripId: string; 
         : deliveryState.level === "weak"
           ? "GPS مؤكد · الإشارة ضعيفة"
           : deliveryState.level === "stale"
-            ? "GPS متأخر · تحقق من الشبكة"
-            : "GPS منقطع · أعد فتح الصفحة والشبكة";
+            ? "GPS متأخر · سيحاول الاستعادة تلقائيًا"
+            : "GPS منقطع · سيحاول الاستعادة عند عودة الصفحة أو الشبكة";
 
   return (
     <div className="driver-location-controls">
@@ -164,6 +200,7 @@ export function DriverLocationBroadcaster({ tripId, active }: { tripId: string; 
                 ? "تم التأكيد عبر الاتصال الاحتياطي"
                 : "سيظهر هنا تأكيد استلام الموقع من الخادم"}
           </small>
+          <small>يُعاد تحديث GPS تلقائيًا عند الرجوع للتطبيق أو عودة الإنترنت.</small>
           <small>
             {wakeLockSupported
               ? wakeLockActive
@@ -178,7 +215,7 @@ export function DriverLocationBroadcaster({ tripId, active }: { tripId: string; 
         <div className="notice error">
           {error}
           {active && autoRequested ? (
-            <button className="button" type="button" onClick={start}>إعادة تشغيل GPS</button>
+            <button className="button" type="button" onClick={recover}>إعادة تشغيل GPS</button>
           ) : null}
         </div>
       ) : null}
