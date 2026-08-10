@@ -27,6 +27,7 @@ import { FlightTicketsService } from './flight-tickets.service';
     BookingRoutePlanService,
     FlightTicketExtractorService,
     FlightTicketsService
-  ]
+  ],
+  exports: [BookingModificationService]
 })
 export class BookingsModule {}
