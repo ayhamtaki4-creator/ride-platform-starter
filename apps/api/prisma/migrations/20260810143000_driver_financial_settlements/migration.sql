@@ -18,8 +18,7 @@ CREATE TABLE "DriverLedgerEntry" (
 );
 
 CREATE UNIQUE INDEX "DriverLedgerEntry_sourceKey_key"
-  ON "DriverLedgerEntry"("sourceKey")
-  WHERE "sourceKey" IS NOT NULL;
+  ON "DriverLedgerEntry"("sourceKey");
 CREATE INDEX "DriverLedgerEntry_driverId_currency_createdAt_idx"
   ON "DriverLedgerEntry"("driverId", "currency", "createdAt" DESC);
 CREATE INDEX "DriverLedgerEntry_tripId_createdAt_idx"
