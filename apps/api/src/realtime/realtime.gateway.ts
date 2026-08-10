@@ -13,6 +13,7 @@ import { Namespace, Server, Socket } from 'socket.io';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { LocationIngressThrottleService } from '../tracking/location-ingress-throttle.service';
+import { TrackingService } from '../tracking/tracking.service';
 import { RealtimeEventsService } from './realtime-events.service';
 
 type TokenPayload = {
@@ -41,7 +42,8 @@ export class RealtimeGateway
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
     private readonly events: RealtimeEventsService,
-    private readonly locationThrottle: LocationIngressThrottleService
+    private readonly locationThrottle: LocationIngressThrottleService,
+    private readonly tracking: TrackingService
   ) {}
 
   afterInit(server: Server | Namespace) {
@@ -232,69 +234,46 @@ export class RealtimeGateway
       return;
     }
 
-    const trip = await this.prisma.trip.findUnique({
-      where: { id: tripId },
-      select: { passengerId: true, driverId: true, status: true }
-    });
-    if (!trip || trip.driverId !== user.sub) {
-      throw new WsException('هذه الرحلة ليست معيّنة لك.');
+    try {
+      const location = await this.tracking.updateDriverLocation(user, tripId, {
+        latitude,
+        longitude,
+        accuracy: payload.accuracy,
+        heading: payload.heading,
+        speed: payload.speed,
+        recordedAt: payload.recordedAt
+      });
+
+      this.locationThrottle.markAccepted(user.sub, tripId);
+
+      const event = {
+        ...location,
+        throttled: false,
+        retryAfterMs: 0
+      };
+
+      if (location.accepted) {
+        const trip = await this.prisma.trip.findUnique({
+          where: { id: tripId },
+          select: { passengerId: true }
+        });
+
+        this.server.to(`trip:${tripId}`).emit('trip.location.updated', event);
+        this.server.to(`public-trip:${tripId}`).emit('trip.location.updated', event);
+        if (trip?.passengerId) {
+          this.server.to(`user:${trip.passengerId}`).emit('trip.location.updated', event);
+        }
+        this.server.to('role:dispatch').emit('trip.location.updated', event);
+      }
+
+      client.emit('trip.location.accepted', event);
+    } catch (caught) {
+      const message =
+        caught instanceof Error && caught.message
+          ? caught.message
+          : 'تعذر تحديث موقع الرحلة.';
+      throw new WsException(message);
     }
-    if (
-      !['DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'DRIVER_ARRIVED', 'IN_PROGRESS'].includes(
-        trip.status
-      )
-    ) {
-      throw new WsException('لا يمكن إرسال الموقع في حالة الرحلة الحالية.');
-    }
-
-    const parsedRecordedAt = payload.recordedAt
-      ? new Date(payload.recordedAt)
-      : new Date();
-    const recordedAt = Number.isNaN(parsedRecordedAt.getTime())
-      ? new Date()
-      : parsedRecordedAt;
-    const finiteOrNull = (value?: number) =>
-      value == null || !Number.isFinite(Number(value)) ? null : Number(value);
-
-    await this.prisma.$executeRaw`
-      INSERT INTO "TripLiveLocation" (
-        "tripId", "driverId", "latitude", "longitude", "accuracy", "heading", "speed", "recordedAt", "updatedAt"
-      ) VALUES (
-        ${tripId}::uuid, ${user.sub}::uuid, ${latitude}, ${longitude},
-        ${finiteOrNull(payload.accuracy)}, ${finiteOrNull(payload.heading)}, ${finiteOrNull(payload.speed)},
-        ${recordedAt}, CURRENT_TIMESTAMP
-      )
-      ON CONFLICT ("tripId") DO UPDATE SET
-        "driverId" = EXCLUDED."driverId",
-        "latitude" = EXCLUDED."latitude",
-        "longitude" = EXCLUDED."longitude",
-        "accuracy" = EXCLUDED."accuracy",
-        "heading" = EXCLUDED."heading",
-        "speed" = EXCLUDED."speed",
-        "recordedAt" = EXCLUDED."recordedAt",
-        "updatedAt" = CURRENT_TIMESTAMP
-    `;
-
-    this.locationThrottle.markAccepted(user.sub, tripId);
-
-    const event = {
-      tripId,
-      driverId: user.sub,
-      latitude,
-      longitude,
-      accuracy: finiteOrNull(payload.accuracy),
-      heading: finiteOrNull(payload.heading),
-      speed: finiteOrNull(payload.speed),
-      recordedAt: recordedAt.toISOString(),
-      throttled: false,
-      retryAfterMs: 0
-    };
-
-    this.server.to(`trip:${tripId}`).emit('trip.location.updated', event);
-    this.server.to(`public-trip:${tripId}`).emit('trip.location.updated', event);
-    this.server.to(`user:${trip.passengerId}`).emit('trip.location.updated', event);
-    this.server.to('role:dispatch').emit('trip.location.updated', event);
-    client.emit('trip.location.accepted', event);
   }
 
   private extractToken(client: AuthenticatedSocket) {
