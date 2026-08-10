@@ -1,88 +1,87 @@
 # Ride Platform Driver Mobile
 
-نسخة أولية لتطبيق السائق مبنية بـ Flutter وتستخدم نفس NestJS API الموجود في المشروع.
+تطبيق السائق المبني بـ Flutter ويستخدم نفس NestJS API الخاص بمنصة Ride Platform.
 
-## ما يعمل في هذه المرحلة
+## ما يعمل حاليًا
 
-- تسجيل الدخول بحساب DRIVER فقط.
-- تخزين access/refresh tokens في secure storage.
-- تجديد الجلسة تلقائيًا عند 401.
-- عرض جدول حجوزات السائق من `GET /api/drivers/me/schedule`.
-- قبول أو رفض المهمة.
-- تحديث الحالة: أنا في الطريق → وصلت إلى المسافر → بدء الرحلة → إنهاء الرحلة.
-- بدء GPS تلقائيًا بعد تسجيل الوصول إلى المسافر.
+- تسجيل الدخول بحساب `DRIVER` فقط.
+- تخزين `accessToken` و`refreshToken` في secure storage.
+- تجديد الجلسة تلقائيًا عند انتهاء access token.
+- عرض حجوزات السائق من `GET /api/drivers/me/schedule`.
+- قبول ورفض المهمة مع سبب الرفض.
+- دورة الرحلة: أنا في الطريق → وصلت إلى المسافر → بدء الرحلة → إنهاء الرحلة.
+- بدء GPS تلقائيًا عند وصول السائق واستمراره أثناء الرحلة.
 - إرسال الموقع إلى `POST /api/tracking/trips/:tripId/location`.
 - Android foreground location notification أثناء التتبع.
-- iOS background location settings في طبقة Flutter.
+- iOS background location configuration.
+- حفظ الرحلة النشطة محليًا واستعادة GPS عند إعادة فتح التطبيق.
+- حفظ آخر نقاط GPS محليًا عند انقطاع الشبكة ومحاولة إرسال أحدث نقطة بعد عودة الاتصال.
+- خريطة داخل التطبيق تعرض نقطة الالتقاط والوجهة والمسار وموقع السائق الأخير.
+- فتح Google Maps على Android وApple Maps على iOS للملاحة إلى الالتقاط أو الوجهة.
+- زر اتصال مباشر بالمسافر عند وجود رقم هاتف.
 
-## إنشاء Android و iOS لأول مرة
+## توليد Android و iOS
 
-هذه المرحلة أضافت كود Flutter إلى المستودع من دون ملفات المنصات المولدة آليًا. على جهاز تطوير يحتوي Flutter SDK:
+ملفات المنصات يتم توليدها من Flutter ثم يطبق السكربت إعدادات GPS والخلفية:
 
 ```bash
 cd apps/driver-mobile
-flutter create --platforms=android,ios --project-name ride_driver --org com.rideplatform .
+flutter create --platforms=android,ios --project-name ride_driver --org com.rideplatform --no-pub .
+python3 tool/configure_platforms.py
 flutter pub get
 ```
 
-راجع `lib/main.dart` بعد `flutter create` وتأكد أنه لم يستبدل ملف المشروع الحالي. إذا استبدله الأمر في إصدار Flutter المستخدم لديك، استرجع الملف من Git قبل المتابعة.
+السكربت يضيف تلقائيًا صلاحيات Android التالية:
 
-## Android permissions
+- `ACCESS_COARSE_LOCATION`
+- `ACCESS_FINE_LOCATION`
+- `ACCESS_BACKGROUND_LOCATION`
+- `FOREGROUND_SERVICE`
+- `FOREGROUND_SERVICE_LOCATION`
+- `POST_NOTIFICATIONS`
 
-أضف داخل `android/app/src/main/AndroidManifest.xml` قبل `<application>`:
-
-```xml
-<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-```
-
-يجب أن يبدأ السائق التتبع من داخل التطبيق وهو ظاهر على الشاشة. عند بدء التتبع يستخدم `geolocator` إشعار foreground دائمًا على Android.
-
-## iOS permissions
-
-في `ios/Runner/Info.plist` أضف نصوص استخدام الموقع:
-
-```xml
-<key>NSLocationWhenInUseUsageDescription</key>
-<string>نستخدم موقع السائق أثناء تنفيذ الرحلة لعرض موقع المركبة للمسافر.</string>
-<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-<string>نحتاج موقع السائق أثناء الرحلة حتى عند انتقال التطبيق إلى الخلفية.</string>
-<key>UIBackgroundModes</key>
-<array>
-    <string>location</string>
-</array>
-```
-
-ومن Xcode فعّل:
-
-`Runner > Signing & Capabilities > Background Modes > Location updates`
+كما يضيف إلى iOS نصوص استخدام الموقع و`UIBackgroundModes = location`.
 
 ## التشغيل
 
-الـAPI الافتراضي هو:
+الـAPI الافتراضي:
 
 `https://ride-platform-starter.onrender.com/api`
 
-ويمكن تغييره بدون تعديل الكود:
+تشغيل على API المنشور:
 
 ```bash
 flutter run --dart-define=API_BASE_URL=https://ride-platform-starter.onrender.com/api
 ```
 
-للتطوير المحلي على Android Emulator مثلًا:
+Android Emulator مع API محلي:
 
 ```bash
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:4000/api
 ```
 
-## ملاحظات المرحلة التالية
+يمكن تغيير مصدر map tiles عبر:
 
-- إضافة شاشة خريطة فعلية داخل التطبيق.
-- فتح Google Maps / Apple Maps للملاحة إلى نقطة الالتقاط والوجهة.
-- ربط Socket.IO بدل REST فقط للموقع عند توفر الاتصال المباشر.
-- إضافة Firebase Cloud Messaging لإشعارات تعيين الرحلات.
-- حفظ آخر مهمة نشطة محليًا واستعادة التتبع بعد إعادة تشغيل التطبيق.
-- إضافة queue محلية للمواقع عند انقطاع الإنترنت إن احتجنا الاحتفاظ بتاريخ المسار وليس آخر موقع فقط.
+```bash
+--dart-define=MAP_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png
+```
+
+## بناء APK
+
+محليًا:
+
+```bash
+flutter build apk --debug --dart-define=API_BASE_URL=https://ride-platform-starter.onrender.com/api
+```
+
+كما يقوم GitHub Actions workflow باسم `Driver Mobile CI` بتوليد ملفات Android/iOS، تشغيل `flutter analyze`، بناء APK تجريبي، ثم رفعه كـArtifact باسم يبدأ بـ:
+
+`ride-platform-driver-android-`
+
+## ما تبقى للمرحلة التالية
+
+- Firebase Cloud Messaging لإشعارات تعيين الرحلات الجديدة.
+- ربط Socket.IO في تطبيق Flutter لتحديثات realtime بدل الاعتماد على REST فقط.
+- تحسين الخريطة لتحديث موقع السيارة لحظيًا بدون إعادة تحميل الشاشة.
+- اختبار background tracking على أجهزة Android فعلية مع سياسات البطارية المختلفة.
+- اختبار iOS background location على جهاز فعلي وضبط Signing & Capabilities قبل النشر.
