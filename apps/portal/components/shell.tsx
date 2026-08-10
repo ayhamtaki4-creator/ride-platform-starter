@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "./auth-provider";
+import { DriverTrackingRecoveryBridge } from "./driver-tracking-recovery-bridge";
 import { NotificationCenter } from "./notification-center";
 import { Icon, IconName } from "./ui/icon";
 import { homeForRoles } from "@/lib/types";
@@ -123,6 +124,7 @@ export function Shell({ children }: { children: ReactNode }) {
   if (isPublic) {
     return (
       <div className="public-shell">
+        {isDriver ? <DriverTrackingRecoveryBridge /> : null}
         <header className="public-header">
           <div className="public-header-inner">
             <Link className="public-brand" href="/" aria-label="طريق الشام - الرئيسية">
@@ -185,6 +187,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className={`shell app-shell ${mobileNavItems.length ? "has-mobile-bottom-nav" : ""}`}>
+      {isDriver ? <DriverTrackingRecoveryBridge /> : null}
       <button className="mobile-menu-button" type="button" aria-label="فتح القائمة" onClick={() => setDrawerOpen(true)}>
         <Icon name="menu" size={23} />
       </button>
