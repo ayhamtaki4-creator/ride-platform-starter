@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Param, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '../iam/auth-user.type';
 import { CurrentUser } from '../iam/current-user.decorator';
@@ -11,18 +11,6 @@ import { TripsService } from './trips.service';
 @Controller('trips')
 export class TripsController {
   constructor(private readonly tripsService: TripsService) {}
-
-  @Permissions('trip:read:own')
-  @Get('me')
-  mine(@CurrentUser() user: AuthUser) {
-    return this.tripsService.mine(user);
-  }
-
-  @Permissions('trip:read:any')
-  @Get()
-  all() {
-    return this.tripsService.all();
-  }
 
   @Permissions('trip:update:own')
   @Post(':id/arriving')
