@@ -8,6 +8,7 @@ import '../models/driver_trip.dart';
 import '../services/location_tracking_service.dart';
 import '../services/realtime_service.dart';
 import 'login_page.dart';
+import 'notifications_page.dart';
 import 'trip_detail_page.dart';
 
 class TripsPage extends StatefulWidget {
@@ -21,6 +22,7 @@ class _TripsPageState extends State<TripsPage> {
   bool _loading = true;
   String? _error;
   List<DriverTrip> _trips = const [];
+  int _unreadNotifications = 0;
   StreamSubscription<Map<String, dynamic>>? _tripEvents;
   StreamSubscription<Map<String, dynamic>>? _notificationEvents;
   Timer? _realtimeReloadTimer;
@@ -36,6 +38,7 @@ class _TripsPageState extends State<TripsPage> {
     );
     unawaited(RealtimeService.instance.ensureConnected());
     _load();
+    unawaited(_loadUnreadCount());
   }
 
   @override
@@ -55,6 +58,7 @@ class _TripsPageState extends State<TripsPage> {
 
   void _showRealtimeNotification(Map<String, dynamic> event) {
     if (!mounted) return;
+    setState(() => _unreadNotifications += 1);
     final title = event['title']?.toString().trim();
     final message = event['message']?.toString().trim();
     final text = [
@@ -71,6 +75,22 @@ class _TripsPageState extends State<TripsPage> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+  }
+
+  Future<void> _loadUnreadCount() async {
+    try {
+      final data = await ApiClient.instance.getJson<Map<String, dynamic>>('/notifications/unread-count');
+      final count = data['count'];
+      if (!mounted) return;
+      setState(() => _unreadNotifications = count is num ? count.toInt() : int.tryParse('$count') ?? 0);
+    } catch (_) {}
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const NotificationsPage()),
+    );
+    await _loadUnreadCount();
   }
 
   Future<void> _load() => _loadTrips(showLoading: true);
@@ -128,9 +148,7 @@ class _TripsPageState extends State<TripsPage> {
 
     try {
       await LocationTrackingService.instance.start(trackingTrip.id);
-    } catch (_) {
-      // Permission and GPS guidance is shown in trip details when the driver opens it.
-    }
+    } catch (_) {}
   }
 
   Future<void> _logout() async {
@@ -151,12 +169,24 @@ class _TripsPageState extends State<TripsPage> {
       appBar: AppBar(
         title: const Text('رحلاتي'),
         actions: [
+          IconButton(
+            tooltip: 'الإشعارات',
+            onPressed: _openNotifications,
+            icon: Badge(
+              isLabelVisible: _unreadNotifications > 0,
+              label: Text(_unreadNotifications > 99 ? '99+' : '$_unreadNotifications'),
+              child: const Icon(Icons.notifications_none_rounded),
+            ),
+          ),
           IconButton(onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh)),
           IconButton(onPressed: _logout, icon: const Icon(Icons.logout)),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: () async {
+          await _load();
+          await _loadUnreadCount();
+        },
         child: _body(),
       ),
     );
@@ -164,12 +194,7 @@ class _TripsPageState extends State<TripsPage> {
 
   Widget _body() {
     if (_loading && _trips.isEmpty) {
-      return ListView(
-        children: const [
-          SizedBox(height: 240),
-          Center(child: CircularProgressIndicator()),
-        ],
-      );
+      return ListView(children: const [SizedBox(height: 240), Center(child: CircularProgressIndicator())]);
     }
 
     if (_error != null && _trips.isEmpty) {
@@ -209,9 +234,7 @@ class _TripsPageState extends State<TripsPage> {
             borderRadius: BorderRadius.circular(12),
             onTap: () async {
               await Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => TripDetailPage(trip: trip),
-                ),
+                MaterialPageRoute<void>(builder: (_) => TripDetailPage(trip: trip)),
               );
               await _load();
             },
@@ -243,8 +266,7 @@ class _TripsPageState extends State<TripsPage> {
                       Text('${trip.passengerCount} ركاب'),
                       Text('${trip.luggageCount} حقائب'),
                       if (trip.travelDate != null) Text(_date(trip.travelDate!)),
-                      if (trip.flightArrivalTime?.isNotEmpty == true)
-                        Text(trip.flightArrivalTime!),
+                      if (trip.flightArrivalTime?.isNotEmpty == true) Text(trip.flightArrivalTime!),
                     ],
                   ),
                 ],
