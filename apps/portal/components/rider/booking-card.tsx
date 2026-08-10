@@ -25,6 +25,11 @@ export function RiderBookingCard({
   const vehicle = booking.driver?.driverProfile?.vehicles[0];
   const runStatus = getRunStatusLabel(booking);
   const canTrack = !["CANCELLED_BY_PASSENGER", "CANCELLED_BY_DRIVER"].includes(booking.status);
+  const canEdit =
+    ["PENDING_DISPATCH", "SEARCHING_DRIVER"].includes(booking.status) &&
+    !booking.driver &&
+    !booking.driverPublicProfile &&
+    !booking.serviceRun;
 
   return (
     <article className={`rider-booking-card ${compact ? "is-compact" : ""}`}>
@@ -93,6 +98,11 @@ export function RiderBookingCard({
           <strong>{formatBookingMoney(booking.estimatedFare, booking.currency)}</strong>
         </div>
         <div className="actions">
+          {canEdit ? (
+            <Link className="button compact-button" href={`/rider/bookings/${booking.id}/edit`}>
+              تعديل الحجز <Icon name="calendar" size={17} />
+            </Link>
+          ) : null}
           {canTrack ? (
             <Link className="button compact-button primary" href={`/rider/bookings/${booking.id}/tracking`}>
               الخريطة والتتبع <Icon name="map-pin" size={17} />

@@ -33,7 +33,7 @@ export class BookingRoutePlanService {
       if (
         !trip ||
         trip.status !== 'PENDING_DISPATCH' ||
-        trip.bookingReviewStatus !== 'NEW' ||
+        !['NEW', 'CONFIRMED'].includes(trip.bookingReviewStatus) ||
         trip.driverAssignmentStatus !== 'UNASSIGNED' ||
         trip.driverId ||
         trip.serviceRunId
@@ -70,7 +70,7 @@ export class BookingRoutePlanService {
               "estimatedDurationMinutes" = ${durationMinutes}
           WHERE current_trip."id" = ${trip.id}::uuid
             AND current_trip."status"::text = 'PENDING_DISPATCH'
-            AND current_trip."bookingReviewStatus"::text = 'NEW'
+            AND current_trip."bookingReviewStatus"::text IN ('NEW', 'CONFIRMED')
             AND current_trip."driverAssignmentStatus"::text = 'UNASSIGNED'
             AND current_trip."driverId" IS NULL
             AND current_trip."serviceRunId" IS NULL

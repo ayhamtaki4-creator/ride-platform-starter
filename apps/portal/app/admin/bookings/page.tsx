@@ -113,6 +113,10 @@ export default function AdminBookingsPage() {
           {bookings.map((booking) => {
             const driverOptions = eligible[booking.id] ?? [];
             const selected = selection[booking.id];
+            const canModify =
+              ["PENDING_DISPATCH", "SEARCHING_DRIVER", "DRIVER_ASSIGNED", "DRIVER_ARRIVING", "DRIVER_ARRIVED"].includes(booking.status) &&
+              booking.bookingReviewStatus !== "REJECTED" &&
+              booking.bookingReviewStatus !== "CANCELLED";
             return <article className="booking-card" key={booking.id}>
               <div className="booking-card-head"><div><strong>{booking.bookingReference}</strong><small>{booking.contactName} · {booking.contactPhone}</small></div><StatusPill status={booking.bookingReviewStatus ?? booking.status} label={booking.bookingReviewStatus ? BOOKING_REVIEW_LABELS[booking.bookingReviewStatus] : TRIP_STATUS_LABELS[booking.status]} /></div>
               <div className="route-booking-highlight"><div><small>المسار</small><strong>{booking.route?.nameAr ?? (booking.direction ? DIRECTION_LABELS[booking.direction] : "مسار غير محدد")}</strong></div><div><small>النوع</small><strong>{booking.bookingType ? BOOKING_TYPE_LABELS[booking.bookingType] : "—"}</strong></div><div><small>التاريخ</small><strong>{booking.travelDate ? new Date(booking.travelDate).toLocaleDateString("ar") : "—"}</strong></div><div><small>{booking.bookingType === "PRIVATE_CAR" ? "فئة السيارة" : "المقاعد"}</small><strong>{booking.bookingType === "PRIVATE_CAR" ? VEHICLE_CLASS_LABELS[booking.vehicleClass ?? "SMALL"] : `${booking.passengerCount ?? 1} مسافر`}</strong></div></div>
@@ -127,7 +131,7 @@ export default function AdminBookingsPage() {
               {booking.driver ? <div className="assigned-driver-summary">{booking.driverPublicProfile?.avatarUrl ? <img src={booking.driverPublicProfile.avatarUrl} alt={booking.driverPublicProfile.displayName} /> : null}<div><strong>السائق: {booking.driver.firstName} {booking.driver.lastName}</strong><small>{TRIP_STATUS_LABELS[booking.status]}{booking.driverAssignmentStatus ? ` · ${DRIVER_ASSIGNMENT_LABELS[booking.driverAssignmentStatus]}` : ""}</small></div>{booking.driverPublicProfile?.vehicle?.primaryImageUrl ? <img className="assigned-vehicle-thumb" src={booking.driverPublicProfile.vehicle.primaryImageUrl} alt="المركبة" /> : null}</div> : null}
               {booking.serviceRun ? <div className="run-summary"><strong>{booking.serviceRun.runReference}</strong><span>{SERVICE_RUN_STATUS_LABELS[booking.serviceRun.status]}</span><span>المقاعد {booking.serviceRun.reservedSeats}/{booking.serviceRun.seatCapacity}</span></div> : null}
               {booking.driverRejectionReason ? <div className="notice error">سبب رفض السائق: {booking.driverRejectionReason}</div> : null}
-              <div className="actions"><Link className="button primary" href={`/admin/bookings/${booking.id}/tracking`}>{booking.driver ? "تتبع الرحلة" : "تخطيط المسار"}</Link><Link className="button" href={`/admin/bookings/${booking.id}`}>التفاصيل</Link></div>
+              <div className="actions"><Link className="button primary" href={`/admin/bookings/${booking.id}/tracking`}>{booking.driver ? "تتبع الرحلة" : "تخطيط المسار"}</Link>{canModify ? <Link className="button" href={`/admin/bookings/${booking.id}/edit`}>تعديل وإعادة جدولة</Link> : null}<Link className="button" href={`/admin/bookings/${booking.id}`}>التفاصيل</Link></div>
             </article>;
           })}
         </section>

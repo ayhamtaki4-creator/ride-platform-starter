@@ -1,5 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BookingModificationService } from '../bookings/booking-modification.service';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
@@ -9,76 +9,30 @@ import { AdminUpdateBookingDto } from './dto/admin-update-booking.dto';
 export class AdminBookingControlService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly realtime: RealtimeEventsService
+    private readonly realtime: RealtimeEventsService,
+    private readonly bookingModifications: BookingModificationService
   ) {}
 
   async update(actor: AuthUser, tripId: string, dto: AdminUpdateBookingDto) {
-    const current = await this.prisma.trip.findFirst({
-      where: { id: tripId, bookingReference: { not: null } }
+    // This endpoint is kept for backwards compatibility with the existing
+    // administration detail page. All editable operational fields now pass
+    // through the same guarded reschedule/update workflow as the new endpoint.
+    // estimatedFare/currency are intentionally ignored here: pricing is derived
+    // from the active route + vehicle-class rule and cannot bypass validation.
+    return this.bookingModifications.updateAdmin(actor, tripId, {
+      ...(dto.contactName !== undefined ? { passengerName: dto.contactName } : {}),
+      ...(dto.contactPhone !== undefined ? { passengerPhone: dto.contactPhone } : {}),
+      ...(dto.travelDate !== undefined ? { travelDate: dto.travelDate } : {}),
+      ...(dto.flightArrivalTime !== undefined
+        ? { flightArrivalTime: dto.flightArrivalTime || null }
+        : {}),
+      ...(dto.flightNumber !== undefined ? { flightNumber: dto.flightNumber || null } : {}),
+      ...(dto.notes !== undefined ? { notes: dto.notes || null } : {}),
+      ...(dto.passengerCount !== undefined ? { passengerCount: dto.passengerCount } : {}),
+      ...(dto.luggageCount !== undefined ? { luggageCount: dto.luggageCount } : {}),
+      ...(dto.vehicleClass !== undefined ? { vehicleClass: dto.vehicleClass } : {}),
+      changeNote: 'تعديل من شاشة تفاصيل الحجز في الإدارة'
     });
-    if (!current) throw new NotFoundException('الحجز غير موجود.');
-
-    const travelDate = dto.travelDate ? new Date(dto.travelDate) : undefined;
-    if (travelDate && Number.isNaN(travelDate.getTime())) {
-      throw new ConflictException('تاريخ الرحلة غير صحيح.');
-    }
-
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const trip = await tx.trip.update({
-        where: { id: tripId },
-        data: {
-          ...(dto.contactName !== undefined ? { contactName: dto.contactName.trim() } : {}),
-          ...(dto.contactPhone !== undefined ? { contactPhone: dto.contactPhone.trim() } : {}),
-          ...(travelDate ? { travelDate } : {}),
-          ...(dto.flightArrivalTime !== undefined
-            ? { flightArrivalTime: dto.flightArrivalTime.trim() || null }
-            : {}),
-          ...(dto.flightNumber !== undefined
-            ? { flightNumber: dto.flightNumber.trim() || null }
-            : {}),
-          ...(dto.notes !== undefined ? { notes: dto.notes.trim() || null } : {}),
-          ...(dto.passengerCount !== undefined ? { passengerCount: dto.passengerCount } : {}),
-          ...(dto.luggageCount !== undefined ? { luggageCount: dto.luggageCount } : {}),
-          ...(dto.vehicleClass !== undefined ? { vehicleClass: dto.vehicleClass } : {}),
-          ...(dto.estimatedFare !== undefined
-            ? { estimatedFare: new Prisma.Decimal(dto.estimatedFare) }
-            : {}),
-          ...(dto.currency !== undefined ? { currency: dto.currency.trim().toUpperCase() } : {})
-        }
-      });
-
-      await tx.auditLog.create({
-        data: {
-          actorId: actor.sub,
-          action: 'booking.admin_override.update',
-          entityType: 'Trip',
-          entityId: tripId,
-          metadata: {
-            bookingReference: current.bookingReference,
-            changedFields: Object.keys(dto),
-            previousFare: String(current.estimatedFare),
-            newFare: String(trip.estimatedFare),
-            previousTravelDate: current.travelDate?.toISOString() ?? null,
-            newTravelDate: trip.travelDate?.toISOString() ?? null
-          }
-        }
-      });
-
-      return trip;
-    });
-
-    this.realtime.bookingUpdated({
-      tripId: updated.id,
-      passengerId: updated.passengerId,
-      driverId: updated.driverId,
-      status: updated.status,
-      bookingStatus: updated.bookingReviewStatus,
-      bookingReference: updated.bookingReference,
-      occurredAt: new Date().toISOString(),
-      reason: 'Booking updated by administration'
-    });
-
-    return updated;
   }
 
   async acceptDriverOnBehalf(actor: AuthUser, tripId: string) {
