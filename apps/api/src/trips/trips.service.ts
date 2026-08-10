@@ -285,8 +285,15 @@ export class TripsService {
       throw new ConflictException('يجب قبول المهمة قبل بدء الرحلة.');
     }
 
+    const startedAt = new Date();
     return this.transition(user.sub, trip, 'IN_PROGRESS', {
-      startedAt: new Date()
+      startedAt,
+      ...(trip.serviceRunId
+        ? {
+            serviceRunPassengerStatus: 'PICKED_UP',
+            pickedUpAt: startedAt
+          }
+        : {})
     });
   }
 
@@ -294,13 +301,20 @@ export class TripsService {
     const trip = await this.findTrip(id);
     this.assertDriverOwnsTrip(user, trip.driverId);
 
+    const completedAt = new Date();
     return this.transition(
       user.sub,
       trip,
       'COMPLETED',
       {
-        completedAt: new Date(),
-        finalFare: trip.estimatedFare
+        completedAt,
+        finalFare: trip.estimatedFare,
+        ...(trip.serviceRunId
+          ? {
+              serviceRunPassengerStatus: 'DROPPED_OFF',
+              droppedOffAt: completedAt
+            }
+          : {})
       },
       note
     );
@@ -380,7 +394,7 @@ export class TripsService {
       if (trip.serviceRunId && to === 'IN_PROGRESS') {
         await tx.serviceRun.updateMany({
           where: { id: trip.serviceRunId },
-          data: { status: 'IN_PROGRESS' }
+          data: { status: 'IN_PROGRESS', startedAt: new Date() }
         });
       }
 
@@ -454,10 +468,10 @@ export class TripsService {
           if (remainingRunBookings === 0) {
             await tx.serviceRun.updateMany({
               where: { id: trip.serviceRunId },
-              data: {
-                status:
-                  to === 'COMPLETED' ? 'COMPLETED' : 'CANCELLED'
-              }
+              data:
+                to === 'COMPLETED'
+                  ? { status: 'COMPLETED', completedAt: new Date() }
+                  : { status: 'CANCELLED' }
             });
           }
         }
