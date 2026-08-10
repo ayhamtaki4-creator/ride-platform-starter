@@ -11,12 +11,16 @@
 - قبول ورفض المهمة مع سبب الرفض.
 - دورة الرحلة: أنا في الطريق → وصلت إلى المسافر → بدء الرحلة → إنهاء الرحلة.
 - بدء GPS تلقائيًا عند وصول السائق واستمراره أثناء الرحلة.
-- إرسال الموقع إلى `POST /api/tracking/trips/:tripId/location`.
+- إرسال الموقع عبر Socket.IO مباشرة مع REST fallback إلى `POST /api/tracking/trips/:tripId/location`.
+- انتظار تأكيد `trip.location.accepted` من الخادم قبل اعتبار تحديث GPS ناجحًا.
+- استقبال أحداث تعيين وتحديث الرحلات مباشرة وتحديث قائمة مهام السائق تلقائيًا.
+- استقبال `notification.created` أثناء تشغيل التطبيق وعرضه للسائق.
 - Android foreground location notification أثناء التتبع.
 - iOS background location configuration.
 - حفظ الرحلة النشطة محليًا واستعادة GPS عند إعادة فتح التطبيق.
 - حفظ آخر نقاط GPS محليًا عند انقطاع الشبكة ومحاولة إرسال أحدث نقطة بعد عودة الاتصال.
-- خريطة داخل التطبيق تعرض نقطة الالتقاط والوجهة والمسار وموقع السائق الأخير.
+- خريطة داخل التطبيق تعرض نقطة الالتقاط والوجهة والمسار وموقع السائق.
+- تحديث علامة السيارة على الخريطة من `trip.location.updated` مباشرة.
 - فتح Google Maps على Android وApple Maps على iOS للملاحة إلى الالتقاط أو الوجهة.
 - زر اتصال مباشر بالمسافر عند وجود رقم هاتف.
 
@@ -54,6 +58,12 @@ flutter pub get
 flutter run --dart-define=API_BASE_URL=https://ride-platform-starter.onrender.com/api
 ```
 
+عنوان Socket.IO يُشتق تلقائيًا من عنوان الـAPI. ويمكن تحديده صراحةً عند الحاجة:
+
+```bash
+--dart-define=REALTIME_URL=https://ride-platform-starter.onrender.com/realtime
+```
+
 Android Emulator مع API محلي:
 
 ```bash
@@ -80,8 +90,7 @@ flutter build apk --debug --dart-define=API_BASE_URL=https://ride-platform-start
 
 ## ما تبقى للمرحلة التالية
 
-- Firebase Cloud Messaging لإشعارات تعيين الرحلات الجديدة.
-- ربط Socket.IO في تطبيق Flutter لتحديثات realtime بدل الاعتماد على REST فقط.
-- تحسين الخريطة لتحديث موقع السيارة لحظيًا بدون إعادة تحميل الشاشة.
+- Firebase Cloud Messaging لإشعارات تعيين الرحلات عندما يكون التطبيق مغلقًا أو في الخلفية.
 - اختبار background tracking على أجهزة Android فعلية مع سياسات البطارية المختلفة.
 - اختبار iOS background location على جهاز فعلي وضبط Signing & Capabilities قبل النشر.
+- إضافة شاشة إشعارات كاملة إذا أردنا عرض سجل الإشعارات داخل التطبيق وليس Snackbar فقط.
