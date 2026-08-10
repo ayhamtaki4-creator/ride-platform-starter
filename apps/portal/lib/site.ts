@@ -5,12 +5,35 @@ function normalizeSiteUrl(value: string) {
   return value.trim().replace(/\/+$/, "");
 }
 
-const fallbackSiteUrl =
-  process.env.NODE_ENV === "production" ? PRODUCTION_SITE_URL : LOCAL_SITE_URL;
+function isSafeProductionSiteUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    return (
+      url.protocol === "https:" &&
+      hostname !== "localhost" &&
+      hostname !== "127.0.0.1" &&
+      hostname !== "0.0.0.0" &&
+      hostname !== "::1"
+    );
+  } catch {
+    return false;
+  }
+}
 
-export const SITE_URL = normalizeSiteUrl(
-  process.env.NEXT_PUBLIC_SITE_URL || fallbackSiteUrl,
-);
+function resolveSiteUrl() {
+  const configured = normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL || "");
+
+  if (process.env.NODE_ENV === "production") {
+    return isSafeProductionSiteUrl(configured)
+      ? configured
+      : PRODUCTION_SITE_URL;
+  }
+
+  return configured || LOCAL_SITE_URL;
+}
+
+export const SITE_URL = resolveSiteUrl();
 
 export function absoluteSiteUrl(path = "/") {
   return new URL(path, `${SITE_URL}/`).toString();
