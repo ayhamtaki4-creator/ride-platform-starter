@@ -14,6 +14,7 @@ type NavItem = { href: string; label: string; icon: IconName };
 const adminItems: NavItem[] = [
   { href: "/admin", label: "نظرة عامة", icon: "dashboard" },
   { href: "/admin/bookings", label: "الحجوزات الحالية", icon: "bookings" },
+  { href: "/admin/tracking", label: "مراقبة GPS", icon: "map-pin" },
   { href: "/admin/runs", label: "الرحلات التشغيلية", icon: "route" },
   { href: "/admin/completed-bookings", label: "الحجوزات المنتهية", icon: "check" },
   { href: "/admin/routes", label: "المواقع والمسارات", icon: "map-pin" },

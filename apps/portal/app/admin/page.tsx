@@ -54,6 +54,7 @@ export default function AdminPage() {
       <div className="card"><div className="label">غير محصل</div><div className="value">${data?.outstandingRevenue ?? 0}</div><small>{data?.unpaidCompletedBookings ?? 0} حجز مكتمل يحتاج مراجعة دفع</small></div>
     </section>
     <section className="operations-shortcuts">
+      <Link className="panel operations-shortcut" href="/admin/tracking"><span>GPS</span><strong>مراقبة السائقين مباشرة</strong><small>حالة التتبع وآخر موقع وصل إلى الخادم بعيدًا عن قائمة الحجوزات.</small></Link>
       <Link className="panel operations-shortcut" href="/admin/routes"><span>المسارات</span><strong>إدارة المدن والمطارات والخطوط</strong><small>إضافة دمشق–عمّان أو أي محافظة وتسعيرها.</small></Link>
       <Link className="panel operations-shortcut" href="/admin/drivers"><span>الأسطول</span><strong>السائقون والمركبات</strong><small>المراكز والدول والصور والوثائق.</small></Link>
       <Link className="panel operations-shortcut" href="/admin/compliance"><span>الامتثال</span><strong>التصاريح القريبة من الانتهاء</strong><small>اعتماد الملفات ومتطلبات الأردن ولبنان.</small></Link>
