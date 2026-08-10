@@ -6,6 +6,7 @@ import '../core/api_client.dart';
 import '../core/driver_runtime_store.dart';
 import '../models/driver_trip.dart';
 import '../services/location_tracking_service.dart';
+import '../services/push_notification_service.dart';
 import '../services/realtime_service.dart';
 import 'login_page.dart';
 import 'notifications_page.dart';
@@ -37,6 +38,7 @@ class _TripsPageState extends State<TripsPage> {
       _showRealtimeNotification,
     );
     unawaited(RealtimeService.instance.ensureConnected());
+    unawaited(PushNotificationService.instance.activate());
     _load();
     unawaited(_loadUnreadCount());
   }
@@ -154,6 +156,7 @@ class _TripsPageState extends State<TripsPage> {
   Future<void> _logout() async {
     await LocationTrackingService.instance.stop();
     RealtimeService.instance.disconnect();
+    await PushNotificationService.instance.deactivate();
     await DriverRuntimeStore.instance.clearAll();
     await ApiClient.instance.logout();
     if (!mounted) return;
