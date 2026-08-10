@@ -7,6 +7,7 @@ import { Shell } from "@/components/shell";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/ui/icon";
 import { useToast } from "@/components/ui/toast-provider";
+import { authPathWithReturn, currentAuthReturnPath } from "@/lib/auth-return-path";
 import { dashboardHomeForRoles } from "@/lib/role-home";
 import { hasPendingBooking } from "@/lib/pending-booking";
 
@@ -20,14 +21,20 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingBooking, setPendingBooking] = useState(false);
+  const [returnPath, setReturnPath] = useState<string | null>(null);
 
   function destinationFor(roles: string[]) {
+    const requestedPath = roles.includes("PASSENGER") ? currentAuthReturnPath() : null;
+    if (requestedPath) return requestedPath;
     return roles.includes("PASSENGER") && hasPendingBooking()
       ? "/booking?resumeBooking=1"
       : dashboardHomeForRoles(roles);
   }
 
-  useEffect(() => setPendingBooking(hasPendingBooking()), []);
+  useEffect(() => {
+    setPendingBooking(hasPendingBooking());
+    setReturnPath(currentAuthReturnPath());
+  }, []);
 
   useEffect(() => {
     if (!authLoading && user) router.replace(destinationFor(user.roles));
@@ -78,7 +85,11 @@ export default function LoginPage() {
               <p>أدخل بريدك الإلكتروني وكلمة المرور للوصول إلى لوحة حسابك.</p>
             </div>
 
-            {pendingBooking ? (
+            {returnPath === "/booking" ? (
+              <div className="notice success">
+                سجّل الدخول أولًا، وبعدها سننقلك مباشرة إلى صفحة الحجز.
+              </div>
+            ) : pendingBooking ? (
               <div className="notice success">
                 تفاصيل حجزك محفوظة. بعد الدخول سنكمل إرساله ونفتح صفحة تفاصيله تلقائيًا.
               </div>
@@ -103,7 +114,7 @@ export default function LoginPage() {
 
             <div className="auth-register-cta">
               <span>ليس لديك حساب مسافر؟</span>
-              <Link href="/register">إنشاء حساب جديد</Link>
+              <Link href={authPathWithReturn("/register", returnPath)}>إنشاء حساب جديد</Link>
             </div>
 
             <p className="auth-help">تواجه مشكلة في الدخول؟ تواصل مع مركز العمليات.</p>

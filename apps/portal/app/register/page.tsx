@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/ui/icon";
 import { InternationalPhoneInput } from "@/components/ui/international-phone-input";
 import { useToast } from "@/components/ui/toast-provider";
+import { authPathWithReturn, currentAuthReturnPath } from "@/lib/auth-return-path";
 import { hasPendingBooking } from "@/lib/pending-booking";
 import { homeForRoles } from "@/lib/types";
 
@@ -25,17 +26,24 @@ export default function RegisterPage() {
     whatsappOptIn: true,
   });
   const [pendingBooking, setPendingBooking] = useState(false);
+  const [returnPath, setReturnPath] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
 
   function destinationFor(roles: string[]) {
+    const requestedPath = roles.includes("PASSENGER") ? currentAuthReturnPath() : null;
+    if (requestedPath) return requestedPath;
     return roles.includes("PASSENGER") && hasPendingBooking()
       ? "/booking?resumeBooking=1"
       : homeForRoles(roles);
   }
 
-  useEffect(() => setPendingBooking(hasPendingBooking()), []);
+  useEffect(() => {
+    setPendingBooking(hasPendingBooking());
+    setReturnPath(currentAuthReturnPath());
+  }, []);
+
   useEffect(() => {
     if (!authLoading && user) router.replace(destinationFor(user.roles));
   }, [authLoading, router, user]);
@@ -101,7 +109,11 @@ export default function RegisterPage() {
               <p>أدخل بيانات صحيحة لأنها ستستخدم للتواصل ومتابعة الحجز.</p>
             </div>
 
-            {pendingBooking ? <div className="notice success">مسودة حجزك محفوظة وستُرسل تلقائيًا بعد إنشاء الحساب.</div> : null}
+            {returnPath === "/booking" ? (
+              <div className="notice success">أنشئ حسابك أولًا، وبعدها سننقلك مباشرة إلى صفحة الحجز.</div>
+            ) : pendingBooking ? (
+              <div className="notice success">مسودة حجزك محفوظة وستُرسل تلقائيًا بعد إنشاء الحساب.</div>
+            ) : null}
 
             <form className="auth-form-v2" onSubmit={submit}>
               <div className="auth-name-grid">
@@ -118,7 +130,7 @@ export default function RegisterPage() {
               <button className="button primary button-lg auth-submit" disabled={working} type="submit">{working ? <><span className="button-spinner" />جارٍ إنشاء الحساب...</> : <>إنشاء الحساب <Icon name="login" size={19} /></>}</button>
             </form>
 
-            <div className="auth-register-cta"><span>لديك حساب بالفعل؟</span><Link href="/login">تسجيل الدخول</Link></div>
+            <div className="auth-register-cta"><span>لديك حساب بالفعل؟</span><Link href={authPathWithReturn("/login", returnPath)}>تسجيل الدخول</Link></div>
           </div>
         </div>
       </section>

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { apiBaseURL } from "../helpers/accounts";
+import { loginAs } from "../helpers/auth";
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -20,6 +21,7 @@ test.describe("Mobile flight-ticket upload", () => {
     );
     expect(route, "Seed data must include a route with flight-ticket upload enabled").toBeTruthy();
 
+    await loginAs(page, "rider");
     await page.goto("/booking");
     await expect(page.locator("#booking-card")).toBeVisible();
 
