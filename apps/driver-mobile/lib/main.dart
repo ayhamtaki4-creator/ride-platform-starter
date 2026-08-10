@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'core/session_store.dart';
 import 'features/login_page.dart';
 import 'features/trips_page.dart';
+import 'services/push_notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await PushNotificationService.initializeFirebase();
   runApp(const DriverApp());
 }
 
