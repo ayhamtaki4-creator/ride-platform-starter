@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { loginAs } from "../helpers/auth";
 
 test.describe("Mobile API network resilience", () => {
   test("retries one transient GET failure and then recovers", async ({ page }) => {
+    await loginAs(page, "rider");
     let routeCalls = 0;
 
     await page.route("**/api/routes", async (route) => {
@@ -26,6 +28,7 @@ test.describe("Mobile API network resilience", () => {
   });
 
   test("retries one browser network failure for a safe GET", async ({ page }) => {
+    await loginAs(page, "rider");
     let routeCalls = 0;
 
     await page.route("**/api/routes", async (route) => {
