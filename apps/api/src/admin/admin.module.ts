@@ -10,6 +10,7 @@ import { AdminDriverManagementService } from './admin-driver-management.service'
 import { AdminRunsController } from './admin-runs.controller';
 import { AdminRunsService } from './admin-runs.service';
 import { AdminService } from './admin.service';
+import { AdminTrackingController } from './admin-tracking.controller';
 import { DriverDayAssignmentPolicyService } from './driver-day-assignment-policy.service';
 
 @Module({
@@ -18,7 +19,8 @@ import { DriverDayAssignmentPolicyService } from './driver-day-assignment-policy
     AdminBookingsController,
     AdminBookingControlController,
     AdminDriverManagementController,
-    AdminRunsController
+    AdminRunsController,
+    AdminTrackingController
   ],
   providers: [
     AdminService,
