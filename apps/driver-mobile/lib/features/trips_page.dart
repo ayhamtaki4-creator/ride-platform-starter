@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
+import '../core/driver_runtime_store.dart';
 import '../models/driver_trip.dart';
 import '../services/location_tracking_service.dart';
 import 'login_page.dart';
@@ -40,16 +41,7 @@ class _TripsPageState extends State<TripsPage> {
 
       if (!mounted) return;
       setState(() => _trips = trips);
-
-      final trackingTrip = trips.where((trip) => trip.shouldTrackLocation).firstOrNull;
-      if (trackingTrip != null &&
-          LocationTrackingService.instance.activeTripId != trackingTrip.id) {
-        try {
-          await LocationTrackingService.instance.start(trackingTrip.id);
-        } catch (_) {
-          // The detail screen will surface permission guidance when the driver opens it.
-        }
-      }
+      await _recoverTracking(trips);
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = apiErrorMessage(error));
@@ -58,8 +50,35 @@ class _TripsPageState extends State<TripsPage> {
     }
   }
 
+  Future<void> _recoverTracking(List<DriverTrip> trips) async {
+    final persistedTripId = await DriverRuntimeStore.instance.activeTripId;
+    DriverTrip? trackingTrip;
+
+    if (persistedTripId != null) {
+      trackingTrip = trips
+          .where((trip) => trip.id == persistedTripId && trip.shouldTrackLocation)
+          .firstOrNull;
+      if (trackingTrip == null) {
+        await DriverRuntimeStore.instance.clearActiveTrip();
+      }
+    }
+
+    trackingTrip ??= trips.where((trip) => trip.shouldTrackLocation).firstOrNull;
+    if (trackingTrip == null ||
+        LocationTrackingService.instance.activeTripId == trackingTrip.id) {
+      return;
+    }
+
+    try {
+      await LocationTrackingService.instance.start(trackingTrip.id);
+    } catch (_) {
+      // Permission and GPS guidance is shown in trip details when the driver opens it.
+    }
+  }
+
   Future<void> _logout() async {
     await LocationTrackingService.instance.stop();
+    await DriverRuntimeStore.instance.clearAll();
     await ApiClient.instance.logout();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
