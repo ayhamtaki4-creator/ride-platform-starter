@@ -57,6 +57,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const isPublic = pathname === "/" || pathname === "/booking" || pathname === "/login" || pathname.startsWith("/register");
   const isAdmin = Boolean(user?.roles.some((role) => ["SUPER_ADMIN", "ADMIN", "OPERATIONS_MANAGER"].includes(role)));
   const isFinance = Boolean(user?.roles.includes("FINANCE_MANAGER"));
+  const canViewFinance = Boolean(user?.roles.some((role) => ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER"].includes(role)));
   const isDriver = Boolean(user?.roles.includes("DRIVER"));
   const isPassenger = Boolean(user?.roles.includes("PASSENGER"));
 
@@ -80,10 +81,13 @@ export function Shell({ children }: { children: ReactNode }) {
         { href: "/driver/profile", label: "الحساب والمركبة", icon: "user" },
       );
     }
-    if (isAdmin) items.push(...adminItems);
-    else if (isFinance) items.push(...financeItems);
+    if (isAdmin) {
+      items.push(...adminItems.filter((item) => item.href !== "/admin/driver-finance" || canViewFinance));
+    } else if (isFinance) {
+      items.push(...financeItems);
+    }
     return items;
-  }, [isAdmin, isDriver, isFinance, isPassenger]);
+  }, [canViewFinance, isAdmin, isDriver, isFinance, isPassenger]);
 
   const mobileNavItems = useMemo<NavItem[]>(() => {
     if (isAdmin || isFinance) return [];
