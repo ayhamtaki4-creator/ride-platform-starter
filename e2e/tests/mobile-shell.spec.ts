@@ -200,21 +200,7 @@ test.describe("Mobile shell", () => {
     expect(await hasHorizontalOverflow(page)).toBe(false);
   });
 
-  test("admin GPS monitoring lives on a separate page from current bookings", async ({ page }) => {
-    await loginAs(page, "admin");
-
-    await page.goto("/admin/bookings");
-    await expect(page.locator('section[aria-label="مراقبة GPS للسائقين"]')).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "مراقبة GPS للسائقين" })).toBeVisible();
-
-    await page.getByRole("link", { name: "مراقبة GPS للسائقين" }).click();
-    await page.waitForURL((url) => url.pathname === "/admin/tracking", { timeout: 15_000 });
-    await expect(page.getByRole("heading", { name: "مراقبة GPS للسائقين" })).toBeVisible();
-    await expect(page.locator('section[aria-label="مراقبة GPS للسائقين"]')).toBeVisible();
-    expect(await hasHorizontalOverflow(page)).toBe(false);
-  });
-
-  test("admin keeps the drawer navigation instead of the passenger bottom bar", async ({ page }) => {
+  test("admin keeps drawer navigation and GPS monitoring separate from bookings", async ({ page }) => {
     await loginAs(page, "admin");
 
     await expect(
@@ -225,9 +211,18 @@ test.describe("Mobile shell", () => {
     await expect(menuButton).toBeVisible();
     await menuButton.click();
     await expect(page.locator(".app-sidebar")).toHaveClass(/is-open/);
-    await expect(
-      page.getByRole("navigation", { name: "قائمة لوحة التحكم" }),
-    ).toBeVisible();
+    const adminNavigation = page.getByRole("navigation", { name: "قائمة لوحة التحكم" });
+    await expect(adminNavigation).toBeVisible();
+    await expect(adminNavigation.getByRole("link", { name: "مراقبة GPS" })).toBeVisible();
+
+    await page.goto("/admin/bookings");
+    await expect(page.locator('section[aria-label="مراقبة GPS للسائقين"]')).toHaveCount(0);
+    const trackingLink = page.getByRole("link", { name: "مراقبة GPS للسائقين" });
+    await expect(trackingLink).toBeVisible();
+    await trackingLink.click();
+    await page.waitForURL((url) => url.pathname === "/admin/tracking", { timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "مراقبة GPS للسائقين" })).toBeVisible();
+    await expect(page.locator('section[aria-label="مراقبة GPS للسائقين"]')).toBeVisible();
 
     expect(await hasHorizontalOverflow(page)).toBe(false);
   });
