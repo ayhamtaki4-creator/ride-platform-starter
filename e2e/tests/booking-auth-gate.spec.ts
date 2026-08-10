@@ -9,7 +9,7 @@ test.describe("Booking authentication gate", () => {
     await expect(page.getByRole("heading", { name: "إنشاء حساب مسافر" })).toBeVisible();
     await expect(page.getByText("أنشئ حسابك أولًا، وبعدها سننقلك مباشرة إلى صفحة الحجز.")).toBeVisible();
 
-    const loginLink = page.getByRole("link", { name: "تسجيل الدخول" });
+    const loginLink = page.getByRole("main").getByRole("link", { name: "تسجيل الدخول" });
     await expect(loginLink).toHaveAttribute("href", "/login?next=%2Fbooking");
     await loginLink.click();
 
