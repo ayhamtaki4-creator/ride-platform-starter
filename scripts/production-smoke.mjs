@@ -197,13 +197,13 @@ await run("Portal booking registration gate", async () => {
   const registerHtml = await responseText(registerResult.response);
   assert(registerHtml.includes("إنشاء حساب مسافر"), "registration page is missing passenger account content");
   assert(
-    registerHtml.includes("أنشئ حسابك أولًا") || registerHtml.includes("صفحة الحجز"),
-    "registration page does not preserve the booking return flow",
+    registerHtml.includes("رقم WhatsApp مع رمز الدولة"),
+    "registration page is missing the international phone field",
   );
 
   return {
     elapsedMs: bookingResult.elapsedMs + registerResult.elapsedMs,
-    detail: "anonymous booking is gated by passenger registration",
+    detail: "anonymous booking is gated and passenger registration is available",
   };
 });
 
