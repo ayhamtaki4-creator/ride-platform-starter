@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BookingsModule } from '../bookings/bookings.module';
 import { AdminBookingControlController } from './admin-booking-control.controller';
 import { AdminBookingControlService } from './admin-booking-control.service';
 import { AdminBookingsController } from './admin-bookings.controller';
@@ -14,6 +15,7 @@ import { AdminTrackingController } from './admin-tracking.controller';
 import { DriverDayAssignmentPolicyService } from './driver-day-assignment-policy.service';
 
 @Module({
+  imports: [BookingsModule],
   controllers: [
     AdminController,
     AdminBookingsController,
