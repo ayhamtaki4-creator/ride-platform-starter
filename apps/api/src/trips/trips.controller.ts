@@ -1,43 +1,16 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Param, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '../iam/auth-user.type';
 import { CurrentUser } from '../iam/current-user.decorator';
 import { Permissions } from '../iam/permissions.decorator';
-import { CreateTripDto } from './dto/create-trip.dto';
-import { EstimateTripDto } from './dto/estimate-trip.dto';
 import { TransitionTripDto } from './dto/transition-trip.dto';
 import { TripsService } from './trips.service';
 
-@ApiTags('Trips')
+@ApiTags('Trip Execution')
 @ApiBearerAuth()
 @Controller('trips')
 export class TripsController {
   constructor(private readonly tripsService: TripsService) {}
-
-  @Permissions('trip:create')
-  @Post('estimate')
-  estimate(@Body() dto: EstimateTripDto) {
-    return this.tripsService.estimate(dto);
-  }
-
-  @Permissions('trip:read:own')
-  @Get('me')
-  mine(@CurrentUser() user: AuthUser) {
-    return this.tripsService.mine(user);
-  }
-
-  @Permissions('trip:read:any')
-  @Get()
-  all() {
-    return this.tripsService.all();
-  }
-
-  @Permissions('trip:create')
-  @Post()
-  create(@CurrentUser() user: AuthUser, @Body() dto: CreateTripDto) {
-    return this.tripsService.create(user, dto);
-  }
-
 
   @Permissions('trip:update:own')
   @Post(':id/arriving')
