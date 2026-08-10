@@ -92,7 +92,6 @@ export function Shell({ children }: { children: ReactNode }) {
         { href: "/driver", label: "الرئيسية", icon: "dashboard" },
         { href: "/driver/bookings", label: "المهام", icon: "briefcase" },
         { href: "/driver/runs", label: "الرحلات", icon: "route" },
-        { href: "/driver/finance", label: "المالية", icon: "pricing" },
         { href: "/driver/profile", label: "حسابي", icon: "user" },
       ];
     }
