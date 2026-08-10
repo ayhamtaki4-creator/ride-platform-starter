@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/api_client.dart';
 import '../core/driver_runtime_store.dart';
 import '../models/driver_trip.dart';
 import '../services/location_tracking_service.dart';
+import '../services/realtime_service.dart';
 import 'login_page.dart';
 import 'trip_detail_page.dart';
 
@@ -18,18 +21,67 @@ class _TripsPageState extends State<TripsPage> {
   bool _loading = true;
   String? _error;
   List<DriverTrip> _trips = const [];
+  StreamSubscription<Map<String, dynamic>>? _tripEvents;
+  StreamSubscription<Map<String, dynamic>>? _notificationEvents;
+  Timer? _realtimeReloadTimer;
 
   @override
   void initState() {
     super.initState();
+    _tripEvents = RealtimeService.instance.tripEvents.listen((_) {
+      _scheduleRealtimeReload();
+    });
+    _notificationEvents = RealtimeService.instance.notificationEvents.listen(
+      _showRealtimeNotification,
+    );
+    unawaited(RealtimeService.instance.ensureConnected());
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
+  @override
+  void dispose() {
+    _realtimeReloadTimer?.cancel();
+    _tripEvents?.cancel();
+    _notificationEvents?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleRealtimeReload() {
+    _realtimeReloadTimer?.cancel();
+    _realtimeReloadTimer = Timer(const Duration(milliseconds: 450), () {
+      if (mounted) unawaited(_loadTrips(showLoading: false));
     });
+  }
+
+  void _showRealtimeNotification(Map<String, dynamic> event) {
+    if (!mounted) return;
+    final title = event['title']?.toString().trim();
+    final message = event['message']?.toString().trim();
+    final text = [
+      if (title != null && title.isNotEmpty) title,
+      if (message != null && message.isNotEmpty) message,
+    ].join('\n');
+    if (text.isEmpty) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(text),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  Future<void> _load() => _loadTrips(showLoading: true);
+
+  Future<void> _loadTrips({required bool showLoading}) async {
+    if (showLoading && mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
       final data = await ApiClient.instance.getJson<List<dynamic>>('/drivers/me/schedule');
@@ -40,13 +92,18 @@ class _TripsPageState extends State<TripsPage> {
           .toList();
 
       if (!mounted) return;
-      setState(() => _trips = trips);
+      setState(() {
+        _trips = trips;
+        _error = null;
+      });
       await _recoverTracking(trips);
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = apiErrorMessage(error));
+      if (showLoading || _trips.isEmpty) {
+        setState(() => _error = apiErrorMessage(error));
+      }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (showLoading && mounted) setState(() => _loading = false);
     }
   }
 
@@ -78,6 +135,7 @@ class _TripsPageState extends State<TripsPage> {
 
   Future<void> _logout() async {
     await LocationTrackingService.instance.stop();
+    RealtimeService.instance.disconnect();
     await DriverRuntimeStore.instance.clearAll();
     await ApiClient.instance.logout();
     if (!mounted) return;
