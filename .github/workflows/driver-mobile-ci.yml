@@ -53,6 +53,10 @@ jobs:
         run: >-
           flutter build apk --debug
           --dart-define=API_BASE_URL=https://ride-platform-starter.onrender.com/api
+          --dart-define=FIREBASE_API_KEY=${{ secrets.DRIVER_FIREBASE_API_KEY }}
+          --dart-define=FIREBASE_APP_ID=${{ secrets.DRIVER_FIREBASE_APP_ID }}
+          --dart-define=FIREBASE_MESSAGING_SENDER_ID=${{ secrets.DRIVER_FIREBASE_MESSAGING_SENDER_ID }}
+          --dart-define=FIREBASE_PROJECT_ID=${{ secrets.DRIVER_FIREBASE_PROJECT_ID }}
 
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
