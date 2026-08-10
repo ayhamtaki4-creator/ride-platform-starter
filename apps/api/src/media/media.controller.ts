@@ -7,7 +7,6 @@ import {
   Post,
   Query,
   Res,
-  StreamableFile,
   UploadedFile,
   UseInterceptors
 } from '@nestjs/common';
@@ -20,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
+import type { Readable } from 'stream';
 import { AuthUser } from '../iam/auth-user.type';
 import { CurrentUser } from '../iam/current-user.decorator';
 import { Permissions } from '../iam/permissions.decorator';
@@ -28,6 +28,13 @@ import { RejectMediaDto } from './dto/reject-media.dto';
 import { UploadMediaDto } from './dto/upload-media.dto';
 import { MediaService, UploadedMediaFile } from './media.service';
 import { PublicMediaDeliveryService } from './public-media-delivery.service';
+
+type MediaFileResult = {
+  stream: Readable;
+  mimeType: string;
+  originalName: string;
+  sizeBytes: number;
+};
 
 @ApiTags('Media')
 @Controller()
@@ -55,14 +62,7 @@ export class MediaController {
       return;
     }
 
-    const file = delivery.file;
-    response.set({
-      'Content-Type': file.mimeType,
-      'Content-Length': String(file.sizeBytes),
-      'Content-Disposition': `inline; filename="${encodeURIComponent(file.originalName)}"`,
-      'Cache-Control': 'public, max-age=86400, immutable'
-    });
-    file.stream.pipe(response);
+    this.pipeFile(response, delivery.file, 'public, max-age=86400, immutable');
   }
 
   @ApiTags('Administration - Media')
@@ -119,15 +119,9 @@ export class MediaController {
   @ApiBearerAuth()
   @Permissions('media:manage')
   @Get('admin/media/:id/file')
-  async adminFile(@Param('id') id: string, @Res({ passthrough: true }) response: Response) {
+  async adminFile(@Param('id') id: string, @Res() response: Response) {
     const file = await this.media.adminFile(id);
-    response.set({
-      'Content-Type': file.mimeType,
-      'Content-Length': String(file.sizeBytes),
-      'Content-Disposition': `inline; filename="${encodeURIComponent(file.originalName)}"`,
-      'Cache-Control': 'private, no-store'
-    });
-    return new StreamableFile(file.stream);
+    this.pipeFile(response, file, 'private, no-store');
   }
 
   @ApiTags('Administration - Media')
@@ -156,5 +150,36 @@ export class MediaController {
   @Delete('admin/media/:id')
   remove(@CurrentUser() actor: AuthUser, @Param('id') id: string) {
     return this.media.remove(actor, id);
+  }
+
+  private pipeFile(response: Response, file: MediaFileResult, cacheControl: string) {
+    response.set({
+      'Content-Type': file.mimeType,
+      'Content-Length': String(file.sizeBytes),
+      'Content-Disposition': `inline; filename="${encodeURIComponent(file.originalName)}"`,
+      'Cache-Control': cacheControl
+    });
+
+    file.stream.once('error', (error: NodeJS.ErrnoException) => {
+      if (response.headersSent) {
+        if (!response.destroyed) response.destroy(error);
+        return;
+      }
+
+      response.removeHeader('Content-Type');
+      response.removeHeader('Content-Length');
+      response.removeHeader('Content-Disposition');
+      response.removeHeader('Cache-Control');
+
+      const missing = error.code === 'ENOENT';
+      response.status(missing ? 404 : 503).json({
+        statusCode: missing ? 404 : 503,
+        message: missing
+          ? 'ملف الوسائط غير موجود في التخزين. أعد رفع الملف من لوحة الإدارة.'
+          : 'تعذر قراءة ملف الوسائط من التخزين.'
+      });
+    });
+
+    file.stream.pipe(response);
   }
 }
