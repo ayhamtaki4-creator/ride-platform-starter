@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import { apiBaseURL } from "../helpers/accounts";
 import { apiLogin, bearer } from "../helpers/auth";
 
@@ -45,7 +45,7 @@ function usdBalance(detail: FinanceDetail) {
 }
 
 async function createCompletedBooking(
-  request: Parameters<typeof test>[0] extends never ? never : any,
+  request: APIRequestContext,
   riderToken: string,
   route: Route,
   driverId: string,
