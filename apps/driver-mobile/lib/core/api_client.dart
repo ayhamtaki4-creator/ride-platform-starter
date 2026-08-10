@@ -106,6 +106,11 @@ class ApiClient {
     return response.data as T;
   }
 
+  Future<T> deleteJson<T>(String path, {Object? data}) async {
+    final response = await _dio.delete<T>(path, data: data);
+    return response.data as T;
+  }
+
   Future<bool> _refreshSession() {
     final existing = _refreshInFlight;
     if (existing != null) return existing;
