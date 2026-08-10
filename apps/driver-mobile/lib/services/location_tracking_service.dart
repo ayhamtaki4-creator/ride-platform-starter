@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../core/api_client.dart';
 import '../core/driver_runtime_store.dart';
+import 'realtime_service.dart';
 
 class LocationTrackingService {
   LocationTrackingService._();
@@ -40,6 +41,7 @@ class LocationTrackingService {
 
     _tripId = tripId;
     await DriverRuntimeStore.instance.setActiveTrip(tripId);
+    unawaited(RealtimeService.instance.subscribeTrip(tripId));
 
     final settings = _settingsForPlatform();
     _subscription = Geolocator.getPositionStream(locationSettings: settings).listen(
@@ -129,7 +131,7 @@ class LocationTrackingService {
 
     try {
       await _flushPending(tripId);
-      await _postLocation(tripId, payload);
+      await _deliverLocation(tripId, payload);
     } catch (_) {
       await DriverRuntimeStore.instance.enqueueLocation(payload);
     } finally {
@@ -141,16 +143,22 @@ class LocationTrackingService {
     final queued = await DriverRuntimeStore.instance.pendingLocations();
     if (queued.isEmpty) return;
 
-    // The backend stores one live point per trip, so replaying only the newest
-    // offline point restores continuity without sending stale historical points.
-    await _postLocation(tripId, queued.last);
+    // The backend stores one live point per trip, so replay only the newest
+    // offline point. Older points are no longer useful for the live marker.
+    await _deliverLocation(tripId, queued.last);
     await DriverRuntimeStore.instance.replacePendingLocations(const []);
   }
 
-  Future<void> _postLocation(
+  Future<void> _deliverLocation(
     String tripId,
     Map<String, dynamic> payload,
   ) async {
+    final realtime = await RealtimeService.instance.sendLocation(tripId, payload);
+    if (realtime == RealtimeDeliveryResult.accepted ||
+        realtime == RealtimeDeliveryResult.rejected) {
+      return;
+    }
+
     await ApiClient.instance.postJson<Map<String, dynamic>>(
       '/tracking/trips/$tripId/location',
       data: payload,
