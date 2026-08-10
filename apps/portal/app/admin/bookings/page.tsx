@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AdminGpsMonitor } from "@/components/admin/admin-gps-monitor";
 import { StatusPill } from "@/components/admin/status-pill";
 import { useAuth } from "@/components/auth-provider";
 import { DashboardHeader } from "@/components/dashboard-header";
@@ -100,12 +99,15 @@ export default function AdminBookingsPage() {
   return (
     <ProtectedRoute roles={["SUPER_ADMIN", "ADMIN", "OPERATIONS_MANAGER"]}>
       <Shell>
-        <DashboardHeader eyebrow="الإدارة" title="الحجوزات" subtitle="راجع الحجز وحدد مساره، ثم عيّن سائقًا وسيارة مؤهلين للمسار والتصاريح المطلوبة." />
+        <DashboardHeader
+          eyebrow="الإدارة"
+          title="الحجوزات"
+          subtitle="راجع الحجز وحدد مساره، ثم عيّن سائقًا وسيارة مؤهلين للمسار والتصاريح المطلوبة."
+          actions={<Link className="button" href="/admin/tracking">مراقبة GPS للسائقين</Link>}
+        />
         <section className="panel filters"><input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="رقم الحجز أو اسم المسافر أو الهاتف" /><select className="input" value={status} onChange={(e) => setStatus(e.target.value as "" | BookingReviewStatus)}><option value="">كل الحالات</option>{Object.entries(BOOKING_REVIEW_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><button className="button" type="button" onClick={() => void load()}>بحث</button></section>
         {message ? <div className="notice success">{message}</div> : null}
         {error ? <div className="notice error">{error}</div> : null}
-
-        <AdminGpsMonitor />
 
         <section className="booking-list admin-booking-list">
           {bookings.map((booking) => {
