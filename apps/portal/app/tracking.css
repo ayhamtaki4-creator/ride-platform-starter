@@ -125,6 +125,50 @@
   margin-top: 16px;
 }
 
+.driver-tracking-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.driver-tracking-status {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.driver-tracking-status small {
+  font-size: 11px;
+  font-weight: 900;
+  color: currentColor;
+  opacity: 0.8;
+}
+
+.driver-tracking-status strong {
+  min-height: 36px;
+  padding-inline-end: 54px;
+  color: var(--text-strong);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.driver-tracking-status > span {
+  position: absolute;
+  inset-inline-end: 10px;
+  top: 10px;
+  padding: 4px 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 900;
+}
+
 .tracking-delivery-health {
   display: grid;
   gap: 5px;
@@ -152,6 +196,11 @@
 
 .driver-location-controls .notice.error .button {
   width: fit-content;
+}
+
+.driver-tracking-recover {
+  min-height: 46px;
+  justify-self: start;
 }
 
 .public-tracking-page {
@@ -209,12 +258,22 @@
 
 @media (max-width: 700px) {
   .tracking-summary-grid,
-  .public-tracking-summary {
+  .public-tracking-summary,
+  .driver-tracking-status-grid {
     grid-template-columns: 1fr;
   }
 
   .tracking-health-card {
     align-items: flex-start;
+  }
+
+  .driver-tracking-status strong {
+    min-height: 0;
+  }
+
+  .driver-tracking-recover {
+    width: 100%;
+    justify-self: stretch;
   }
 
   .public-tracking-page {
