@@ -7,7 +7,7 @@ import { useAuth } from "./auth-provider";
 import { DriverTrackingRecoveryBridge } from "./driver-tracking-recovery-bridge";
 import { NotificationCenter } from "./notification-center";
 import { Icon, IconName } from "./ui/icon";
-import { homeForRoles } from "@/lib/types";
+import { dashboardHomeForRoles } from "@/lib/role-home";
 import { convertTelephoneLinksToWhatsApp } from "@/lib/whatsapp-link";
 
 type NavItem = { href: string; label: string; icon: IconName };
@@ -18,6 +18,7 @@ const adminItems: NavItem[] = [
   { href: "/admin/tracking", label: "مراقبة GPS", icon: "map-pin" },
   { href: "/admin/runs", label: "الرحلات التشغيلية", icon: "route" },
   { href: "/admin/completed-bookings", label: "الحجوزات المنتهية", icon: "check" },
+  { href: "/admin/driver-finance", label: "حسابات السائقين", icon: "pricing" },
   { href: "/admin/routes", label: "المواقع والمسارات", icon: "map-pin" },
   { href: "/admin/route-templates", label: "قوالب المسارات", icon: "route" },
   { href: "/admin/route-policies", label: "سياسات الحجز والطيران", icon: "route" },
@@ -28,6 +29,10 @@ const adminItems: NavItem[] = [
   { href: "/admin/users", label: "الحسابات", icon: "users" },
   { href: "/admin/pricing", label: "الأسعار", icon: "pricing" },
   { href: "/admin/whatsapp", label: "رسائل WhatsApp", icon: "bell" },
+];
+
+const financeItems: NavItem[] = [
+  { href: "/admin/driver-finance", label: "حسابات السائقين", icon: "pricing" },
 ];
 
 const publicMobileItems: NavItem[] = [
@@ -51,6 +56,8 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const isPublic = pathname === "/" || pathname === "/booking" || pathname === "/login" || pathname.startsWith("/register");
   const isAdmin = Boolean(user?.roles.some((role) => ["SUPER_ADMIN", "ADMIN", "OPERATIONS_MANAGER"].includes(role)));
+  const isFinance = Boolean(user?.roles.includes("FINANCE_MANAGER"));
+  const canViewFinance = Boolean(user?.roles.some((role) => ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER"].includes(role)));
   const isDriver = Boolean(user?.roles.includes("DRIVER"));
   const isPassenger = Boolean(user?.roles.includes("PASSENGER"));
 
@@ -70,15 +77,20 @@ export function Shell({ children }: { children: ReactNode }) {
         { href: "/driver/bookings", label: "الحجوزات والمهام الحالية", icon: "briefcase" },
         { href: "/driver/runs", label: "الرحلات التشغيلية", icon: "route" },
         { href: "/driver/completed-bookings", label: "الحجوزات المنتهية", icon: "check" },
+        { href: "/driver/finance", label: "حسابي المالي", icon: "pricing" },
         { href: "/driver/profile", label: "الحساب والمركبة", icon: "user" },
       );
     }
-    if (isAdmin) items.push(...adminItems);
+    if (isAdmin) {
+      items.push(...adminItems.filter((item) => item.href !== "/admin/driver-finance" || canViewFinance));
+    } else if (isFinance) {
+      items.push(...financeItems);
+    }
     return items;
-  }, [isAdmin, isDriver, isPassenger]);
+  }, [canViewFinance, isAdmin, isDriver, isFinance, isPassenger]);
 
   const mobileNavItems = useMemo<NavItem[]>(() => {
-    if (isAdmin) return [];
+    if (isAdmin || isFinance) return [];
     if (isDriver) {
       return [
         { href: "/driver", label: "الرئيسية", icon: "dashboard" },
@@ -96,7 +108,7 @@ export function Shell({ children }: { children: ReactNode }) {
       ];
     }
     return [];
-  }, [isAdmin, isDriver, isPassenger]);
+  }, [isAdmin, isDriver, isFinance, isPassenger]);
 
   useEffect(() => {
     setDrawerOpen(false);
@@ -149,7 +161,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </button>
             <div className="public-header-actions">
               {user ? (
-                <Link className="button primary compact-button" href={homeForRoles(user.roles)}>لوحة التحكم</Link>
+                <Link className="button primary compact-button" href={dashboardHomeForRoles(user.roles)}>لوحة التحكم</Link>
               ) : (
                 <Link className="button primary compact-button" href="/login"><Icon name="login" size={18} /> تسجيل الدخول</Link>
               )}
@@ -196,7 +208,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <div className="sidebar-heading">
           <Link className="sidebar-brand" href="/">
             <span className="brand-mark"><Icon name="route" size={22} /></span>
-            <span><strong>طريق الشام</strong><small>مركز العمليات</small></span>
+            <span><strong>طريق الشام</strong><small>{isFinance && !isAdmin ? "الإدارة المالية" : "مركز العمليات"}</small></span>
           </Link>
           <button className="sidebar-close" type="button" aria-label="إغلاق القائمة" onClick={() => setDrawerOpen(false)}><Icon name="close" size={21} /></button>
         </div>

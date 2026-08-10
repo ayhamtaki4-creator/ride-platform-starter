@@ -22,9 +22,10 @@ type Dashboard = {
 };
 
 export default function AdminPage() {
-  const { socket, isRealtimeConnected } = useAuth();
+  const { user, socket, isRealtimeConnected } = useAuth();
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState("");
+  const canViewFinance = Boolean(user?.roles.some((role) => ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER"].includes(role)));
 
   const load = useCallback(async () => {
     try { setData(await apiFetch<Dashboard>("/admin/dashboard")); setError(""); }
@@ -57,6 +58,7 @@ export default function AdminPage() {
       <Link className="panel operations-shortcut" href="/admin/tracking"><span>GPS</span><strong>مراقبة السائقين مباشرة</strong><small>حالة التتبع وآخر موقع وصل إلى الخادم بعيدًا عن قائمة الحجوزات.</small></Link>
       <Link className="panel operations-shortcut" href="/admin/routes"><span>المسارات</span><strong>إدارة المدن والمطارات والخطوط</strong><small>إضافة دمشق–عمّان أو أي محافظة وتسعيرها.</small></Link>
       <Link className="panel operations-shortcut" href="/admin/drivers"><span>الأسطول</span><strong>السائقون والمركبات</strong><small>المراكز والدول والصور والوثائق.</small></Link>
+      {canViewFinance ? <Link className="panel operations-shortcut" href="/admin/driver-finance"><span>المالية</span><strong>حسابات وتسويات السائقين</strong><small>اعرف فورًا من يدين لمن وسجل أي تسوية بدون حذف التاريخ.</small></Link> : null}
       <Link className="panel operations-shortcut" href="/admin/compliance"><span>الامتثال</span><strong>التصاريح القريبة من الانتهاء</strong><small>اعتماد الملفات ومتطلبات الأردن ولبنان.</small></Link>
       <Link className="panel operations-shortcut" href="/admin/users"><span>الحسابات</span><strong>إنشاء المستخدمين والموظفين</strong><small>الأدوار والتفعيل وكلمات المرور.</small></Link>
     </section>

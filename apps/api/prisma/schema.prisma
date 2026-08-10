@@ -186,30 +186,34 @@ enum PaymentReceiver {
 }
 
 model User {
-  id                       String             @id @default(uuid()) @db.Uuid
-  email                    String             @unique
-  phone                    String?            @unique
-  passwordHash             String
-  firstName                String
-  lastName                 String
-  status                   UserStatus         @default(ACTIVE)
-  whatsappOptIn            Boolean            @default(false)
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
-  roles                    UserRole[]
-  passengerTrips           Trip[]             @relation("PassengerTrips")
-  driverTrips              Trip[]             @relation("DriverTrips")
-  passengerProfile         PassengerProfile?
-  driverProfile            DriverProfile?
-  driverServiceRuns        ServiceRun[]       @relation("DriverServiceRuns")
-  auditLogs                AuditLog[]         @relation("AuditActor")
-  uploadedMedia            MediaAsset[]       @relation("MediaUploadedBy")
-  approvedMedia            MediaAsset[]       @relation("MediaApprovedBy")
-  reviewedDriverDocuments  DriverDocument[]   @relation("DriverDocumentReviewer")
-  reviewedVehicleDocuments VehicleDocument[]  @relation("VehicleDocumentReviewer")
-  notifications            Notification[]
-  authSessions             AuthSession[]
-  whatsappDeliveries       WhatsAppDelivery[]
+  id                           String             @id @default(uuid()) @db.Uuid
+  email                        String             @unique
+  phone                        String?            @unique
+  passwordHash                 String
+  firstName                    String
+  lastName                     String
+  status                       UserStatus         @default(ACTIVE)
+  whatsappOptIn                Boolean            @default(false)
+  createdAt                    DateTime           @default(now())
+  updatedAt                    DateTime           @updatedAt
+  roles                        UserRole[]
+  passengerTrips               Trip[]             @relation("PassengerTrips")
+  driverTrips                  Trip[]             @relation("DriverTrips")
+  passengerProfile             PassengerProfile?
+  driverProfile                DriverProfile?
+  driverServiceRuns            ServiceRun[]       @relation("DriverServiceRuns")
+  auditLogs                    AuditLog[]         @relation("AuditActor")
+  uploadedMedia                MediaAsset[]       @relation("MediaUploadedBy")
+  approvedMedia                MediaAsset[]       @relation("MediaApprovedBy")
+  reviewedDriverDocuments      DriverDocument[]   @relation("DriverDocumentReviewer")
+  reviewedVehicleDocuments     VehicleDocument[]  @relation("VehicleDocumentReviewer")
+  notifications                Notification[]
+  authSessions                 AuthSession[]
+  whatsappDeliveries           WhatsAppDelivery[]
+  driverLedgerEntries          DriverLedgerEntry[] @relation("DriverLedgerDriver")
+  createdDriverLedgerEntries   DriverLedgerEntry[] @relation("DriverLedgerCreator")
+  driverSettlements            DriverSettlement[]  @relation("DriverSettlementDriver")
+  createdDriverSettlements     DriverSettlement[]  @relation("DriverSettlementCreator")
 }
 
 model AuthSession {
@@ -356,7 +360,7 @@ model PricingRule {
 }
 
 model VehicleClassConfig {
-  vehicleClass      VehicleClass @id
+  vehicleClass       VehicleClass @id
   passengerCapacity Int
   luggageCapacity   Int          @default(4)
   createdAt         DateTime     @default(now())
@@ -431,6 +435,7 @@ model Trip {
   flightTicketMedia         MediaAsset?               @relation("TripFlightTicket", fields: [flightTicketMediaId], references: [id], onDelete: SetNull)
   statusHistory             TripStatusHistory[]
   telegramDelivery          TelegramDelivery?
+  driverLedgerEntries       DriverLedgerEntry[]
 
   @@index([passengerId, requestedAt])
   @@index([driverId, requestedAt])
@@ -518,26 +523,26 @@ model ServiceLocation {
 }
 
 model ServiceRoute {
-  id                          String                @id @default(uuid()) @db.Uuid
-  code                        String                @unique
-  nameAr                      String
-  nameEn                      String?
-  originId                    String                @db.Uuid
-  destinationId               String                @db.Uuid
-  routeType                   RouteType
-  requiresFlightDetails       Boolean               @default(false)
-  flightTicketUploadEnabled   Boolean               @default(true)
-  estimatedMinutes            Int?
-  distanceKm                  Decimal?              @db.Decimal(10, 2)
-  isActive                    Boolean               @default(true)
-  createdAt                   DateTime              @default(now())
-  updatedAt                   DateTime              @updatedAt
-  origin                      ServiceLocation       @relation("RouteOrigin", fields: [originId], references: [id])
-  destination                 ServiceLocation       @relation("RouteDestination", fields: [destinationId], references: [id])
-  requiredRegions             RouteRequiredRegion[]
-  pricingRules                PricingRule[]
-  trips                       Trip[]
-  serviceRuns                 ServiceRun[]
+  id                        String                @id @default(uuid()) @db.Uuid
+  code                      String                @unique
+  nameAr                    String
+  nameEn                    String?
+  originId                  String                @db.Uuid
+  destinationId             String                @db.Uuid
+  routeType                 RouteType
+  requiresFlightDetails     Boolean               @default(false)
+  flightTicketUploadEnabled Boolean               @default(true)
+  estimatedMinutes          Int?
+  distanceKm                Decimal?              @db.Decimal(10, 2)
+  isActive                  Boolean               @default(true)
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+  origin                    ServiceLocation       @relation("RouteOrigin", fields: [originId], references: [id])
+  destination               ServiceLocation       @relation("RouteDestination", fields: [destinationId], references: [id])
+  requiredRegions           RouteRequiredRegion[]
+  pricingRules              PricingRule[]
+  trips                     Trip[]
+  serviceRuns               ServiceRun[]
 
   @@unique([originId, destinationId])
   @@index([isActive, routeType])
@@ -758,6 +763,44 @@ model WhatsAppDelivery {
 
   @@index([status, nextAttemptAt])
   @@index([userId, createdAt])
+}
+
+model DriverLedgerEntry {
+  id           String            @id @default(uuid()) @db.Uuid
+  driverId     String            @db.Uuid
+  tripId       String?           @db.Uuid
+  type         String
+  balanceDelta Decimal           @db.Decimal(12, 3)
+  currency     String            @default("USD")
+  sourceKey    String?           @unique
+  note         String?
+  createdById  String?           @db.Uuid
+  createdAt    DateTime          @default(now())
+  driver       User              @relation("DriverLedgerDriver", fields: [driverId], references: [id], onDelete: Restrict)
+  trip         Trip?             @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  createdBy    User?             @relation("DriverLedgerCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  settlement   DriverSettlement?
+
+  @@index([driverId, currency, createdAt(sort: Desc)])
+  @@index([tripId, createdAt])
+}
+
+model DriverSettlement {
+  id            String            @id @default(uuid()) @db.Uuid
+  driverId      String            @db.Uuid
+  direction     String
+  amount        Decimal           @db.Decimal(12, 3)
+  currency      String            @default("USD")
+  note          String?
+  settledAt     DateTime          @default(now())
+  createdById   String?           @db.Uuid
+  ledgerEntryId String            @unique @db.Uuid
+  createdAt     DateTime          @default(now())
+  driver        User              @relation("DriverSettlementDriver", fields: [driverId], references: [id], onDelete: Restrict)
+  createdBy     User?             @relation("DriverSettlementCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  ledgerEntry   DriverLedgerEntry @relation(fields: [ledgerEntryId], references: [id], onDelete: Restrict)
+
+  @@index([driverId, currency, settledAt(sort: Desc)])
 }
 
 model TelegramDelivery {

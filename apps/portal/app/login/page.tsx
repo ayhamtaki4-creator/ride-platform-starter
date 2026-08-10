@@ -7,7 +7,7 @@ import { Shell } from "@/components/shell";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/ui/icon";
 import { useToast } from "@/components/ui/toast-provider";
-import { homeForRoles } from "@/lib/types";
+import { dashboardHomeForRoles } from "@/lib/role-home";
 import { hasPendingBooking } from "@/lib/pending-booking";
 
 export default function LoginPage() {
@@ -24,7 +24,7 @@ export default function LoginPage() {
   function destinationFor(roles: string[]) {
     return roles.includes("PASSENGER") && hasPendingBooking()
       ? "/booking?resumeBooking=1"
-      : homeForRoles(roles);
+      : dashboardHomeForRoles(roles);
   }
 
   useEffect(() => setPendingBooking(hasPendingBooking()), []);

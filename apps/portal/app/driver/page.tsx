@@ -73,7 +73,7 @@ export default function DriverPage() {
           eyebrow="السائق"
           title="لوحة السائق"
           subtitle="ملخص واضح للمهمة الحالية والطلبات والرحلات التشغيلية."
-          actions={<Link className="button primary" href="/driver/bookings"><Icon name="briefcase" size={18} /> فتح المهام</Link>}
+          actions={<div className="actions"><Link className="button" href="/driver/finance">حسابي المالي</Link><Link className="button primary" href="/driver/bookings"><Icon name="briefcase" size={18} /> فتح المهام</Link></div>}
         />
 
         <div className="rider-dashboard-toolbar">

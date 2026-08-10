@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { homeForRoles } from "@/lib/types";
+import { dashboardHomeForRoles } from "@/lib/role-home";
 import { useAuth } from "./auth-provider";
 
 export function ProtectedRoute({
@@ -26,7 +26,7 @@ export function ProtectedRoute({
     }
 
     if (!hasRole) {
-      router.replace(homeForRoles(user.roles));
+      router.replace(dashboardHomeForRoles(user.roles));
     }
   }, [hasRole, isLoading, router, user]);
 
