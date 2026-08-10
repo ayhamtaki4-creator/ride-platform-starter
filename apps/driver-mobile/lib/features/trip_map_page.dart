@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../core/api_client.dart';
 import '../models/driver_trip.dart';
+import '../services/realtime_service.dart';
 
 class TripMapPage extends StatefulWidget {
   const TripMapPage({super.key, required this.trip});
@@ -19,11 +22,41 @@ class _TripMapPageState extends State<TripMapPage> {
   String? _error;
   LatLng? _driver;
   List<LatLng> _route = const [];
+  StreamSubscription<Map<String, dynamic>>? _locationEvents;
 
   @override
   void initState() {
     super.initState();
+    _locationEvents = RealtimeService.instance.locationEvents.listen(
+      _handleRealtimeLocation,
+    );
+    unawaited(_connectRealtime());
     _load();
+  }
+
+  @override
+  void dispose() {
+    _locationEvents?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _connectRealtime() async {
+    if (await RealtimeService.instance.ensureConnected()) {
+      await RealtimeService.instance.subscribeTrip(widget.trip.id);
+    }
+  }
+
+  void _handleRealtimeLocation(Map<String, dynamic> event) {
+    if (!mounted || event['tripId']?.toString() != widget.trip.id) return;
+    final latitude = _nullableDouble(event['latitude']);
+    final longitude = _nullableDouble(event['longitude']);
+    if (latitude == null || longitude == null) return;
+    if (latitude.abs() > 90 || longitude.abs() > 180) return;
+
+    setState(() {
+      _driver = LatLng(latitude, longitude);
+      _error = null;
+    });
   }
 
   Future<void> _load() async {
@@ -40,11 +73,10 @@ class _TripMapPageState extends State<TripMapPage> {
       );
       final live = data['liveLocation'];
       final routePlan = data['routePlan'];
-      final driver = live is Map
-          ? LatLng(
-              _double(live['latitude']),
-              _double(live['longitude']),
-            )
+      final latitude = live is Map ? _nullableDouble(live['latitude']) : null;
+      final longitude = live is Map ? _nullableDouble(live['longitude']) : null;
+      final driver = latitude != null && longitude != null
+          ? LatLng(latitude, longitude)
           : null;
       final route = _readRoute(routePlan);
 
@@ -76,9 +108,11 @@ class _TripMapPageState extends State<TripMapPage> {
         .toList();
   }
 
-  double _double(Object? value) {
+  double _double(Object? value) => _nullableDouble(value) ?? 0;
+
+  double? _nullableDouble(Object? value) {
     if (value is num) return value.toDouble();
-    return double.tryParse(value?.toString() ?? '') ?? 0;
+    return double.tryParse(value?.toString() ?? '');
   }
 
   @override
@@ -134,19 +168,13 @@ class _TripMapPageState extends State<TripMapPage> {
                     point: pickup,
                     width: 48,
                     height: 48,
-                    child: const Icon(
-                      Icons.trip_origin_rounded,
-                      size: 34,
-                    ),
+                    child: const Icon(Icons.trip_origin_rounded, size: 34),
                   ),
                   Marker(
                     point: dropoff,
                     width: 48,
                     height: 48,
-                    child: const Icon(
-                      Icons.location_on_rounded,
-                      size: 38,
-                    ),
+                    child: const Icon(Icons.location_on_rounded, size: 38),
                   ),
                   if (_driver != null)
                     Marker(
@@ -204,13 +232,19 @@ class _TripMapPageState extends State<TripMapPage> {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    const Icon(Icons.gps_fixed_rounded),
+                    Icon(
+                      RealtimeService.instance.connected
+                          ? Icons.wifi_tethering_rounded
+                          : Icons.gps_fixed_rounded,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         _driver == null
                             ? 'بانتظار أول موقع مباشر من السائق.'
-                            : 'آخر موقع مباشر تم استلامه من الخادم.',
+                            : RealtimeService.instance.connected
+                                ? 'الموقع يتحدث مباشرة عبر الاتصال الحي.'
+                                : 'آخر موقع مباشر تم استلامه من الخادم.',
                       ),
                     ),
                   ],
