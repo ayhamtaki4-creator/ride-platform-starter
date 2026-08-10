@@ -110,6 +110,110 @@ test.describe("Mobile shell", () => {
     expect(await hasHorizontalOverflow(page)).toBe(false);
   });
 
+  test("driver must answer whether cash was received after completing a trip", async ({ page }) => {
+    await loginAs(page, "driver");
+
+    const trip = {
+      id: "11111111-1111-4111-8111-111111111111",
+      passengerId: "22222222-2222-4222-8222-222222222222",
+      driverId: "33333333-3333-4333-8333-333333333333",
+      status: "IN_PROGRESS",
+      bookingReviewStatus: "CONFIRMED",
+      driverAssignmentStatus: "ACCEPTED",
+      bookingReference: "PAY-UI-E2E",
+      bookingType: "PRIVATE_CAR",
+      vehicleClass: "SMALL",
+      travelDate: new Date(Date.now() + 86_400_000).toISOString(),
+      passengerCount: 1,
+      luggageCount: 1,
+      contactName: "مسافر اختبار",
+      contactPhone: "+963944000001",
+      pickupAddress: "دمشق",
+      pickupLatitude: 33.5138,
+      pickupLongitude: 36.2765,
+      dropoffAddress: "مطار بيروت",
+      dropoffLatitude: 33.8209,
+      dropoffLongitude: 35.4884,
+      estimatedFare: 100,
+      finalFare: null,
+      currency: "USD",
+      requestedAt: new Date().toISOString(),
+      passenger: { firstName: "مسافر", lastName: "اختبار", phone: "+963944000001" },
+    };
+
+    await page.route(/\/api\/drivers\/me$/, (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ id: "driver-profile", status: "APPROVED", availability: "ON_TRIP", rating: 5, vehicles: [] }),
+    }));
+    await page.route(/\/api\/drivers\/me\/schedule$/, (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([trip]),
+    }));
+    await page.route(/\/api\/drivers\/me\/runs$/, (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "[]",
+    }));
+
+    let completeRequests = 0;
+    let cashRequests = 0;
+    await page.route(new RegExp(`/api/trips/${trip.id}/complete$`), (route) => {
+      completeRequests += 1;
+      return route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ ...trip, status: "COMPLETED", finalFare: 100 }),
+      });
+    });
+    await page.route(new RegExp(`/api/drivers/me/bookings/${trip.id}/cash-payment$`), (route) => {
+      cashRequests += 1;
+      return route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ paymentStatus: "PAID", amountReceived: 100 }),
+      });
+    });
+
+    await page.goto("/driver/bookings");
+    await expect(page.getByRole("button", { name: "إنهاء الرحلة" })).toBeVisible();
+    await page.getByRole("button", { name: "إنهاء الرحلة" }).click();
+
+    const dialog = page.getByTestId("driver-cash-payment-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "هل استلمت المبلغ من المسافر؟" })).toBeVisible();
+    await expect(page.getByTestId("driver-cash-received-yes")).toBeVisible();
+    await expect(page.getByTestId("driver-cash-received-no")).toBeVisible();
+
+    await page.getByTestId("driver-cash-received-no").click();
+    await expect(dialog).toHaveCount(0);
+    expect(cashRequests).toBe(0);
+    expect(completeRequests).toBe(1);
+
+    await page.getByRole("button", { name: "إنهاء الرحلة" }).click();
+    await expect(page.getByTestId("driver-cash-payment-dialog")).toBeVisible();
+    await page.getByTestId("driver-cash-received-yes").click();
+    await expect(page.getByTestId("driver-cash-payment-dialog")).toHaveCount(0);
+    expect(cashRequests).toBe(1);
+    expect(completeRequests).toBe(2);
+    expect(await hasHorizontalOverflow(page)).toBe(false);
+  });
+
+  test("admin GPS monitoring lives on a separate page from current bookings", async ({ page }) => {
+    await loginAs(page, "admin");
+
+    await page.goto("/admin/bookings");
+    await expect(page.locator('section[aria-label="مراقبة GPS للسائقين"]')).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "مراقبة GPS للسائقين" })).toBeVisible();
+
+    await page.getByRole("link", { name: "مراقبة GPS للسائقين" }).click();
+    await page.waitForURL((url) => url.pathname === "/admin/tracking", { timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "مراقبة GPS للسائقين" })).toBeVisible();
+    await expect(page.locator('section[aria-label="مراقبة GPS للسائقين"]')).toBeVisible();
+    expect(await hasHorizontalOverflow(page)).toBe(false);
+  });
+
   test("admin keeps the drawer navigation instead of the passenger bottom bar", async ({ page }) => {
     await loginAs(page, "admin");
 
