@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { SITE_URL } from "@/lib/site";
+import { absoluteSiteUrl, SITE_URL } from "@/lib/site";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
@@ -7,6 +7,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       url: SITE_URL,
       changeFrequency: "weekly",
       priority: 1,
+    },
+    {
+      url: absoluteSiteUrl("/booking"),
+      changeFrequency: "weekly",
+      priority: 0.9,
     },
   ];
 }
