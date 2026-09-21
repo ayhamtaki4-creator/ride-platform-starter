@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "طريق الشام",
     short_name: "طريق الشام",
-    description: "منصة حجز ومتابعة نقل منظم وآمن بين سوريا ولبنان والأردن.",
+    description: "رحلات أبعد… بأمان أكبر. منصة حجز ومتابعة نقل منظم بين سوريا ولبنان والأردن.",
     start_url: "/",
     scope: "/",
     display: "standalone",
