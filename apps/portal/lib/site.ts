@@ -1,5 +1,5 @@
 const LOCAL_SITE_URL = "http://localhost:3000";
-const PRODUCTION_SITE_URL = "https://alnokhbaeducation.com";
+const PRODUCTION_SITE_URL = "https://tareeqalsham.com";
 
 function normalizeSiteUrl(value: string) {
   return value.trim().replace(/\/+$/, "");
