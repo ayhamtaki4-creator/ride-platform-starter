@@ -66,7 +66,7 @@ export default function LoginPage() {
           <div className="auth-visual-content">
             <span className="auth-visual-icon"><Icon name="route" size={34} /></span>
             <div className="eyebrow-v2 light-eyebrow">منصة طريق الشام</div>
-            <h1>كل رحلة تحت المتابعة من الحجز حتى الوصول</h1>
+            <h1>رحلات أبعد… بأمان أكبر</h1>
             <p>ادخل إلى حسابك لمتابعة الحجوزات أو إدارة الرحلات أو تنفيذ مهام السائق.</p>
             <div className="auth-benefits">
               <span><Icon name="shield" size={20} /><div><strong>دخول محمي</strong><small>صلاحيات منفصلة لكل مستخدم</small></div></span>
