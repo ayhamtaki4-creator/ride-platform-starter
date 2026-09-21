@@ -44,7 +44,7 @@ export default function Home() {
       <section className="home-hero">
         <div className="home-hero-content">
           <div className="hero-kicker"><span><Icon name="sparkles" size={17} /></span>نقل خاص منظم بين سوريا ولبنان والأردن</div>
-          <h1>رحلة مريحة من <em>الحجز إلى الوصول</em></h1>
+          <h1>رحلات أبعد… <em>بأمان أكبر</em></h1>
           <p>احجز سيارة خاصة بخطوات واضحة، مع سيارات حديثة ومكيفة، إنترنت طوال الطريق، سعر معروف مسبقًا، ومتابعة من مركز العمليات.</p>
           <div className="hero-actions">
             <Link className="button primary button-lg" href="/booking">احجز رحلتك الآن <Icon name="arrow-left" size={19} /></Link>
