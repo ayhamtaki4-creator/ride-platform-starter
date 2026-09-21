@@ -116,7 +116,7 @@ export default function RiderPage() {
               <span className="rider-quick-icon"><Icon name="shield" size={25} /></span>
               <h2>مركز العمليات يتابع رحلتك</h2>
               <p>كل حجز يمر بالمراجعة، تأكيد الموعد، ثم تعيين سائق ومركبة معتمدين.</p>
-              <a className="button" href="tel:+96100000000"><Icon name="phone" size={18} /> الاتصال بالدعم</a>
+              <div className="actions"><a className="button" href="tel:+963965350502"><Icon name="phone" size={18} /> +963 965 350 502</a><a className="button" href="tel:+96171967194"><Icon name="phone" size={18} /> +961 71 967 194</a></div>
             </section>
 
             <section className="panel rider-account-card">
