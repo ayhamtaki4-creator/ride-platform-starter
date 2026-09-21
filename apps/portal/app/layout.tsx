@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   applicationName: "طريق الشام",
   title: {
-    default: "طريق الشام | نقل مسبق بين سوريا ولبنان والأردن",
+    default: "طريق الشام | رحلات أبعد… بأمان أكبر",
     template: "%s | طريق الشام",
   },
   description:
@@ -49,14 +49,14 @@ export const metadata: Metadata = {
     locale: "ar_SY",
     url: SITE_URL,
     siteName: "طريق الشام",
-    title: "طريق الشام | نقل مسبق بين سوريا ولبنان والأردن",
+    title: "طريق الشام | رحلات أبعد… بأمان أكبر",
     description:
       "حجز سيارة خاصة مسبقًا للمطارات والمسارات بين سوريا ولبنان والأردن مع متابعة الرحلة.",
   },
   twitter: {
     card: "summary",
     title: "طريق الشام",
-    description: "نقل مسبق منظم للمطارات والمسارات بين سوريا ولبنان والأردن.",
+    description: "رحلات أبعد… بأمان أكبر. نقل منظم للمطارات والمسارات بين سوريا ولبنان والأردن.",
   },
   robots: {
     index: true,
