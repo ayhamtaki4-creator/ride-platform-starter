@@ -69,7 +69,7 @@ export default function PublicTrackingPage() {
     <main className="public-tracking-page" dir="rtl">
       <section className="public-tracking-header">
         <div>
-          <span className="eyebrow">Sham Route</span>
+          <span className="eyebrow">طريق الشام</span>
           <h1>متابعة الرحلة</h1>
           <p>رابط متابعة آمن يعرض مسار السيارة وآخر موقع معروف لها.</p>
         </div>
