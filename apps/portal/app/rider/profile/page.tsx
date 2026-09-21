@@ -84,7 +84,7 @@ export default function RiderProfilePage() {
           <aside className="rider-profile-aside">
             <section className="panel rider-account-status-card"><span className={`rider-connection-orb ${isRealtimeConnected ? "is-online" : "is-offline"}`}><Icon name="wifi" size={25} /></span><h2>{isRealtimeConnected ? "الاتصال المباشر فعّال" : "وضع الاتصال الاحتياطي"}</h2><p>{isRealtimeConnected ? "تصل تحديثات الرحلات إلى هذه الجلسة فورًا." : "ستستمر الصفحة في التحقق من التحديثات بصورة دورية."}</p></section>
             <section className="panel rider-security-card"><span className="eyebrow">الأمان</span><h2>الجلسة الحالية</h2><p>استخدم تسجيل الخروج عند استخدام جهاز مشترك أو عام.</p><button className="button danger" type="button" onClick={handleLogout}><Icon name="logout" size={18} /> تسجيل الخروج</button></section>
-            <section className="panel rider-support-panel"><span className="rider-quick-icon"><Icon name="phone" size={24} /></span><h2>الدعم والمساعدة</h2><p>للاستفسار عن حجز قائم، جهّز رقم الحجز قبل التواصل.</p><a className="button" href="tel:+96100000000">الاتصال بمركز العمليات</a></section>
+            <section className="panel rider-support-panel"><span className="rider-quick-icon"><Icon name="phone" size={24} /></span><h2>الدعم والمساعدة</h2><p>للاستفسار عن حجز قائم، جهّز رقم الحجز قبل التواصل.</p><div className="actions"><a className="button" href="tel:+963965350502">+963 965 350 502</a><a className="button" href="tel:+96171967194">+961 71 967 194</a></div></section>
           </aside>
         </div>
       </Shell>
