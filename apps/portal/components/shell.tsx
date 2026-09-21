@@ -189,7 +189,7 @@ export function Shell({ children }: { children: ReactNode }) {
               <p>منصة موثوقة للحجز والمتابعة على خطوط سوريا ولبنان والأردن، بإشراف مركز عمليات وسائقين ومركبات معتمدين.</p>
             </div>
             <div><strong>روابط سريعة</strong><Link href="/booking">الحجز</Link><Link href="/#how-it-works">طريقة العمل</Link><Link href="/login">تسجيل الدخول</Link></div>
-            <div><strong>الدعم</strong><span>خدمة ومتابعة على مدار الساعة</span><a href="tel:+96100000000">+961 / +963</a><a href="mailto:info@tareeqalsham.example">info@tareeqalsham.example</a></div>
+            <div><strong>الدعم</strong><span>خدمة ومتابعة على مدار الساعة</span><a href="tel:+963965350502">سوريا: +963 965 350 502</a><a href="tel:+96171967194">لبنان: +961 71 967 194</a><a href="mailto:info@tareeqalsham.example">info@tareeqalsham.example</a></div>
           </div>
           <div className="public-footer-bottom"><span>© 2026 طريق الشام — جميع الحقوق محفوظة</span><span>دمشق · بيروت · عمّان</span></div>
         </footer>
