@@ -66,6 +66,8 @@ export type Trip = {
   bookingReviewStatus?: BookingReviewStatus;
   driverAssignmentStatus?: DriverAssignmentStatus;
   bookingReference?: string | null;
+  bookingSource?: "GUEST" | "AUTHENTICATED";
+  accountLinkStatus?: "UNLINKED" | "LINKED";
   direction?: BookingDirection | null;
   routeId?: string | null;
   route?: {
