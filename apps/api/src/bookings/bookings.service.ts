@@ -329,7 +329,7 @@ export class BookingsService {
     const actor: AuthUser | null = accountId
       ? { sub: accountId, email: '', roles: ['PASSENGER'], permissions: [] }
       : null;
-    let booking: BookingWithRelations;
+    let booking: Awaited<ReturnType<BookingsService['create']>>;
     try {
       booking = await this.create(actor, request, {
         guest: true,
