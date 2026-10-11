@@ -636,20 +636,35 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         dropoffLongitude,
         ...payload
       } = candidate;
-      const booking = await apiFetch<Trip | { bookingReference: string | null; accepted: boolean }>(isPassenger ? "/bookings" : "/bookings/guest", {
-        skipAuth: !isPassenger,
-        method: "POST",
-        body: JSON.stringify({
-          ...payload,
-          clientRequestId: requestId,
-          flightTicketMediaId: isPassenger ? candidate.flightTicketMediaId || undefined : undefined,
-          vehicleClass: candidate.bookingType === "PRIVATE_CAR" ? candidate.vehicleClass : "SMALL",
-          pickupLatitude: useCustomMapLocations && canEditPickup ? pickupLatitude ?? undefined : undefined,
-          pickupLongitude: useCustomMapLocations && canEditPickup ? pickupLongitude ?? undefined : undefined,
-          dropoffLatitude: useCustomMapLocations && canEditDropoff ? dropoffLatitude ?? undefined : undefined,
-          dropoffLongitude: useCustomMapLocations && canEditDropoff ? dropoffLongitude ?? undefined : undefined,
-        }),
-      });
+      const bookingPayload = {
+        ...payload,
+        clientRequestId: requestId,
+        flightTicketMediaId: isPassenger ? candidate.flightTicketMediaId || undefined : undefined,
+        vehicleClass: candidate.bookingType === "PRIVATE_CAR" ? candidate.vehicleClass : "SMALL",
+        pickupLatitude: useCustomMapLocations && canEditPickup ? pickupLatitude ?? undefined : undefined,
+        pickupLongitude: useCustomMapLocations && canEditPickup ? pickupLongitude ?? undefined : undefined,
+        dropoffLatitude: useCustomMapLocations && canEditDropoff ? dropoffLatitude ?? undefined : undefined,
+        dropoffLongitude: useCustomMapLocations && canEditDropoff ? dropoffLongitude ?? undefined : undefined,
+      };
+      type GuestReceipt = { bookingReference: string | null; accepted: boolean; attachmentSaved?: boolean };
+      let booking: Trip | GuestReceipt;
+      if (!isPassenger && candidate.flightTicketFileName) {
+        const savedTicket = await loadPendingTicket(requestId);
+        if (!savedTicket) throw new Error("تعذر استعادة تذكرة الطيران. أعد إرفاق الملف قبل إرسال الحجز.");
+        const multipart = new FormData();
+        multipart.append("booking", JSON.stringify(bookingPayload));
+        multipart.append("file", savedTicket);
+        booking = await apiUpload<GuestReceipt>("/bookings/guest-with-ticket", multipart, {
+          skipAuth: true,
+        });
+        if (!booking.attachmentSaved) throw new Error("تم إنشاء الحجز لكن لم يتم حفظ تذكرة الطيران. حاول الإرسال مجددًا بنفس الحجز.");
+      } else {
+        booking = await apiFetch<Trip | GuestReceipt>(isPassenger ? "/bookings" : "/bookings/guest", {
+          skipAuth: !isPassenger,
+          method: "POST",
+          body: JSON.stringify(bookingPayload),
+        });
+      }
 
       clearPendingBooking();
       await deletePendingTicket(requestId).catch(() => undefined);
@@ -785,7 +800,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                   <input hidden type="file" accept="image/jpeg,image/png,image/webp,application/pdf" disabled={ticketWorking} onChange={(event) => void handleTicketSelected(event.target.files?.[0])} />
                   {ticketWorking ? "جارٍ تجهيز وتحليل التذكرة..." : form.flightTicketFileName ? "استبدال التذكرة" : "اختيار التذكرة"}
                 </label>
-                {form.flightTicketFileName ? <div className="flight-ticket-result"><Icon name="check" size={18} /><span><strong>{form.flightTicketFileName}</strong><small>{form.flightTicketMediaId ? "تم رفعها وحفظها بصورة خاصة" : "تم تحليل بيانات التذكرة. لا يُحفظ المرفق في حجز الضيف"}</small></span></div> : null}
+                {form.flightTicketFileName ? <div className="flight-ticket-result"><Icon name="check" size={18} /><span><strong>{form.flightTicketFileName}</strong><small>{form.flightTicketMediaId ? "تم رفعها وحفظها بصورة خاصة" : "تم تحليل بيانات التذكرة. ستُرفع مع الحجز عند تأكيده"}</small></span></div> : null}
                 {ticketExtraction ? <div className={`ticket-extraction-status ${ticketExtraction.status === "EXTRACTED" ? "success" : "warning"}`}><strong>{ticketExtraction.status === "EXTRACTED" ? "تمت تعبئة البيانات تلقائيًا" : "تحتاج البيانات إلى مراجعة"}</strong><span>دقة القراءة التقريبية: {Math.round(ticketExtraction.confidence * 100)}%</span>{ticketExtraction.warning ? <small>{ticketExtraction.warning}</small> : null}</div> : null}
               </section>
             ) : null}
@@ -914,7 +929,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
               {form.useCustomMapLocations ? <div><span>تحديد المواقع</span><strong>تم تخصيص النقاط المسموح بها عبر الخريطة</strong></div> : null}
             </div>
             <div className="quote-card"><span>السعر التقديري</span><strong>{quote ? formatMoney(quote.passengerPrice, quote.currency) : "—"}</strong></div>
-            {!isPassenger ? <div className="notice success">يمكنك إرسال الطلب دون تسجيل دخول. إذا كان رقمك مسجّلًا مسبقًا فسيُحفظ الحجز كضيف دون ربطه بحسابك حتى التحقق.</div> : null}
+            {!isPassenger ? <div className="notice success">يمكنك إرسال الطلب دون تسجيل دخول، وسيتم حفظ التذكرة المرفقة إن وجدت. إذا كان رقمك مسجّلًا مسبقًا فسيُحفظ الحجز كضيف دون ربطه بحسابك حتى التحقق.</div> : null}
           </div>
         ) : null}
       </div>
