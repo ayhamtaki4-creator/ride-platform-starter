@@ -37,7 +37,7 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    if (!authLoading && user) router.replace(destinationFor(user.roles));
+    if (!authLoading && user) router.replace(user.mustChangePassword ? "/change-password" : destinationFor(user.roles));
   }, [authLoading, router, user]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -47,7 +47,7 @@ export default function LoginPage() {
     try {
       const loggedInUser = await login(email, password);
       showToast(`مرحبًا ${loggedInUser.firstName}، تم تسجيل الدخول بنجاح.`, "success");
-      router.replace(destinationFor(loggedInUser.roles));
+      router.replace(loggedInUser.mustChangePassword ? "/change-password" : destinationFor(loggedInUser.roles));
       router.refresh();
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : "حدث خطأ غير متوقع.";
