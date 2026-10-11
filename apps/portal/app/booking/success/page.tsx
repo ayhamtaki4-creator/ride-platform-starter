@@ -16,7 +16,8 @@ export default async function GuestBookingSuccessPage({
         <p>سيقوم مركز العمليات بمراجعة الطلب والتواصل معك على الرقم الذي أدخلته.</p>
         <p>إذا كان لديك حساب سابق، فلن يظهر فيه هذا الحجز إلا بعد إثبات ملكية الرقم وربطه بالحساب.</p>
         <p>إذا كنت عميلًا جديدًا، فسيتم التحقق من رقم هاتفك قبل تفعيل الحساب الجديد.</p>
-        <Link className="button primary" href="/">العودة إلى الرئيسية</Link>
+        <p><Link className="button primary" href="/activate">التحقق من الهاتف وتفعيل الحساب</Link></p>
+        <p><Link href="/">العودة إلى الرئيسية</Link></p>
       </main>
     </Shell>
   );
