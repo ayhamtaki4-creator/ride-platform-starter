@@ -278,6 +278,7 @@ export class AuthService {
       firstName: user.firstName,
       lastName: user.lastName,
       whatsappOptIn: user.whatsappOptIn,
+      mustChangePassword: user.mustChangePassword,
       roles,
       permissions
     };
