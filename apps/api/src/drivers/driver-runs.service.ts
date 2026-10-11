@@ -561,7 +561,7 @@ export class DriverRunsService {
       runId: run.id,
       runReference: run.runReference,
       driverId: run.driverId,
-      passengerIds: Array.from(new Set(run.bookings.map((item) => item.passengerId))),
+      passengerIds: Array.from(new Set(run.bookings.map((item) => item.passengerId).filter((id): id is string => id !== null))),
       status: run.status,
       occurredAt: new Date().toISOString(),
       ...extra
@@ -570,7 +570,7 @@ export class DriverRunsService {
 
   private toTripEvent(trip: {
     id: string;
-    passengerId: string;
+    passengerId: string | null;
     driverId: string | null;
     status: TripStatus;
     bookingReviewStatus: string;

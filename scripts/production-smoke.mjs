@@ -166,6 +166,32 @@ await run("Public routes API", async () => {
   return { elapsedMs, detail: `${body.length} bookable route(s)` };
 });
 
+await run("Public guest booking API route", async () => {
+  const { response, elapsedMs } = await fetchTimed(`${API_BASE_URL}/bookings/guest`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: portalOrigin },
+    body: "{}",
+  });
+  assert(
+    response.status === 400,
+    `expected validation failure HTTP 400 from guest booking endpoint, got ${response.status}`,
+  );
+  return { elapsedMs, detail: "guest booking route is public and validates input" };
+});
+
+await run("Phone verification API route", async () => {
+  const { response, elapsedMs } = await fetchTimed(`${API_BASE_URL}/auth/phone/request-code`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: portalOrigin },
+    body: "{}",
+  });
+  assert(
+    response.status === 400,
+    `expected validation failure HTTP 400 from OTP endpoint, got ${response.status}`,
+  );
+  return { elapsedMs, detail: "phone verification route is public and validates input" };
+});
+
 await run("Portal home identity and canonical metadata", async () => {
   const { response, elapsedMs } = await fetchTimed(`${PORTAL_BASE_URL}/`);
   assert(response.status === 200, `HTTP ${response.status}`);
@@ -183,27 +209,28 @@ await run("Portal home identity and canonical metadata", async () => {
   return { elapsedMs, detail: new URL(response.url).origin };
 });
 
-await run("Portal booking registration gate", async () => {
+await run("Public booking without authentication", async () => {
   const bookingResult = await fetchTimed(`${PORTAL_BASE_URL}/booking`);
   assert(bookingResult.response.status === 200, `booking HTTP ${bookingResult.response.status}`);
   const bookingHtml = await responseText(bookingResult.response);
   assert(
-    bookingHtml.includes("جارٍ التحقق من الجلسة") || bookingHtml.includes("جارٍ تحويلك إلى الصفحة المناسبة"),
-    "anonymous booking route does not expose the expected authentication gate",
+    bookingHtml.includes("احجز سيارتك بخطوات واضحة"),
+    "anonymous booking page is missing the public booking heading",
+  );
+  assert(
+    !bookingHtml.includes("جارٍ التحقق من الجلسة") &&
+    !bookingHtml.includes("جارٍ تحويلك إلى الصفحة المناسبة"),
+    "anonymous booking page still serves the login guard",
   );
 
-  const registerResult = await fetchTimed(`${PORTAL_BASE_URL}/register?next=%2Fbooking`);
-  assert(registerResult.response.status === 200, `register HTTP ${registerResult.response.status}`);
-  const registerHtml = await responseText(registerResult.response);
-  assert(registerHtml.includes("إنشاء حساب مسافر"), "registration page is missing passenger account content");
-  assert(
-    registerHtml.includes("رقم WhatsApp مع رمز الدولة"),
-    "registration page is missing the international phone field",
-  );
+  const activationResult = await fetchTimed(`${PORTAL_BASE_URL}/activate`);
+  assert(activationResult.response.status === 200, `activate HTTP ${activationResult.response.status}`);
+  const activationHtml = await responseText(activationResult.response);
+  assert(activationHtml.includes("التحقق من رقم الهاتف"), "phone verification page is missing");
 
   return {
-    elapsedMs: bookingResult.elapsedMs + registerResult.elapsedMs,
-    detail: "anonymous booking is gated and passenger registration is available",
+    elapsedMs: bookingResult.elapsedMs + activationResult.elapsedMs,
+    detail: "public booking and optional account verification are accessible",
   };
 });
 

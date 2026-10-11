@@ -1,16 +1,11 @@
 import Link from "next/link";
 import BookingFormContent from "@/components/booking-form-lazy-content";
-import { ProtectedRoute } from "@/components/protected-route";
 import { Shell } from "@/components/shell";
 import { Icon } from "@/components/ui/icon";
 
 export default function BookingPage() {
   return (
-    <ProtectedRoute
-      roles={["PASSENGER"]}
-      unauthenticatedRedirect="/register?next=%2Fbooking"
-    >
-      <Shell>
+    <Shell>
         <section style={{ maxWidth: 1180, margin: "0 auto", padding: "56px 20px 18px" }}>
           <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: 7, color: "var(--muted)", marginBottom: 18 }}>
             <Icon name="arrow-right" size={17} /> العودة إلى الرئيسية
@@ -26,7 +21,6 @@ export default function BookingPage() {
         <section className="booking-section-v2" style={{ paddingTop: 18 }}>
           <BookingFormContent />
         </section>
-      </Shell>
-    </ProtectedRoute>
+    </Shell>
   );
 }

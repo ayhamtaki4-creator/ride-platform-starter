@@ -27,6 +27,11 @@ export function ProtectedRoute({
       return;
     }
 
+    if (user.mustChangePassword) {
+      router.replace("/change-password");
+      return;
+    }
+
     if (!hasRole) {
       router.replace(dashboardHomeForRoles(user.roles));
     }

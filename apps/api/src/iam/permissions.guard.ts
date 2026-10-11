@@ -75,6 +75,13 @@ export class PermissionsGuard implements CanActivate {
     if (!user || user.status !== 'ACTIVE') {
       throw new UnauthorizedException('الحساب غير نشط أو لم يعد موجودًا.');
     }
+    if (
+      user.mustChangePassword &&
+      !request.path.endsWith('/auth/me') &&
+      !request.path.endsWith('/auth/me/password')
+    ) {
+      throw new ForbiddenException('يجب تغيير كلمة المرور المؤقتة قبل متابعة استخدام الحساب.');
+    }
 
     const roles: string[] = user.roles.map((item) => item.role.code);
     const permissions: string[] = Array.from(

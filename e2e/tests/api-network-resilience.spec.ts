@@ -60,7 +60,7 @@ test.describe("Mobile API network resilience", () => {
     });
 
     await page.goto("/login");
-    await page.getByLabel("البريد الإلكتروني").fill("rider@example.com");
+    await page.getByLabel("رقم الهاتف أو البريد الإلكتروني").fill("rider@example.com");
     await page.locator('input[type="password"]').fill("not-used-by-the-stub");
     await page.getByRole("button", { name: "تسجيل الدخول", exact: true }).click();
 

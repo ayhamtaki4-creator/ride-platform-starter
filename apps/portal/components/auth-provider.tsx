@@ -129,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem("ride_access_token");
 
-    if (!user || !token) {
+    if (!user || !token || user.mustChangePassword) {
       setSocket((current) => {
         current?.disconnect();
         return null;
@@ -191,7 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         current === realtimeSocket ? null : current
       );
     };
-  }, [authVersion, clearSession, preserveCachedSession, user?.id]);
+  }, [authVersion, clearSession, preserveCachedSession, user?.id, user?.mustChangePassword]);
 
   const storeSession = useCallback((response: SessionResponse) => {
     localStorage.setItem("ride_access_token", response.accessToken);

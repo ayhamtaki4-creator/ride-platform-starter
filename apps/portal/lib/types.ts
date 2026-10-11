@@ -5,6 +5,7 @@ export type AuthUser = {
   firstName: string;
   lastName: string;
   whatsappOptIn?: boolean;
+  mustChangePassword?: boolean;
   roles: string[];
   permissions: string[];
 };
@@ -66,6 +67,8 @@ export type Trip = {
   bookingReviewStatus?: BookingReviewStatus;
   driverAssignmentStatus?: DriverAssignmentStatus;
   bookingReference?: string | null;
+  bookingSource?: "GUEST" | "AUTHENTICATED";
+  accountLinkStatus?: "UNLINKED" | "LINKED";
   direction?: BookingDirection | null;
   routeId?: string | null;
   route?: {
@@ -345,7 +348,7 @@ export function homeForRoles(roles: string[]) {
 
 export type TripRealtimeEvent = {
   tripId: string;
-  passengerId: string;
+  passengerId: string | null;
   driverId?: string | null;
   previousDriverId?: string | null;
   status: TripStatus;

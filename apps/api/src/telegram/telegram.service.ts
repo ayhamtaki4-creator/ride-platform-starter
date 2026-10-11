@@ -20,6 +20,7 @@ const bookingSelect = {
   travelDate: true,
   flightArrivalTime: true,
   flightNumber: true,
+  flightTicketMediaId: true,
   passengerCount: true,
   luggageCount: true,
   contactName: true,
@@ -127,7 +128,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async enqueueBookingCreated(tripId: string) {
+  async enqueueBookingCreated(tripId: string, provisionalAccount = false) {
     if (!this.enabled) return;
 
     try {
@@ -148,7 +149,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           tripId: booking.id,
           dedupeKey: `booking-created:${booking.id}`,
           chatId: this.chatId || 'not-configured',
-          messageText: this.bookingMessage(booking),
+          messageText: this.bookingMessage(booking, provisionalAccount),
           buttonText: 'فتح تفاصيل الحجز',
           buttonUrl,
           status: this.isConfigured() ? 'PENDING' : 'SKIPPED',
@@ -337,11 +338,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private bookingMessage(booking: TelegramBooking) {
+  private bookingMessage(booking: TelegramBooking, provisionalAccount: boolean) {
     const passengerName =
       booking.contactName?.trim() ||
-      `${booking.passenger.firstName} ${booking.passenger.lastName}`.trim();
-    const passengerPhone = booking.contactPhone?.trim() || booking.passenger.phone || 'غير مضاف';
+      `${booking.passenger?.firstName ?? ''} ${booking.passenger?.lastName ?? ''}`.trim();
+    const passengerPhone = booking.contactPhone?.trim() || booking.passenger?.phone || 'غير مضاف';
     const travelDate = this.formatTravelDate(booking.travelDate);
     const travelTime = booking.flightArrivalTime?.trim()
       ? `${travelDate}، الساعة ${booking.flightArrivalTime.trim()}`
@@ -352,7 +353,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     })} ${booking.currency}`;
 
     return [
-      '🚐 حجز جديد على منصة شام روت',
+      '🚐 حجز جديد على منصة طريق الشام',
       '',
       `رقم الحجز: ${booking.bookingReference || booking.id.slice(0, 8)}`,
       `المسافر: ${passengerName}`,
@@ -366,7 +367,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       `فئة السيارة: ${this.vehicleClassLabel(booking.vehicleClass)}`,
       `عدد الركاب: ${booking.passengerCount}`,
       `عدد الحقائب: ${booking.luggageCount}`,
-      `السعر: ${fare}`
+      ...(booking.flightTicketMediaId ? ['تذكرة الطيران: مرفقة'] : []),
+      `السعر: ${fare}`,
+      `نوع الحجز: ${booking.passenger ? 'مرتبط بحساب' : 'ضيف غير مرتبط'}`,
+      ...(provisionalAccount ? ['تم إنشاء حساب جديد معلّق لحين التحقق من رقم الهاتف.'] : [])
     ].join('\n');
   }
 

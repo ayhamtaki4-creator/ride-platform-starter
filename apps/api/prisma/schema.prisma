@@ -194,6 +194,9 @@ model User {
   lastName                     String
   status                       UserStatus         @default(ACTIVE)
   whatsappOptIn                Boolean            @default(false)
+  provisionalAccount           Boolean            @default(false)
+  phoneVerifiedAt              DateTime?
+  mustChangePassword           Boolean            @default(false)
   createdAt                    DateTime           @default(now())
   updatedAt                    DateTime           @updatedAt
   roles                        UserRole[]
@@ -214,6 +217,18 @@ model User {
   createdDriverLedgerEntries   DriverLedgerEntry[] @relation("DriverLedgerCreator")
   driverSettlements            DriverSettlement[]  @relation("DriverSettlementDriver")
   createdDriverSettlements     DriverSettlement[]  @relation("DriverSettlementCreator")
+}
+
+model PhoneVerificationChallenge {
+  id         String    @id @default(uuid()) @db.Uuid
+  phone      String
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
 }
 
 model AuthSession {
@@ -370,7 +385,9 @@ model VehicleClassConfig {
 model Trip {
   id                        String                    @id @default(uuid()) @db.Uuid
   clientRequestId           String?                   @unique @db.Uuid
-  passengerId               String                    @db.Uuid
+  passengerId               String?                   @db.Uuid
+  bookingSource             String                    @default("AUTHENTICATED")
+  accountLinkStatus         String                    @default("LINKED")
   driverId                  String?                   @db.Uuid
   pricingRuleId             String?                   @db.Uuid
   routeId                   String?                   @db.Uuid
@@ -427,7 +444,7 @@ model Trip {
   startedAt                 DateTime?
   completedAt               DateTime?
   cancelledAt               DateTime?
-  passenger                 User                      @relation("PassengerTrips", fields: [passengerId], references: [id])
+  passenger                 User?                     @relation("PassengerTrips", fields: [passengerId], references: [id])
   driver                    User?                     @relation("DriverTrips", fields: [driverId], references: [id])
   pricingRule               PricingRule?              @relation(fields: [pricingRuleId], references: [id])
   route                     ServiceRoute?             @relation(fields: [routeId], references: [id], onDelete: SetNull)
@@ -438,6 +455,7 @@ model Trip {
   driverLedgerEntries       DriverLedgerEntry[]
 
   @@index([passengerId, requestedAt])
+  @@index([bookingSource, accountLinkStatus])
   @@index([driverId, requestedAt])
   @@index([status, requestedAt])
   @@index([bookingReviewStatus, requestedAt])
@@ -700,7 +718,7 @@ model TripStatusHistory {
   tripId    String      @db.Uuid
   from      TripStatus?
   to        TripStatus
-  actorId   String      @db.Uuid
+  actorId   String?     @db.Uuid
   note      String?
   createdAt DateTime    @default(now())
   trip      Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)

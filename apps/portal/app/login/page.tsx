@@ -37,7 +37,7 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    if (!authLoading && user) router.replace(destinationFor(user.roles));
+    if (!authLoading && user) router.replace(user.mustChangePassword ? "/change-password" : destinationFor(user.roles));
   }, [authLoading, router, user]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -47,7 +47,7 @@ export default function LoginPage() {
     try {
       const loggedInUser = await login(email, password);
       showToast(`مرحبًا ${loggedInUser.firstName}، تم تسجيل الدخول بنجاح.`, "success");
-      router.replace(destinationFor(loggedInUser.roles));
+      router.replace(loggedInUser.mustChangePassword ? "/change-password" : destinationFor(loggedInUser.roles));
       router.refresh();
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : "حدث خطأ غير متوقع.";
@@ -82,7 +82,7 @@ export default function LoginPage() {
             <div className="auth-card-heading">
               <div className="eyebrow-v2">مرحبًا بعودتك</div>
               <h2>تسجيل الدخول</h2>
-              <p>أدخل بريدك الإلكتروني وكلمة المرور للوصول إلى لوحة حسابك.</p>
+              <p>أدخل رقم هاتفك الدولي أو بريدك الإلكتروني مع كلمة المرور.</p>
             </div>
 
             {returnPath === "/booking" ? (
@@ -97,8 +97,8 @@ export default function LoginPage() {
 
             <form className="auth-form-v2" onSubmit={handleSubmit}>
               <label>
-                <span className="label">البريد الإلكتروني</span>
-                <div className="input-with-icon auth-input"><Icon name="user" size={19} /><input className="input ltr-input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="name@example.com" required /></div>
+                <span className="label">رقم الهاتف أو البريد الإلكتروني</span>
+                <div className="input-with-icon auth-input"><Icon name="user" size={19} /><input className="input ltr-input" type="text" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" placeholder="+9639... أو name@example.com" required /></div>
               </label>
               <label>
                 <div className="password-label-row"><span className="label">كلمة المرور</span><button type="button" className="forgot-link" disabled>نسيت كلمة المرور؟</button></div>

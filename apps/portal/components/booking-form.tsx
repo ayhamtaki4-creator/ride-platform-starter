@@ -434,10 +434,9 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     if (
       step === 2 &&
       selectedRoute?.requiresFlightDetails &&
-      (!form.flightArrivalTime || !form.flightNumber.trim()) &&
-      !(!isPassenger && isTicketUploadEnabled && form.flightTicketFileName)
+      (!form.flightArrivalTime || !form.flightNumber.trim())
     ) {
-      setError("أرفق تذكرة الطيران أو أدخل وقت الرحلة ورقم الرحلة.");
+      setError("أدخل وقت الرحلة ورقم الرحلة الجوية قبل الإرسال.");
       return false;
     }
     if (step === 3 && (!form.passengerName.trim() || !form.passengerPhone.trim())) {
@@ -637,25 +636,41 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         dropoffLongitude,
         ...payload
       } = candidate;
-      const booking = await apiFetch<Trip>("/bookings", {
-        method: "POST",
-        body: JSON.stringify({
-          ...payload,
-          clientRequestId: requestId,
-          flightTicketMediaId: candidate.flightTicketMediaId || undefined,
-          vehicleClass: candidate.bookingType === "PRIVATE_CAR" ? candidate.vehicleClass : "SMALL",
-          pickupLatitude: useCustomMapLocations && canEditPickup ? pickupLatitude ?? undefined : undefined,
-          pickupLongitude: useCustomMapLocations && canEditPickup ? pickupLongitude ?? undefined : undefined,
-          dropoffLatitude: useCustomMapLocations && canEditDropoff ? dropoffLatitude ?? undefined : undefined,
-          dropoffLongitude: useCustomMapLocations && canEditDropoff ? dropoffLongitude ?? undefined : undefined,
-        }),
-      });
+      const bookingPayload = {
+        ...payload,
+        clientRequestId: requestId,
+        flightTicketMediaId: isPassenger ? candidate.flightTicketMediaId || undefined : undefined,
+        vehicleClass: candidate.bookingType === "PRIVATE_CAR" ? candidate.vehicleClass : "SMALL",
+        pickupLatitude: useCustomMapLocations && canEditPickup ? pickupLatitude ?? undefined : undefined,
+        pickupLongitude: useCustomMapLocations && canEditPickup ? pickupLongitude ?? undefined : undefined,
+        dropoffLatitude: useCustomMapLocations && canEditDropoff ? dropoffLatitude ?? undefined : undefined,
+        dropoffLongitude: useCustomMapLocations && canEditDropoff ? dropoffLongitude ?? undefined : undefined,
+      };
+      type GuestReceipt = { bookingReference: string | null; accepted: boolean; attachmentSaved?: boolean };
+      let booking: Trip | GuestReceipt;
+      if (!isPassenger && candidate.flightTicketFileName) {
+        const savedTicket = await loadPendingTicket(requestId);
+        if (!savedTicket) throw new Error("تعذر استعادة تذكرة الطيران. أعد إرفاق الملف قبل إرسال الحجز.");
+        const multipart = new FormData();
+        multipart.append("booking", JSON.stringify(bookingPayload));
+        multipart.append("file", savedTicket);
+        booking = await apiUpload<GuestReceipt>("/bookings/guest-with-ticket", multipart, {
+          skipAuth: true,
+        });
+        if (!booking.attachmentSaved) throw new Error("تم إنشاء الحجز لكن لم يتم حفظ تذكرة الطيران. حاول الإرسال مجددًا بنفس الحجز.");
+      } else {
+        booking = await apiFetch<Trip | GuestReceipt>(isPassenger ? "/bookings" : "/bookings/guest", {
+          skipAuth: !isPassenger,
+          method: "POST",
+          body: JSON.stringify(bookingPayload),
+        });
+      }
 
       clearPendingBooking();
       await deletePendingTicket(requestId).catch(() => undefined);
       showToast(`تم إرسال الحجز ${booking.bookingReference ?? ""}.`, "success");
-      onCreated?.(booking);
-      router.replace(`/rider/bookings/${booking.id}`);
+      if (isPassenger && "id" in booking) onCreated?.(booking);
+      router.replace(isPassenger && "id" in booking ? `/rider/bookings/${booking.id}` : `/booking/success?ref=${encodeURIComponent(booking.bookingReference ?? "")}`);
       return booking;
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "تعذر إرسال الحجز.";
@@ -665,11 +680,6 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     } finally {
       setWorking(false);
     }
-  }
-
-  function continueToLogin() {
-    savePendingBooking({ id: draftId, form, step: 4, submitAfterAuth: true });
-    router.push("/login?continue=booking");
   }
 
   async function nextStep() {
@@ -683,10 +693,6 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     event.preventDefault();
     if (step !== 4) {
       await nextStep();
-      return;
-    }
-    if (!isPassenger) {
-      continueToLogin();
       return;
     }
     await createBooking(form);
@@ -794,7 +800,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                   <input hidden type="file" accept="image/jpeg,image/png,image/webp,application/pdf" disabled={ticketWorking} onChange={(event) => void handleTicketSelected(event.target.files?.[0])} />
                   {ticketWorking ? "جارٍ تجهيز وتحليل التذكرة..." : form.flightTicketFileName ? "استبدال التذكرة" : "اختيار التذكرة"}
                 </label>
-                {form.flightTicketFileName ? <div className="flight-ticket-result"><Icon name="check" size={18} /><span><strong>{form.flightTicketFileName}</strong><small>{form.flightTicketMediaId ? "تم رفعها وحفظها بصورة خاصة" : "تم تحليلها ومحفوظة مؤقتًا حتى تسجيل الدخول"}</small></span></div> : null}
+                {form.flightTicketFileName ? <div className="flight-ticket-result"><Icon name="check" size={18} /><span><strong>{form.flightTicketFileName}</strong><small>{form.flightTicketMediaId ? "تم رفعها وحفظها بصورة خاصة" : "تم تحليل بيانات التذكرة. ستُرفع مع الحجز عند تأكيده"}</small></span></div> : null}
                 {ticketExtraction ? <div className={`ticket-extraction-status ${ticketExtraction.status === "EXTRACTED" ? "success" : "warning"}`}><strong>{ticketExtraction.status === "EXTRACTED" ? "تمت تعبئة البيانات تلقائيًا" : "تحتاج البيانات إلى مراجعة"}</strong><span>دقة القراءة التقريبية: {Math.round(ticketExtraction.confidence * 100)}%</span>{ticketExtraction.warning ? <small>{ticketExtraction.warning}</small> : null}</div> : null}
               </section>
             ) : null}
@@ -923,14 +929,14 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
               {form.useCustomMapLocations ? <div><span>تحديد المواقع</span><strong>تم تخصيص النقاط المسموح بها عبر الخريطة</strong></div> : null}
             </div>
             <div className="quote-card"><span>السعر التقديري</span><strong>{quote ? formatMoney(quote.passengerPrice, quote.currency) : "—"}</strong></div>
-            {!isPassenger ? <div className="notice success">تفاصيل هذا الحجز محفوظة. بعد الدخول أو إنشاء حساب سنرسله تلقائيًا ونفتح صفحة التفاصيل.</div> : null}
+            {!isPassenger ? <div className="notice success">يمكنك إرسال الطلب دون تسجيل دخول، وسيتم حفظ التذكرة المرفقة إن وجدت. إذا كان رقمك مسجّلًا مسبقًا فسيُحفظ الحجز كضيف دون ربطه بحسابك حتى التحقق.</div> : null}
           </div>
         ) : null}
       </div>
       {error ? <div className="notice error">{error}</div> : null}
       <div className="wizard-actions">
         {step > 1 ? <button className="button" type="button" onClick={() => setStep((current) => current - 1)}>السابق</button> : <span />}
-        {step < 4 ? <button className="button primary" type="button" disabled={working || ticketWorking || mapWorking} onClick={() => void nextStep()}>التالي</button> : isPassenger ? <button className="button primary" type="submit" disabled={working || ticketWorking || mapWorking}>{working ? "جارٍ الإرسال..." : "إرسال الحجز"}</button> : <button className="button primary" type="button" onClick={continueToLogin} disabled={mapWorking}>تسجيل الدخول وإكمال الحجز</button>}
+        {step < 4 ? <button className="button primary" type="button" disabled={working || ticketWorking || mapWorking} onClick={() => void nextStep()}>التالي</button> : <button className="button primary" type="submit" disabled={working || ticketWorking || mapWorking}>{working ? "جارٍ الإرسال..." : "تأكيد وإرسال الحجز"}</button>}
       </div>
     </form>
   );
