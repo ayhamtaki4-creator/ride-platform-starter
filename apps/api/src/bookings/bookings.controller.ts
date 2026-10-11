@@ -45,6 +45,14 @@ export class BookingsController {
     return this.bookingsService.quote(dto);
   }
 
+  @Public()
+  @Post('guest')
+  async guest(@Ip() ipAddress: string | undefined, @Body() dto: CreateBookingDto) {
+    await this.rateLimit.assertGuestBookingAllowed(ipAddress);
+    const confirmation = await this.bookingsService.createGuest(dto);
+    return confirmation;
+  }
+
   @ApiBearerAuth()
   @Permissions('booking:create')
   @Post()
