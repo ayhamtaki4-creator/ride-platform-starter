@@ -14,9 +14,17 @@ export default async function GuestBookingSuccessPage({
         <h1>تم استلام طلب الحجز</h1>
         {bookingReference ? <p>رقم حجزك: <strong dir="ltr">{bookingReference}</strong></p> : null}
         <p>سيقوم مركز العمليات بمراجعة الطلب والتواصل معك على الرقم الذي أدخلته.</p>
-        <p>إذا كان لديك حساب سابق، فلن يظهر فيه هذا الحجز إلا بعد إثبات ملكية الرقم وربطه بالحساب.</p>
-        <p>إذا كنت عميلًا جديدًا، فسيتم التحقق من رقم هاتفك قبل تفعيل الحساب الجديد.</p>
-        <p><Link className="button primary" href="/activate">التحقق من الهاتف وتفعيل الحساب</Link></p>
+        <p>يمكنك متابعة الحجز كضيف دون الحاجة إلى إنشاء حساب.</p>
+        <p style={{ marginTop: 24, fontWeight: 600 }}>
+          إذا أردت الاستفادة من باقي مزايا الموقع، يرجى تسجيل الدخول أو إنشاء حساب.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center", marginTop: 20 }}>
+          <Link className="button primary" href="/login">تسجيل الدخول</Link>
+          <Link className="button" href="/register">إنشاء حساب جديد</Link>
+        </div>
+        <p style={{ marginTop: 20, fontSize: "0.9rem", color: "var(--muted)" }}>
+          الحجوزات التي أُرسلت كضيف لا تُضاف تلقائيًا إلى حسابك عند التسجيل.
+        </p>
         <p><Link href="/">العودة إلى الرئيسية</Link></p>
       </main>
     </Shell>
