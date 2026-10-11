@@ -434,10 +434,9 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     if (
       step === 2 &&
       selectedRoute?.requiresFlightDetails &&
-      (!form.flightArrivalTime || !form.flightNumber.trim()) &&
-      !(!isPassenger && isTicketUploadEnabled && form.flightTicketFileName)
+      (!form.flightArrivalTime || !form.flightNumber.trim())
     ) {
-      setError("أرفق تذكرة الطيران أو أدخل وقت الرحلة ورقم الرحلة.");
+      setError("أدخل وقت الرحلة ورقم الرحلة الجوية قبل الإرسال.");
       return false;
     }
     if (step === 3 && (!form.passengerName.trim() || !form.passengerPhone.trim())) {
