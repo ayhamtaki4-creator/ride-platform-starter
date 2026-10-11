@@ -80,7 +80,7 @@ test.describe("Public guest booking", () => {
     expect(trip.contactPhone).toBe(number);
   });
 
-  test("provisions one suspended account and one linked booking for a new phone", async ({ request }) => {
+  test("allows a new guest to register normally while automatic account creation is paused", async ({ request }) => {
     const number = phone();
     const requestId = randomUUID();
     const response = await bookAsGuest(request, number, requestId);
@@ -91,12 +91,28 @@ test.describe("Public guest booking", () => {
     expect(retry.status(), await retry.text()).toBe(201);
     expect((await retry.json()).bookingReference).toBe(receipt.bookingReference);
 
-    const user = await prisma.user.findUniqueOrThrow({ where: { phone: number } });
-    expect(user.status).toBe("SUSPENDED");
-    expect(user.email.endsWith(".invalid")).toBe(true);
+    const provisional = await prisma.user.findUnique({ where: { phone: number } });
+    expect(provisional).toBeNull();
     const bookings = await prisma.trip.findMany({ where: { clientRequestId: requestId } });
     expect(bookings).toHaveLength(1);
-    expect(bookings[0].passengerId).toBe(user.id);
+    expect(bookings[0].passengerId).toBeNull();
+    expect(bookings[0].accountLinkStatus).toBe("UNLINKED");
     expect(bookings[0].bookingSource).toBe("GUEST");
+
+    const registration = await request.post(`${apiBaseURL}/auth/register`, {
+      data: {
+        firstName: "New",
+        lastName: "Passenger",
+        email: `after-guest-${randomUUID()}@example.com`,
+        phone: number,
+        password: "TestPassword123!",
+        whatsappOptIn: false,
+      },
+    });
+    expect(registration.status(), await registration.text()).toBe(201);
+    const account = await prisma.user.findUniqueOrThrow({ where: { phone: number } });
+    expect(account.status).toBe("ACTIVE");
+    const originalGuestBooking = await prisma.trip.findUniqueOrThrow({ where: { clientRequestId: requestId } });
+    expect(originalGuestBooking.passengerId).toBeNull();
   });
 });

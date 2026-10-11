@@ -5,6 +5,7 @@ import {
   NotFoundException
 } from '@nestjs/common';
 import { BookingDirection, Prisma } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { randomBytes, randomInt, randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { normalizeInternationalPhone } from '../common/phone';
@@ -163,7 +164,8 @@ export class BookingsService {
     private readonly realtime: RealtimeEventsService,
     private readonly media: MediaService,
     private readonly telegram: TelegramService,
-    private readonly flightTickets: FlightTicketsService
+    private readonly flightTickets: FlightTicketsService,
+    private readonly config: ConfigService
   ) {}
 
   async quote(dto: BookingQuoteDto) {
@@ -317,7 +319,10 @@ export class BookingsService {
     });
     let accountId: string | null = null;
     let provisionalAccountCreated = false;
-    if (!existing) {
+    // Without OTP, avoid reserving new phone numbers in suspended accounts.
+    // Customers can then create a normal account whenever they choose.
+    // Enable this only when verified phone activation is operational.
+    if (!existing && this.config.get<string>('GUEST_PROVISIONAL_ACCOUNT_ENABLED') === 'true') {
       const passengerRole = await this.prisma.role.findUniqueOrThrow({
         where: { code: 'PASSENGER' }
       });
