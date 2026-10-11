@@ -1,6 +1,6 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import { apiBaseURL } from "../helpers/accounts";
 
 const prisma = new PrismaClient();
@@ -15,7 +15,7 @@ function phone() {
   return `+9639${randomInt(10000000, 99999999)}`;
 }
 
-async function bookAsGuest(request: Parameters<Parameters<typeof test>[1]>[0]["request"], phoneNumber: string, requestId: string) {
+async function bookAsGuest(request: APIRequestContext, phoneNumber: string, requestId: string) {
   const routesResponse = await request.get(`${apiBaseURL}/routes`);
   expect(routesResponse.ok()).toBeTruthy();
   const routes = (await routesResponse.json()) as Array<{
@@ -24,10 +24,10 @@ async function bookAsGuest(request: Parameters<Parameters<typeof test>[1]>[0]["r
     requiresFlightDetails: boolean;
     origin: { nameAr: string };
     destination: { nameAr: string };
-    pricingRules: Array<{ bookingType: string; vehicleClass: string; isActive: boolean }>;
+    pricingRules: Array<{ bookingType: string; vehicleClass: string; isActive?: boolean }>;
   }>;
   const route = routes.find((item) =>
-    item.bookable && item.pricingRules.some((rule) => rule.bookingType === "PRIVATE_CAR" && rule.vehicleClass === "SMALL" && rule.isActive),
+    item.bookable && item.pricingRules.some((rule) => rule.bookingType === "PRIVATE_CAR" && rule.vehicleClass === "SMALL" && rule.isActive !== false),
   );
   expect(route).toBeTruthy();
   return request.post(`${apiBaseURL}/bookings/guest`, {
