@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException
 } from '@nestjs/common';
 import { BookingDirection, Prisma } from '@prisma/client';
@@ -155,6 +156,8 @@ type RouteBookingPolicyRow = {
 
 @Injectable()
 export class BookingsService {
+  private readonly logger = new Logger(BookingsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeEventsService,
@@ -252,9 +255,14 @@ export class BookingsService {
         if (prior.bookingSource !== 'GUEST' || prior.contactPhone !== phone) {
           throw new BadRequestException('معرف طلب الحجز مستخدم بالفعل.');
         }
-        const attachmentSaved = ticketFile
-          ? await this.saveGuestTicket(prior.id, dto.routeId, ticketFile)
-          : undefined;
+        let attachmentSaved: boolean | undefined;
+        if (ticketFile) {
+          try {
+            attachmentSaved = await this.saveGuestTicket(prior.id, dto.routeId, ticketFile);
+          } catch {
+            attachmentSaved = false;
+          }
+        }
         return { bookingId: prior.id, bookingReference: prior.bookingReference, accepted: true, attachmentSaved };
       }
     }
@@ -283,6 +291,20 @@ export class BookingsService {
       if (route?.requiresFlightDetails && (!dto.flightArrivalTime?.trim() || !dto.flightNumber?.trim())) {
         throw new BadRequestException('يجب إدخال وقت الرحلة الجوية ورقمها قبل إرسال الحجز.');
       }
+    }
+
+    if (ticketFile) {
+      if (dto.routeId) {
+        const route = await this.prisma.serviceRoute.findUnique({
+          where: { id: dto.routeId },
+          select: { flightTicketUploadEnabled: true, requiresFlightDetails: true }
+        });
+        if (!route?.requiresFlightDetails || !route.flightTicketUploadEnabled) {
+          throw new BadRequestException('إرفاق التذكرة غير متاح لهذا المسار.');
+        }
+      }
+      // Validate the file before creating the provisional account or reservation.
+      await this.flightTickets.analyze(ticketFile, dto.routeId);
     }
 
     const existing = await this.prisma.user.findUnique({
@@ -344,9 +366,15 @@ export class BookingsService {
       }
       throw error;
     }
-    const attachmentSaved = ticketFile
-      ? await this.saveGuestTicket(booking.id, dto.routeId, ticketFile)
-      : undefined;
+    let attachmentSaved: boolean | undefined;
+    if (ticketFile) {
+      try {
+        attachmentSaved = await this.saveGuestTicket(booking.id, dto.routeId, ticketFile);
+      } catch (error) {
+        attachmentSaved = false;
+        this.logger.warn(`Guest booking ${booking.id} created, but the ticket could not be attached: ${error instanceof Error ? error.message : 'upload failed'}`);
+      }
+    }
     return { bookingId: booking.id, bookingReference: booking.bookingReference, accepted: true, attachmentSaved };
   }
 
