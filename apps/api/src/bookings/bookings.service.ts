@@ -263,6 +263,7 @@ export class BookingsService {
             attachmentSaved = false;
           }
         }
+        await this.telegram.enqueueBookingCreated(prior.id);
         return { bookingId: prior.id, bookingReference: prior.bookingReference, accepted: true, attachmentSaved };
       }
     }
@@ -355,7 +356,8 @@ export class BookingsService {
     try {
       booking = await this.create(actor, request, {
         guest: true,
-        newAccountCreated: provisionalAccountCreated
+        newAccountCreated: provisionalAccountCreated,
+        delayTelegram: true
       });
     } catch (error) {
       if (accountId) {
@@ -375,6 +377,7 @@ export class BookingsService {
         this.logger.warn(`Guest booking ${booking.id} created, but the ticket could not be attached: ${error instanceof Error ? error.message : 'upload failed'}`);
       }
     }
+    await this.telegram.enqueueBookingCreated(booking.id, provisionalAccountCreated);
     return { bookingId: booking.id, bookingReference: booking.bookingReference, accepted: true, attachmentSaved };
   }
 
@@ -425,7 +428,7 @@ export class BookingsService {
   async create(
     user: AuthUser | null,
     dto: CreateBookingDto,
-    options?: { guest?: boolean; newAccountCreated?: boolean }
+    options?: { guest?: boolean; newAccountCreated?: boolean; delayTelegram?: boolean }
   ) {
     const travelDate = parseDateOnly(dto.travelDate);
 
@@ -692,7 +695,9 @@ export class BookingsService {
       }
     });
 
-    await this.telegram.enqueueBookingCreated(booking.id, Boolean(options?.newAccountCreated));
+    if (!options?.delayTelegram) {
+      await this.telegram.enqueueBookingCreated(booking.id, Boolean(options?.newAccountCreated));
+    }
 
     this.realtime.bookingCreated({
       tripId: booking.id,
