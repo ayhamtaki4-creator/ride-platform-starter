@@ -69,6 +69,18 @@ export class AuthRateLimitService implements OnModuleDestroy {
     );
   }
 
+  async assertPhoneVerificationRequestAllowed(ipAddress: string | undefined, phone: string) {
+    if (!this.enabled()) return;
+    await this.consume('phone-otp-request-ip', this.normalizeIp(ipAddress), 12, 60 * 60);
+    await this.consume('phone-otp-request-number', phone, 3, 60 * 60);
+  }
+
+  async assertPhoneVerificationConfirmAllowed(ipAddress: string | undefined, phone: string) {
+    if (!this.enabled()) return;
+    await this.consume('phone-otp-confirm-ip', this.normalizeIp(ipAddress), 30, 60 * 60);
+    await this.consume('phone-otp-confirm-number', phone, 12, 60 * 60);
+  }
+
   async assertGuestBookingAllowed(ipAddress: string | undefined) {
     if (!this.enabled()) return;
     await this.consume(
