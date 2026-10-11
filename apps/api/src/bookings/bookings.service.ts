@@ -11,6 +11,8 @@ import { isPastServiceDate, parseDateOnly } from '../common/service-date';
 import { AuthUser } from '../iam/auth-user.type';
 import { MediaService } from '../media/media.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { UploadedMediaFile } from '../media/media.service';
+import { FlightTicketsService } from './flight-tickets.service';
 import {
   defaultVehicleClassCapacity,
   defaultVehicleClassLuggageCapacity
@@ -157,7 +159,8 @@ export class BookingsService {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeEventsService,
     private readonly media: MediaService,
-    private readonly telegram: TelegramService
+    private readonly telegram: TelegramService,
+    private readonly flightTickets: FlightTicketsService
   ) {}
 
   async quote(dto: BookingQuoteDto) {
@@ -235,7 +238,7 @@ export class BookingsService {
    * A guest request never claims an existing user's account based on their phone.
    * Newly-created accounts remain suspended pending out-of-band phone verification.
    */
-  async createGuest(dto: CreateBookingDto) {
+  async createGuest(dto: CreateBookingDto, ticketFile?: UploadedMediaFile) {
     const phone = normalizeInternationalPhone(dto.passengerPhone);
     const request = { ...dto, passengerPhone: phone };
 
@@ -249,7 +252,10 @@ export class BookingsService {
         if (prior.bookingSource !== 'GUEST' || prior.contactPhone !== phone) {
           throw new BadRequestException('معرف طلب الحجز مستخدم بالفعل.');
         }
-        return { bookingReference: prior.bookingReference, accepted: true };
+        const attachmentSaved = ticketFile
+          ? await this.saveGuestTicket(prior.id, dto.routeId, ticketFile)
+          : undefined;
+        return { bookingId: prior.id, bookingReference: prior.bookingReference, accepted: true, attachmentSaved };
       }
     }
 
@@ -284,7 +290,7 @@ export class BookingsService {
       select: { id: true }
     });
     let accountId: string | null = null;
-    let temporaryPassword: string | undefined;
+    let provisionalAccountCreated = false;
     if (!existing) {
       const passengerRole = await this.prisma.role.findUniqueOrThrow({
         where: { code: 'PASSENGER' }
@@ -292,7 +298,7 @@ export class BookingsService {
       const parts = dto.passengerName.trim().split(/\s+/);
       const firstName = parts.shift() ?? 'مسافر';
       const lastName = parts.join(' ') || 'طريق الشام';
-      const proposedPassword = randomBytes(18).toString('base64url');
+      const disabledPassword = randomBytes(32).toString('hex');
       try {
         const newAccount = await this.prisma.user.create({
           data: {
@@ -301,7 +307,8 @@ export class BookingsService {
             phone,
             firstName,
             lastName,
-            passwordHash: await bcrypt.hash(proposedPassword, 12),
+            passwordHash: await bcrypt.hash(disabledPassword, 12),
+            provisionalAccount: true,
             status: 'SUSPENDED',
             whatsappOptIn: false,
             passengerProfile: { create: {} },
@@ -310,7 +317,7 @@ export class BookingsService {
           select: { id: true }
         });
         accountId = newAccount.id;
-        temporaryPassword = proposedPassword;
+        provisionalAccountCreated = true;
       } catch (error) {
         // Concurrent requests for the same phone must not overwrite its account.
         if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) {
@@ -319,18 +326,78 @@ export class BookingsService {
       }
     }
 
-    const actor = accountId ? ({ sub: accountId, roles: ['PASSENGER'] } as AuthUser) : null;
-    const booking = await this.create(actor, request, {
-      guest: true,
-      temporaryPassword
+    const actor: AuthUser | null = accountId
+      ? { sub: accountId, email: '', roles: ['PASSENGER'], permissions: [] }
+      : null;
+    let booking: BookingWithRelations;
+    try {
+      booking = await this.create(actor, request, {
+        guest: true,
+        newAccountCreated: provisionalAccountCreated
+      });
+    } catch (error) {
+      if (accountId) {
+        // Remove an unused, never-verified placeholder if booking validation failed.
+        await this.prisma.user.deleteMany({
+          where: { id: accountId, provisionalAccount: true, passengerTrips: { none: {} } }
+        }).catch(() => undefined);
+      }
+      throw error;
+    }
+    const attachmentSaved = ticketFile
+      ? await this.saveGuestTicket(booking.id, dto.routeId, ticketFile)
+      : undefined;
+    return { bookingId: booking.id, bookingReference: booking.bookingReference, accepted: true, attachmentSaved };
+  }
+
+  private async saveGuestTicket(
+    bookingId: string,
+    routeId: string | undefined,
+    file: UploadedMediaFile
+  ) {
+    const existingTicket = await this.prisma.trip.findUnique({
+      where: { id: bookingId },
+      select: { flightTicketMediaId: true, bookingSource: true }
     });
-    return { bookingReference: booking.bookingReference, accepted: true };
+    if (!existingTicket || existingTicket.bookingSource !== 'GUEST') {
+      throw new BadRequestException('الحجز غير صالح لإرفاق التذكرة.');
+    }
+    if (existingTicket.flightTicketMediaId) return true;
+
+    const accountEmail = 'guest-ticket-storage@internal.tareeqalsham.invalid';
+    const storageAccount = await this.prisma.user.upsert({
+      where: { email: accountEmail },
+      update: {},
+      create: {
+        email: accountEmail,
+        passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 12),
+        firstName: 'Guest',
+        lastName: 'Media',
+        status: 'SUSPENDED'
+      },
+      select: { id: true, email: true }
+    });
+    const systemActor: AuthUser = {
+      sub: storageAccount.id,
+      email: storageAccount.email,
+      roles: [],
+      permissions: []
+    };
+    const result = await this.flightTickets.uploadAndExtract(systemActor, file, routeId);
+    await this.prisma.trip.updateMany({
+      where: { id: bookingId, bookingSource: 'GUEST', flightTicketMediaId: null },
+      data: {
+        flightTicketMediaId: result.asset.id,
+        flightTicketData: result.extraction as unknown as Prisma.InputJsonValue
+      }
+    });
+    return true;
   }
 
   async create(
     user: AuthUser | null,
     dto: CreateBookingDto,
-    options?: { guest?: boolean; temporaryPassword?: string }
+    options?: { guest?: boolean; newAccountCreated?: boolean }
   ) {
     const travelDate = parseDateOnly(dto.travelDate);
 
@@ -597,7 +664,7 @@ export class BookingsService {
       }
     });
 
-    await this.telegram.enqueueBookingCreated(booking.id, Boolean(options?.temporaryPassword));
+    await this.telegram.enqueueBookingCreated(booking.id, Boolean(options?.newAccountCreated));
 
     this.realtime.bookingCreated({
       tripId: booking.id,
