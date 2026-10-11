@@ -274,6 +274,7 @@ export class BookingModificationService {
       });
 
       if (mode === 'ADMIN') {
+        if (trip.passengerId) {
         const passengerNotification = await tx.notification.create({
           data: {
             userId: trip.passengerId,
@@ -293,6 +294,7 @@ export class BookingModificationService {
           }
         });
         notifications.push(passengerNotification);
+        }
 
         if (trip.driverId) {
           const driverNotification = await tx.notification.create({
