@@ -242,6 +242,9 @@ export class BookingsService {
    * Newly-created accounts remain suspended pending out-of-band phone verification.
    */
   async createGuest(dto: CreateBookingDto, ticketFile?: UploadedMediaFile) {
+    if (!dto.clientRequestId) {
+      throw new BadRequestException('معرف طلب الحجز مطلوب لمنع التكرار.');
+    }
     const phone = normalizeInternationalPhone(dto.passengerPhone);
     const request = { ...dto, passengerPhone: phone };
 
