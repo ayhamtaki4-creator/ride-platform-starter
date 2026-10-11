@@ -588,7 +588,7 @@ export class BookingsService {
       }
     });
 
-    await this.telegram.enqueueBookingCreated(booking.id, options?.temporaryPassword);
+    await this.telegram.enqueueBookingCreated(booking.id, Boolean(options?.temporaryPassword));
 
     this.realtime.bookingCreated({
       tripId: booking.id,
