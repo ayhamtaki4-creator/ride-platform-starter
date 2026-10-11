@@ -12,6 +12,7 @@ import { normalizeInternationalPhone } from '../common/phone';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/phone-verification.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 
@@ -171,11 +172,32 @@ export class AuthService {
       where: { id: user.sub },
       data: {
         whatsappOptIn: dto.whatsappOptIn,
-        ...(phone ? { phone } : {})
+        ...(phone ? { phone, phoneVerifiedAt: null } : {})
       }
     });
 
     return this.loadUserView(user.sub);
+  }
+
+  async changePassword(user: AuthUser, dto: ChangePasswordDto) {
+    const account = await this.prisma.user.findUniqueOrThrow({ where: { id: user.sub } });
+    if (!(await bcrypt.compare(dto.currentPassword, account.passwordHash))) {
+      throw new BadRequestException('كلمة المرور الحالية غير صحيحة.');
+    }
+    if (dto.currentPassword === dto.newPassword) {
+      throw new BadRequestException('اختر كلمة مرور جديدة مختلفة عن المؤقتة.');
+    }
+    await this.prisma.user.update({
+      where: { id: account.id },
+      data: {
+        passwordHash: await bcrypt.hash(dto.newPassword, 12),
+        mustChangePassword: false
+      }
+    });
+    await this.prisma.auditLog.create({
+      data: { actorId: account.id, action: 'auth.password.changed', entityType: 'User', entityId: account.id }
+    });
+    return { success: true };
   }
 
   private async createSession(userId: string, context?: SessionContext) {
@@ -231,6 +253,7 @@ export class AuthService {
         firstName: user.firstName,
         lastName: user.lastName,
         whatsappOptIn: user.whatsappOptIn,
+        mustChangePassword: user.mustChangePassword,
         roles,
         permissions
       }
