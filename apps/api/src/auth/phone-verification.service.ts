@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import bcrypt from 'bcryptjs';
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'crypto';
@@ -16,6 +16,9 @@ export class PhoneVerificationService {
 
   async request(rawPhone: string) {
     const phone = normalizeInternationalPhone(rawPhone);
+    if (!this.whatsapp.otpConfigured()) {
+      throw new ServiceUnavailableException('خدمة التحقق من الهاتف غير مهيأة بعد. تواصل مع مركز العمليات.');
+    }
     const account = await this.prisma.user.findUnique({
       where: { phone }, select: { id: true }
     });
