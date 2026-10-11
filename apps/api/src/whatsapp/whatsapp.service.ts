@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   OnModuleDestroy,
   OnModuleInit
 } from '@nestjs/common';
@@ -74,6 +75,48 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
       templateName: this.templateName,
       languageCode: this.languageCode
     };
+  }
+
+  /**
+   * Authentication-specific WhatsApp template (OTP copy-code button).
+   * Never store or log the plaintext verification code.
+   */
+  async sendVerificationCode(phone: string, code: string) {
+    const templateName = this.config.get<string>('WHATSAPP_OTP_TEMPLATE')?.trim();
+    const language = this.config.get<string>('WHATSAPP_OTP_LANGUAGE')?.trim() || 'ar';
+    if (!this.enabled || !this.isConfigured() || !templateName) {
+      throw new ServiceUnavailableException('خدمة التحقق من الهاتف غير مهيأة بعد. تواصل مع مركز العمليات.');
+    }
+    const response = await fetch(
+      `https://graph.facebook.com/${this.graphVersion}/${this.phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: toWhatsAppRecipient(phone),
+          type: 'template',
+          template: {
+            name: templateName,
+            language: { code: language },
+            components: [
+              { type: 'body', parameters: [{ type: 'text', text: code }] },
+              { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] }
+            ]
+          }
+        }),
+        signal: AbortSignal.timeout(15000)
+      }
+    );
+    if (!response.ok) {
+      // Do not leak authentication codes or provider payloads in errors.
+      this.logger.warn(`WhatsApp account verification failed with HTTP ${response.status}.`);
+      throw new ServiceUnavailableException('تعذر إرسال رمز التحقق. أعد المحاولة لاحقًا.');
+    }
   }
 
   async list(status?: string) {
