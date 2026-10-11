@@ -226,11 +226,15 @@ await run("Public booking without authentication", async () => {
   const activationResult = await fetchTimed(`${PORTAL_BASE_URL}/activate`);
   assert(activationResult.response.status === 200, `activate HTTP ${activationResult.response.status}`);
   const activationHtml = await responseText(activationResult.response);
-  assert(activationHtml.includes("التحقق من رقم الهاتف"), "phone verification page is missing");
+  assert(
+    activationHtml.includes("إذا أردت الاستفادة من باقي مزايا الموقع، يرجى تسجيل الدخول أو إنشاء حساب."),
+    "paused phone-verification page must invite sign-in or registration",
+  );
+  assert(!activationHtml.includes("إرسال رمز التحقق"), "OTP request form must be hidden");
 
   return {
     elapsedMs: bookingResult.elapsedMs + activationResult.elapsedMs,
-    detail: "public booking and optional account verification are accessible",
+    detail: "public booking and registration options are accessible without OTP",
   };
 });
 
