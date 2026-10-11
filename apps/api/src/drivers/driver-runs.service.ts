@@ -570,7 +570,7 @@ export class DriverRunsService {
 
   private toTripEvent(trip: {
     id: string;
-    passengerId: string;
+    passengerId: string | null;
     driverId: string | null;
     status: TripStatus;
     bookingReviewStatus: string;
