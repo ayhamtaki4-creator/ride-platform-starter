@@ -54,7 +54,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [publicMenuOpen, setPublicMenuOpen] = useState(false);
 
-  const isPublic = pathname === "/" || pathname === "/booking" || pathname === "/login" || pathname.startsWith("/register");
+  const isPublic = pathname === "/" || pathname === "/booking" || pathname === "/booking/success" || pathname === "/activate" || pathname === "/login" || pathname.startsWith("/register");
   const isAdmin = Boolean(user?.roles.some((role) => ["SUPER_ADMIN", "ADMIN", "OPERATIONS_MANAGER"].includes(role)));
   const isFinance = Boolean(user?.roles.includes("FINANCE_MANAGER"));
   const canViewFinance = Boolean(user?.roles.some((role) => ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER"].includes(role)));
