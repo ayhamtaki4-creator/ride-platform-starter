@@ -166,6 +166,32 @@ await run("Public routes API", async () => {
   return { elapsedMs, detail: `${body.length} bookable route(s)` };
 });
 
+await run("Public guest booking API route", async () => {
+  const { response, elapsedMs } = await fetchTimed(`${API_BASE_URL}/bookings/guest`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: portalOrigin },
+    body: "{}",
+  });
+  assert(
+    response.status === 400,
+    `expected validation failure HTTP 400 from guest booking endpoint, got ${response.status}`,
+  );
+  return { elapsedMs, detail: "guest booking route is public and validates input" };
+});
+
+await run("Phone verification API route", async () => {
+  const { response, elapsedMs } = await fetchTimed(`${API_BASE_URL}/auth/phone/request-code`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: portalOrigin },
+    body: "{}",
+  });
+  assert(
+    response.status === 400,
+    `expected validation failure HTTP 400 from OTP endpoint, got ${response.status}`,
+  );
+  return { elapsedMs, detail: "phone verification route is public and validates input" };
+});
+
 await run("Portal home identity and canonical metadata", async () => {
   const { response, elapsedMs } = await fetchTimed(`${PORTAL_BASE_URL}/`);
   assert(response.status === 200, `HTTP ${response.status}`);
