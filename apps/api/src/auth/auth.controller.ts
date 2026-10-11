@@ -17,6 +17,9 @@ import { CurrentUser } from '../iam/current-user.decorator';
 import { Public } from '../iam/public.decorator';
 import { AuthRateLimitService } from './auth-rate-limit.service';
 import { AuthService } from './auth.service';
+import { normalizeInternationalPhone } from '../common/phone';
+import { ChangePasswordDto, PhoneVerificationRequestDto, PhoneVerificationConfirmDto } from './dto/phone-verification.dto';
+import { PhoneVerificationService } from './phone-verification.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -29,7 +32,8 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly rateLimit: AuthRateLimitService,
-    private readonly refreshCookie: RefreshCookieService
+    private readonly refreshCookie: RefreshCookieService,
+    private readonly phoneVerification: PhoneVerificationService
   ) {}
 
   @Public()
@@ -59,6 +63,36 @@ export class AuthController {
     await this.rateLimit.clearLoginIdentity(dto.email);
     this.markNoStore(response);
     return this.refreshCookie.present(response, session);
+  }
+
+  @Public()
+  @Post('phone/request-code')
+  async requestPhoneCode(
+    @Body() dto: PhoneVerificationRequestDto,
+    @Ip() ipAddress?: string
+  ) {
+    const phone = normalizeInternationalPhone(dto.phone);
+    await this.rateLimit.assertPhoneVerificationRequestAllowed(ipAddress, phone);
+    return this.phoneVerification.request(phone);
+  }
+
+  @Public()
+  @Post('phone/verify-code')
+  async verifyPhoneCode(
+    @Body() dto: PhoneVerificationConfirmDto,
+    @Res({ passthrough: true }) response: Response,
+    @Ip() ipAddress?: string
+  ) {
+    const phone = normalizeInternationalPhone(dto.phone);
+    await this.rateLimit.assertPhoneVerificationConfirmAllowed(ipAddress, phone);
+    this.markNoStore(response);
+    return this.phoneVerification.confirm(phone, dto.code);
+  }
+
+  @ApiBearerAuth()
+  @Patch('me/password')
+  changePassword(@CurrentUser() user: AuthUser, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(user, dto);
   }
 
   @Public()
