@@ -440,6 +440,7 @@ model Trip {
   driverLedgerEntries       DriverLedgerEntry[]
 
   @@index([passengerId, requestedAt])
+  @@index([bookingSource, accountLinkStatus])
   @@index([driverId, requestedAt])
   @@index([status, requestedAt])
   @@index([bookingReviewStatus, requestedAt])
