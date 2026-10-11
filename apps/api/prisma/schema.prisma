@@ -702,7 +702,7 @@ model TripStatusHistory {
   tripId    String      @db.Uuid
   from      TripStatus?
   to        TripStatus
-  actorId   String      @db.Uuid
+  actorId   String?     @db.Uuid
   note      String?
   createdAt DateTime    @default(now())
   trip      Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
