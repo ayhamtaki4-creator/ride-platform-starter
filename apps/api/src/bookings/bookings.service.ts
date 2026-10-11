@@ -269,6 +269,15 @@ export class BookingsService {
     if (dto.flightTicketMediaId) {
       throw new BadRequestException('إرفاق التذكرة يتطلب حسابًا. يمكنك تعبئة بيانات الرحلة يدويًا.');
     }
+    if (dto.routeId) {
+      const route = await this.prisma.serviceRoute.findUnique({
+        where: { id: dto.routeId },
+        select: { requiresFlightDetails: true }
+      });
+      if (route?.requiresFlightDetails && (!dto.flightArrivalTime?.trim() || !dto.flightNumber?.trim())) {
+        throw new BadRequestException('يجب إدخال وقت الرحلة الجوية ورقمها قبل إرسال الحجز.');
+      }
+    }
 
     const existing = await this.prisma.user.findUnique({
       where: { phone },
