@@ -637,7 +637,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         dropoffLongitude,
         ...payload
       } = candidate;
-      const booking = await apiFetch<Trip>("/bookings", {
+      const booking = await apiFetch<Trip | { bookingReference: string | null; accepted: boolean }>(isPassenger ? "/bookings" : "/bookings/guest", {
+        skipAuth: !isPassenger,
         method: "POST",
         body: JSON.stringify({
           ...payload,
@@ -654,8 +655,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       clearPendingBooking();
       await deletePendingTicket(requestId).catch(() => undefined);
       showToast(`تم إرسال الحجز ${booking.bookingReference ?? ""}.`, "success");
-      onCreated?.(booking);
-      router.replace(`/rider/bookings/${booking.id}`);
+      if (isPassenger && "id" in booking) onCreated?.(booking);
+      router.replace(isPassenger && "id" in booking ? `/rider/bookings/${booking.id}` : `/booking/success?ref=${encodeURIComponent(booking.bookingReference ?? "")}`);
       return booking;
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "تعذر إرسال الحجز.";
@@ -683,10 +684,6 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     event.preventDefault();
     if (step !== 4) {
       await nextStep();
-      return;
-    }
-    if (!isPassenger) {
-      continueToLogin();
       return;
     }
     await createBooking(form);
@@ -794,7 +791,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                   <input hidden type="file" accept="image/jpeg,image/png,image/webp,application/pdf" disabled={ticketWorking} onChange={(event) => void handleTicketSelected(event.target.files?.[0])} />
                   {ticketWorking ? "جارٍ تجهيز وتحليل التذكرة..." : form.flightTicketFileName ? "استبدال التذكرة" : "اختيار التذكرة"}
                 </label>
-                {form.flightTicketFileName ? <div className="flight-ticket-result"><Icon name="check" size={18} /><span><strong>{form.flightTicketFileName}</strong><small>{form.flightTicketMediaId ? "تم رفعها وحفظها بصورة خاصة" : "تم تحليلها ومحفوظة مؤقتًا حتى تسجيل الدخول"}</small></span></div> : null}
+                {form.flightTicketFileName ? <div className="flight-ticket-result"><Icon name="check" size={18} /><span><strong>{form.flightTicketFileName}</strong><small>{form.flightTicketMediaId ? "تم رفعها وحفظها بصورة خاصة" : "تم تحليل بيانات التذكرة. لا يُحفظ المرفق في حجز الضيف"}</small></span></div> : null}
                 {ticketExtraction ? <div className={`ticket-extraction-status ${ticketExtraction.status === "EXTRACTED" ? "success" : "warning"}`}><strong>{ticketExtraction.status === "EXTRACTED" ? "تمت تعبئة البيانات تلقائيًا" : "تحتاج البيانات إلى مراجعة"}</strong><span>دقة القراءة التقريبية: {Math.round(ticketExtraction.confidence * 100)}%</span>{ticketExtraction.warning ? <small>{ticketExtraction.warning}</small> : null}</div> : null}
               </section>
             ) : null}
@@ -923,14 +920,14 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
               {form.useCustomMapLocations ? <div><span>تحديد المواقع</span><strong>تم تخصيص النقاط المسموح بها عبر الخريطة</strong></div> : null}
             </div>
             <div className="quote-card"><span>السعر التقديري</span><strong>{quote ? formatMoney(quote.passengerPrice, quote.currency) : "—"}</strong></div>
-            {!isPassenger ? <div className="notice success">تفاصيل هذا الحجز محفوظة. بعد الدخول أو إنشاء حساب سنرسله تلقائيًا ونفتح صفحة التفاصيل.</div> : null}
+            {!isPassenger ? <div className="notice success">يمكنك إرسال الطلب دون تسجيل دخول. إذا كان رقمك مسجّلًا مسبقًا فسيُحفظ الحجز كضيف دون ربطه بحسابك حتى التحقق.</div> : null}
           </div>
         ) : null}
       </div>
       {error ? <div className="notice error">{error}</div> : null}
       <div className="wizard-actions">
         {step > 1 ? <button className="button" type="button" onClick={() => setStep((current) => current - 1)}>السابق</button> : <span />}
-        {step < 4 ? <button className="button primary" type="button" disabled={working || ticketWorking || mapWorking} onClick={() => void nextStep()}>التالي</button> : isPassenger ? <button className="button primary" type="submit" disabled={working || ticketWorking || mapWorking}>{working ? "جارٍ الإرسال..." : "إرسال الحجز"}</button> : <button className="button primary" type="button" onClick={continueToLogin} disabled={mapWorking}>تسجيل الدخول وإكمال الحجز</button>}
+        {step < 4 ? <button className="button primary" type="button" disabled={working || ticketWorking || mapWorking} onClick={() => void nextStep()}>التالي</button> : <button className="button primary" type="submit" disabled={working || ticketWorking || mapWorking}>{working ? "جارٍ الإرسال..." : "تأكيد وإرسال الحجز"}</button>}
       </div>
     </form>
   );
