@@ -36,7 +36,7 @@ test.describe("Mobile shell", () => {
   test("login inputs keep an iOS-safe font size", async ({ page }) => {
     await page.goto("/login");
 
-    const inputs = page.locator('input[type="email"], input[type="password"]');
+    const inputs = page.locator('input[autocomplete="username"], input[type="password"]');
     await expect(inputs).toHaveCount(2);
 
     for (let index = 0; index < 2; index += 1) {
