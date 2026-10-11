@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -12,6 +13,8 @@ import {
   UseInterceptors
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { memoryStorage } from 'multer';
@@ -50,7 +53,48 @@ export class BookingsController {
   async guest(@Ip() ipAddress: string | undefined, @Body() dto: CreateBookingDto) {
     await this.rateLimit.assertGuestBookingAllowed(ipAddress);
     const confirmation = await this.bookingsService.createGuest(dto);
-    return confirmation;
+    void this.routePlans.syncPendingBooking(confirmation.bookingId);
+    return { bookingReference: confirmation.bookingReference, accepted: true };
+  }
+
+  @Public()
+  @Post('guest-with-ticket')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024, files: 1 }
+    })
+  )
+  async guestWithTicket(
+    @Ip() ipAddress: string | undefined,
+    @Body('booking') rawBooking: string | undefined,
+    @UploadedFile() ticket: UploadedMediaFile | undefined
+  ) {
+    await this.rateLimit.assertGuestBookingAllowed(ipAddress);
+    if (!rawBooking || !ticket) {
+      throw new BadRequestException('أرفق بيانات الحجز وتذكرة الطيران.');
+    }
+    let data: unknown;
+    try {
+      data = JSON.parse(rawBooking);
+    } catch {
+      throw new BadRequestException('بيانات الحجز غير صالحة.');
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new BadRequestException('بيانات الحجز غير صالحة.');
+    }
+    const dto = plainToInstance(CreateBookingDto, data);
+    const errors = await validate(dto, { whitelist: true, forbidNonWhitelisted: true });
+    if (errors.length) {
+      throw new BadRequestException('راجع معلومات الحجز المطلوبة وحاول مرة أخرى.');
+    }
+    const confirmation = await this.bookingsService.createGuest(dto, ticket);
+    void this.routePlans.syncPendingBooking(confirmation.bookingId);
+    return {
+      bookingReference: confirmation.bookingReference,
+      accepted: true,
+      attachmentSaved: confirmation.attachmentSaved
+    };
   }
 
   @ApiBearerAuth()
