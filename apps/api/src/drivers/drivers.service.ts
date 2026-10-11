@@ -367,7 +367,7 @@ export class DriversService {
   private toRealtimeEvent(
     trip: {
       id: string;
-      passengerId: string;
+      passengerId: string | null;
       driverId: string | null;
       status: string;
       bookingReviewStatus: string;
