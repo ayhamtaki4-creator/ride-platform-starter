@@ -71,8 +71,11 @@ export class AuthService {
   }
 
   async login(dto: LoginDto, context?: SessionContext) {
-    const email = dto.email.trim().toLowerCase();
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const identity = dto.email.trim().toLowerCase();
+    const isPhone = identity.startsWith('+') || identity.startsWith('00');
+    const user = isPhone
+      ? await this.prisma.user.findUnique({ where: { phone: normalizeInternationalPhone(identity) } })
+      : await this.prisma.user.findUnique({ where: { email: identity } });
 
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException('بيانات الدخول غير صحيحة.');
