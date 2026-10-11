@@ -370,7 +370,9 @@ model VehicleClassConfig {
 model Trip {
   id                        String                    @id @default(uuid()) @db.Uuid
   clientRequestId           String?                   @unique @db.Uuid
-  passengerId               String                    @db.Uuid
+  passengerId               String?                   @db.Uuid
+  bookingSource             String                    @default("AUTHENTICATED")
+  accountLinkStatus         String                    @default("LINKED")
   driverId                  String?                   @db.Uuid
   pricingRuleId             String?                   @db.Uuid
   routeId                   String?                   @db.Uuid
@@ -427,7 +429,7 @@ model Trip {
   startedAt                 DateTime?
   completedAt               DateTime?
   cancelledAt               DateTime?
-  passenger                 User                      @relation("PassengerTrips", fields: [passengerId], references: [id])
+  passenger                 User?                     @relation("PassengerTrips", fields: [passengerId], references: [id])
   driver                    User?                     @relation("DriverTrips", fields: [driverId], references: [id])
   pricingRule               PricingRule?              @relation(fields: [pricingRuleId], references: [id])
   route                     ServiceRoute?             @relation(fields: [routeId], references: [id], onDelete: SetNull)
