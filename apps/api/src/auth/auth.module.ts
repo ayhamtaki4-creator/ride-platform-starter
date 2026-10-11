@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthRateLimitService } from './auth-rate-limit.service';
 import { AuthService } from './auth.service';
+import { PhoneVerificationService } from './phone-verification.service';
 import { RefreshCookieService } from './refresh-cookie.service';
 
 @Module({
@@ -19,7 +20,7 @@ import { RefreshCookieService } from './refresh-cookie.service';
     })
   ],
   controllers: [AuthController],
-  providers: [AuthService, AuthRateLimitService, RefreshCookieService],
+  providers: [AuthService, AuthRateLimitService, RefreshCookieService, PhoneVerificationService],
   exports: [JwtModule, AuthService, AuthRateLimitService, RefreshCookieService]
 })
 export class AuthModule {}
