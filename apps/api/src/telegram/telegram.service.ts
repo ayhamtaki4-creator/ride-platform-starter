@@ -20,6 +20,7 @@ const bookingSelect = {
   travelDate: true,
   flightArrivalTime: true,
   flightNumber: true,
+  flightTicketMediaId: true,
   passengerCount: true,
   luggageCount: true,
   contactName: true,
@@ -366,6 +367,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       `فئة السيارة: ${this.vehicleClassLabel(booking.vehicleClass)}`,
       `عدد الركاب: ${booking.passengerCount}`,
       `عدد الحقائب: ${booking.luggageCount}`,
+      ...(booking.flightTicketMediaId ? ['تذكرة الطيران: مرفقة'] : []),
       `السعر: ${fare}`,
       `نوع الحجز: ${booking.passenger ? 'مرتبط بحساب' : 'ضيف غير مرتبط'}`,
       ...(provisionalAccount ? ['تم إنشاء حساب جديد معلّق لحين التحقق من رقم الهاتف.'] : [])
