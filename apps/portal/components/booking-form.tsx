@@ -643,7 +643,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         body: JSON.stringify({
           ...payload,
           clientRequestId: requestId,
-          flightTicketMediaId: candidate.flightTicketMediaId || undefined,
+          flightTicketMediaId: isPassenger ? candidate.flightTicketMediaId || undefined : undefined,
           vehicleClass: candidate.bookingType === "PRIVATE_CAR" ? candidate.vehicleClass : "SMALL",
           pickupLatitude: useCustomMapLocations && canEditPickup ? pickupLatitude ?? undefined : undefined,
           pickupLongitude: useCustomMapLocations && canEditPickup ? pickupLongitude ?? undefined : undefined,
@@ -666,11 +666,6 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     } finally {
       setWorking(false);
     }
-  }
-
-  function continueToLogin() {
-    savePendingBooking({ id: draftId, form, step: 4, submitAfterAuth: true });
-    router.push("/login?continue=booking");
   }
 
   async function nextStep() {
