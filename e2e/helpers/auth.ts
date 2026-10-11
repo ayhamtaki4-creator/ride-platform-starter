@@ -16,7 +16,7 @@ export async function loginAs(
   const account = accounts[role];
 
   await page.goto("/login");
-  await page.locator('input[type="email"]').fill(account.email);
+  await page.locator('input[autocomplete="username"]').fill(account.email);
   await page.locator('input[type="password"]').fill(account.password);
 
   await Promise.all([
