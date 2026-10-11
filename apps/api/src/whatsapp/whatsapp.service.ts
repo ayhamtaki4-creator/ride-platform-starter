@@ -81,10 +81,15 @@ export class WhatsAppService implements OnModuleInit, OnModuleDestroy {
    * Authentication-specific WhatsApp template (OTP copy-code button).
    * Never store or log the plaintext verification code.
    */
+  otpConfigured() {
+    return this.enabled && this.isConfigured() &&
+      Boolean(this.config.get<string>('WHATSAPP_OTP_TEMPLATE')?.trim());
+  }
+
   async sendVerificationCode(phone: string, code: string) {
     const templateName = this.config.get<string>('WHATSAPP_OTP_TEMPLATE')?.trim();
     const language = this.config.get<string>('WHATSAPP_OTP_LANGUAGE')?.trim() || 'ar';
-    if (!this.enabled || !this.isConfigured() || !templateName) {
+    if (!this.otpConfigured() || !templateName) {
       throw new ServiceUnavailableException('خدمة التحقق من الهاتف غير مهيأة بعد. تواصل مع مركز العمليات.');
     }
     const response = await fetch(
