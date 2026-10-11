@@ -4,7 +4,9 @@ import {
   NotFoundException
 } from '@nestjs/common';
 import { BookingDirection, Prisma } from '@prisma/client';
-import { randomInt } from 'crypto';
+import { randomBytes, randomInt, randomUUID } from 'crypto';
+import bcrypt from 'bcryptjs';
+import { normalizeInternationalPhone } from '../common/phone';
 import { isPastServiceDate, parseDateOnly } from '../common/service-date';
 import { AuthUser } from '../iam/auth-user.type';
 import { MediaService } from '../media/media.service';
@@ -229,7 +231,98 @@ export class BookingsService {
     };
   }
 
-  async create(user: AuthUser, dto: CreateBookingDto) {
+  /**
+   * A guest request never claims an existing user's account based on their phone.
+   * Newly-created accounts remain suspended pending out-of-band phone verification.
+   */
+  async createGuest(dto: CreateBookingDto) {
+    const phone = normalizeInternationalPhone(dto.passengerPhone);
+    const request = { ...dto, passengerPhone: phone };
+
+    // Idempotency must be checked before creating a provisional account.
+    if (dto.clientRequestId) {
+      const prior = await this.prisma.trip.findUnique({
+        where: { clientRequestId: dto.clientRequestId },
+        select: { id: true, contactPhone: true, bookingReference: true, bookingSource: true }
+      });
+      if (prior) {
+        if (prior.bookingSource !== 'GUEST' || prior.contactPhone !== phone) {
+          throw new BadRequestException('معرف طلب الحجز مستخدم بالفعل.');
+        }
+        return { bookingReference: prior.bookingReference, accepted: true };
+      }
+    }
+
+    // Validate the date and price before provisioning an account.
+    const date = parseDateOnly(dto.travelDate);
+    if (!date || isPastServiceDate(date)) {
+      throw new BadRequestException('يجب اختيار تاريخ رحلة صالح وغير ماضٍ.');
+    }
+    await this.resolveQuote({
+      routeId: dto.routeId,
+      direction: dto.direction,
+      bookingType: dto.bookingType,
+      vehicleClass: dto.vehicleClass,
+      passengerCount: dto.passengerCount,
+      luggageCount: dto.luggageCount
+    });
+    if (dto.flightTicketMediaId) {
+      throw new BadRequestException('إرفاق التذكرة يتطلب حسابًا. يمكنك تعبئة بيانات الرحلة يدويًا.');
+    }
+
+    const existing = await this.prisma.user.findUnique({
+      where: { phone },
+      select: { id: true }
+    });
+    let accountId: string | null = null;
+    let temporaryPassword: string | undefined;
+    if (!existing) {
+      const passengerRole = await this.prisma.role.findUniqueOrThrow({
+        where: { code: 'PASSENGER' }
+      });
+      const parts = dto.passengerName.trim().split(/\s+/);
+      const firstName = parts.shift() ?? 'مسافر';
+      const lastName = parts.join(' ') || 'طريق الشام';
+      const proposedPassword = randomBytes(18).toString('base64url');
+      try {
+        const newAccount = await this.prisma.user.create({
+          data: {
+            // Keep legacy email-based accounts compatible until optional email is migrated.
+            email: `guest-${randomUUID()}@accounts.tareeqalsham.invalid`,
+            phone,
+            firstName,
+            lastName,
+            passwordHash: await bcrypt.hash(proposedPassword, 12),
+            status: 'SUSPENDED',
+            whatsappOptIn: false,
+            passengerProfile: { create: {} },
+            roles: { create: { roleId: passengerRole.id } }
+          },
+          select: { id: true }
+        });
+        accountId = newAccount.id;
+        temporaryPassword = proposedPassword;
+      } catch (error) {
+        // Concurrent requests for the same phone must not overwrite its account.
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) {
+          throw error;
+        }
+      }
+    }
+
+    const actor = accountId ? ({ sub: accountId, roles: ['PASSENGER'] } as AuthUser) : null;
+    const booking = await this.create(actor, request, {
+      guest: true,
+      temporaryPassword
+    });
+    return { bookingReference: booking.bookingReference, accepted: true };
+  }
+
+  async create(
+    user: AuthUser | null,
+    dto: CreateBookingDto,
+    options?: { guest?: boolean; temporaryPassword?: string }
+  ) {
     const travelDate = parseDateOnly(dto.travelDate);
 
     if (!travelDate || isPastServiceDate(travelDate)) {
@@ -259,7 +352,7 @@ export class BookingsService {
       ? await this.prisma.mediaAsset.findFirst({
           where: {
             id: dto.flightTicketMediaId,
-            uploadedById: user.sub,
+            uploadedById: user?.sub ?? '',
             purpose: 'FLIGHT_TICKET',
             deletedAt: null
           },
@@ -386,7 +479,7 @@ export class BookingsService {
 
       await this.prisma.auditLog.create({
         data: {
-          actorId: user.sub,
+          actorId: user?.sub ?? null,
           action: 'booking.idempotent_refresh',
           entityType: 'Trip',
           entityId: refreshed.id,
@@ -418,7 +511,7 @@ export class BookingsService {
       const existing = await this.prisma.trip.findFirst({
         where: {
           clientRequestId: dto.clientRequestId,
-          passengerId: user.sub
+          passengerId: user?.sub ?? null
         },
         include: bookingInclude
       });
@@ -435,7 +528,9 @@ export class BookingsService {
       booking = await this.prisma.trip.create({
         data: {
           clientRequestId: dto.clientRequestId,
-          passengerId: user.sub,
+          passengerId: user?.sub ?? null,
+          bookingSource: options?.guest ? 'GUEST' : 'AUTHENTICATED',
+          accountLinkStatus: user ? 'LINKED' : 'UNLINKED',
           status: 'PENDING_DISPATCH',
           bookingReviewStatus: 'NEW',
           bookingReference,
@@ -443,7 +538,7 @@ export class BookingsService {
           statusHistory: {
             create: {
               to: 'PENDING_DISPATCH',
-              actorId: user.sub,
+              actorId: user?.sub ?? null,
               note: 'Booking submitted and awaiting administration confirmation'
             }
           }
@@ -459,7 +554,7 @@ export class BookingsService {
         const existing = await this.prisma.trip.findFirst({
           where: {
             clientRequestId: dto.clientRequestId,
-            passengerId: user.sub
+            passengerId: user?.sub ?? null
           },
           include: bookingInclude
         });
@@ -473,7 +568,7 @@ export class BookingsService {
 
     await this.prisma.auditLog.create({
       data: {
-        actorId: user.sub,
+        actorId: user?.sub ?? null,
         action: 'booking.create',
         entityType: 'Trip',
         entityId: booking.id,
@@ -493,7 +588,7 @@ export class BookingsService {
       }
     });
 
-    await this.telegram.enqueueBookingCreated(booking.id);
+    await this.telegram.enqueueBookingCreated(booking.id, options?.temporaryPassword);
 
     this.realtime.bookingCreated({
       tripId: booking.id,
