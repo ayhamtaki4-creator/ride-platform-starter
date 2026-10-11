@@ -72,7 +72,7 @@ export class RealtimeGateway
           }
         });
 
-        if (!user || user.status !== 'ACTIVE') {
+        if (!user || user.status !== 'ACTIVE' || user.mustChangePassword) {
           throw new Error('Inactive user');
         }
 
