@@ -5,7 +5,7 @@ import { WhatsAppService } from '../whatsapp/whatsapp.service';
 
 export type TripRealtimeEvent = {
   tripId: string;
-  passengerId: string;
+  passengerId: string | null;
   driverId?: string | null;
   previousDriverId?: string | null;
   status: string;
@@ -645,7 +645,7 @@ export class RealtimeEventsService {
   }
 
   private async createNotification(input: {
-    userId: string;
+    userId: string | null;
     type: string;
     title: string;
     message: string;
@@ -655,6 +655,7 @@ export class RealtimeEventsService {
     dedupeKey?: string | null;
     metadata?: unknown;
   }): Promise<void> {
+    if (!input.userId) return; // Guest bookings have no recipient account.
     try {
       const notification =
         await this.prisma.notification.create({
