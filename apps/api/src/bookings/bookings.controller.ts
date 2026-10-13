@@ -29,6 +29,7 @@ import { BookingRoutePlanService } from './booking-route-plan.service';
 import { BookingsService } from './bookings.service';
 import { BookingQuoteDto } from './dto/booking-quote.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
+import { ClaimGuestBookingDto } from './dto/claim-guest-booking.dto';
 import { FlightTicketsService } from './flight-tickets.service';
 
 @ApiTags('Bookings')
@@ -104,6 +105,16 @@ export class BookingsController {
     const booking = await this.bookingsService.create(user, dto);
     void this.routePlans.syncPendingBooking(booking.id);
     return booking;
+  }
+
+  @ApiBearerAuth()
+  @Permissions('booking:read:own')
+  @Post('claim-guest')
+  claimGuestBooking(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ClaimGuestBookingDto
+  ) {
+    return this.bookingsService.claimGuestBooking(user, dto.clientRequestId);
   }
 
   @ApiBearerAuth()

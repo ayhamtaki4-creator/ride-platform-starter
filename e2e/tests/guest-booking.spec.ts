@@ -115,4 +115,85 @@ test.describe("Public guest booking", () => {
     const originalGuestBooking = await prisma.trip.findUniqueOrThrow({ where: { clientRequestId: requestId } });
     expect(originalGuestBooking.passengerId).toBeNull();
   });
+  test("claims a guest booking only with its secret proof and matching registered phone", async ({ request }) => {
+    const guestPhone = phone();
+    const otherPhone = phone();
+    const secret = randomUUID();
+    const response = await bookAsGuest(request, guestPhone, secret);
+    expect(response.status(), await response.text()).toBe(201);
+    const { bookingReference } = (await response.json()) as { bookingReference: string };
+
+    const unauthenticated = await request.post(`${apiBaseURL}/bookings/claim-guest`, {
+      data: { clientRequestId: secret },
+    });
+    expect([401, 403]).toContain(unauthenticated.status());
+
+    const otherRegister = await request.post(`${apiBaseURL}/auth/register`, {
+      data: {
+        firstName: "Another",
+        lastName: "Passenger",
+        email: `guest-other-${randomUUID()}@example.com`,
+        phone: otherPhone,
+        password: "TestPassword123!",
+        whatsappOptIn: false,
+      },
+    });
+    expect(otherRegister.status(), await otherRegister.text()).toBe(201);
+    const otherToken = ((await otherRegister.json()) as { accessToken: string }).accessToken;
+    const rejected = await request.post(`${apiBaseURL}/bookings/claim-guest`, {
+      headers: { Authorization: `Bearer ${otherToken}` },
+      data: { clientRequestId: secret },
+    });
+    expect(rejected.status(), await rejected.text()).toBe(201);
+    expect((await rejected.json()).linked).toBe(false);
+    expect((await prisma.trip.findUniqueOrThrow({ where: { clientRequestId: secret } })).passengerId).toBeNull();
+
+    const register = await request.post(`${apiBaseURL}/auth/register`, {
+      data: {
+        firstName: "True",
+        lastName: "Passenger",
+        email: `guest-real-${randomUUID()}@example.com`,
+        phone: guestPhone,
+        password: "TestPassword123!",
+        whatsappOptIn: false,
+      },
+    });
+    expect(register.status(), await register.text()).toBe(201);
+    const session = (await register.json()) as { accessToken: string; user: { id: string } };
+
+    // Matching a phone does not silently expose old guest bookings.
+    const beforeClaim = await request.get(`${apiBaseURL}/bookings/me`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    expect(beforeClaim.ok()).toBeTruthy();
+    expect((await beforeClaim.json()) as Array<{ bookingReference: string }>).not.toContainEqual(
+      expect.objectContaining({ bookingReference }),
+    );
+
+    const claim = await request.post(`${apiBaseURL}/bookings/claim-guest`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+      data: { clientRequestId: secret },
+    });
+    expect(claim.status(), await claim.text()).toBe(201);
+    const result = (await claim.json()) as { linked: boolean; bookingId: string | null };
+    expect(result.linked).toBe(true);
+    expect(result.bookingId).toBeTruthy();
+
+    // Duplicate claims are safe and cannot transfer ownership.
+    const retry = await request.post(`${apiBaseURL}/bookings/claim-guest`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+      data: { clientRequestId: secret },
+    });
+    expect(retry.status(), await retry.text()).toBe(201);
+    expect((await retry.json()).linked).toBe(true);
+
+    const mine = await request.get(`${apiBaseURL}/bookings/me`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    expect(mine.ok()).toBeTruthy();
+    const ownTrips = (await mine.json()) as Array<{ id: string; bookingReference: string }>;
+    expect(ownTrips.some((booking) => booking.id === result.bookingId && booking.bookingReference === bookingReference)).toBe(true);
+    expect((await prisma.trip.findUniqueOrThrow({ where: { clientRequestId: secret } })).passengerId).toBe(session.user.id);
+  });
+
 });

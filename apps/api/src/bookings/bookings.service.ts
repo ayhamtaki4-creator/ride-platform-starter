@@ -720,6 +720,65 @@ export class BookingsService {
     return this.serialize(booking);
   }
 
+  /**
+   * An unverified phone number is NOT enough to claim a guest's travel details.
+   * Require both the authenticated passenger's matching phone AND the private,
+   * cryptographically generated idempotency UUID retained by the booking browser.
+   * The atomic update prevents two accounts from claiming the same reservation.
+   */
+  async claimGuestBooking(user: AuthUser, clientRequestId: string) {
+    const passenger = await this.prisma.user.findUnique({
+      where: { id: user.sub },
+      select: { phone: true, status: true }
+    });
+    if (!passenger?.phone || passenger.status !== 'ACTIVE') {
+      throw new BadRequestException('يلزم وجود حساب مسافر نشط ورقم هاتف لربط الحجز.');
+    }
+
+    const where = {
+      clientRequestId,
+      contactPhone: passenger.phone,
+      bookingSource: 'GUEST' as const
+    };
+    const updated = await this.prisma.trip.updateMany({
+      where: {
+        ...where,
+        passengerId: null,
+        accountLinkStatus: 'UNLINKED'
+      },
+      data: {
+        passengerId: user.sub,
+        accountLinkStatus: 'LINKED'
+      }
+    });
+
+    // Retrying after a lost response must report success for the same owner.
+    const booking = await this.prisma.trip.findFirst({
+      where: {
+        ...where,
+        passengerId: user.sub,
+        accountLinkStatus: 'LINKED'
+      },
+      select: { id: true }
+    });
+    if (updated.count === 1 && booking) {
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: user.sub,
+          action: 'booking.guest.claimed',
+          entityType: 'Trip',
+          entityId: booking.id,
+          metadata: { proof: 'clientRequestId+matchingAccountPhone' }
+        }
+      });
+    }
+
+    return {
+      linked: Boolean(booking),
+      bookingId: booking?.id ?? null
+    };
+  }
+
   async mine(user: AuthUser) {
     const bookings = await this.prisma.trip.findMany({
       where: {

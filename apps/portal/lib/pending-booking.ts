@@ -35,14 +35,17 @@ export type PendingBooking = {
 };
 
 export function createPendingBookingId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
+  // This UUID is also retained as a private guest-booking ownership proof.
+  // Do not fall back to Math.random(): predictable UUIDs could expose trips.
+  if (typeof crypto === "undefined" || typeof crypto.getRandomValues !== "function") {
+    throw new Error("يتطلب الحجز متصفحًا يدعم التشفير الآمن.");
   }
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (value) => {
-    const random = Math.floor(Math.random() * 16);
-    const digit = value === "x" ? random : (random & 0x3) | 0x8;
-    return digit.toString(16);
-  });
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export function savePendingBooking(draft: Omit<PendingBooking, "savedAt">) {

@@ -20,6 +20,7 @@ import {
   refreshAccessToken,
 } from "@/lib/api";
 import { AuthUser, LoginResponse } from "@/lib/types";
+import { claimSavedGuestBookings } from "@/lib/guest-booking-claims";
 
 type SessionResponse = Omit<LoginResponse, "refreshToken"> & {
   refreshToken?: string;
@@ -214,6 +215,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ email, password }),
     });
 
+    // Claim only reservations whose private proof remains on this device.
+    // A matching phone number alone is never sufficient to expose trip details.
+    if (response.user.roles.includes("PASSENGER")) {
+      await claimSavedGuestBookings(response.accessToken);
+    }
     storeSession(response);
     return response.user;
   }, [storeSession]);
@@ -232,6 +238,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify(input),
     });
 
+    // Claim only reservations whose private proof remains on this device.
+    // A matching phone number alone is never sufficient to expose trip details.
+    if (response.user.roles.includes("PASSENGER")) {
+      await claimSavedGuestBookings(response.accessToken);
+    }
     storeSession(response);
     return response.user;
   }, [storeSession]);
