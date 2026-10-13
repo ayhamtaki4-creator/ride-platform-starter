@@ -26,10 +26,18 @@ async function bootstrap() {
     config.get<string>('WEB_ORIGIN') ??
     'http://localhost:3000';
 
-  const webOrigins = webOriginsValue
-    .split(',')
-    .map((origin) => origin.trim().replace(/\/+$/, ''))
-    .filter(Boolean);
+  const webOrigins = Array.from(
+    new Set([
+      ...webOriginsValue
+        .split(',')
+        .map((origin) => origin.trim().replace(/\/+$/, ''))
+        .filter(Boolean),
+      // Public booking portal: allow image/gallery API requests from both hosts
+      // even when Render still has the previous domain in WEB_ORIGINS.
+      'https://tareeqalsham.com',
+      'https://www.tareeqalsham.com'
+    ])
+  );
 
   if (webOrigins.includes('*')) {
     throw new Error(
