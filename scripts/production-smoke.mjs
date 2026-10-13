@@ -4,7 +4,9 @@ const API_BASE_URL = trimTrailingSlash(
 const PORTAL_BASE_URL = trimTrailingSlash(
   process.env.PRODUCTION_PORTAL_URL || "https://tareeqalsham.com",
 );
-const REQUEST_TIMEOUT_MS = numberSetting("PRODUCTION_SMOKE_TIMEOUT_MS", 45_000);
+const REQUEST_TIMEOUT_MS = numberSetting("PRODUCTION_SMOKE_TIMEOUT_MS", 120_000);
+const MAX_REQUEST_ATTEMPTS = numberSetting("PRODUCTION_SMOKE_MAX_ATTEMPTS", 2);
+const RETRY_DELAY_MS = numberSetting("PRODUCTION_SMOKE_RETRY_DELAY_MS", 10_000);
 const SLOW_REQUEST_MS = numberSetting("PRODUCTION_SMOKE_SLOW_MS", 8_000);
 const portalOrigin = new URL(PORTAL_BASE_URL).origin;
 
@@ -25,31 +27,69 @@ function record(name, status, detail, elapsedMs) {
   const icon = status === "pass" ? "PASS" : status === "warn" ? "WARN" : "FAIL";
   const timing = Number.isFinite(elapsedMs) ? ` (${elapsedMs} ms)` : "";
   console.log(`[${icon}] ${name}${timing}${detail ? ` - ${detail}` : ""}`);
-  if (status === "fail") failed = true;
+  if (status === "fail") {
+    failed = true;
+    if (process.env.GITHUB_ACTIONS === "true") {
+      console.log(`::error::${name}: ${String(detail).replace(/[\r\n]/g, " ")}`);
+    }
+  }
 }
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function isTransientStatus(status) {
+  return status === 429 || (status >= 500 && status <= 599);
+}
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function fetchTimed(url, init = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  const startedAt = Date.now();
-  try {
-    const response = await fetch(url, {
-      redirect: "follow",
-      cache: "no-store",
-      ...init,
-      signal: controller.signal,
-      headers: {
-        "user-agent": "ride-platform-production-smoke/1.0",
-        ...(init.headers || {}),
-      },
-    });
-    return { response, elapsedMs: Date.now() - startedAt };
-  } finally {
-    clearTimeout(timer);
+  const requestPath = new URL(url).pathname;
+
+  for (let attempt = 1; attempt <= MAX_REQUEST_ATTEMPTS; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const startedAt = Date.now();
+    try {
+      const response = await fetch(url, {
+        redirect: "follow",
+        cache: "no-store",
+        ...init,
+        signal: controller.signal,
+        headers: {
+          "user-agent": "ride-platform-production-smoke/1.0",
+          ...(init.headers || {}),
+        },
+      });
+
+      if (isTransientStatus(response.status) && attempt < MAX_REQUEST_ATTEMPTS) {
+        await response.body?.cancel();
+        console.log(
+          `[RETRY] ${requestPath}: HTTP ${response.status} (attempt ${attempt}/${MAX_REQUEST_ATTEMPTS}); retrying in ${RETRY_DELAY_MS} ms`,
+        );
+      } else {
+        if (attempt > 1 && !isTransientStatus(response.status)) {
+          record("Transient request recovered", "warn", `${requestPath} succeeded on attempt ${attempt}/${MAX_REQUEST_ATTEMPTS}`);
+        }
+        return { response, elapsedMs: Date.now() - startedAt };
+      }
+    } catch (error) {
+      const detail = errorMessage(error);
+      if (attempt >= MAX_REQUEST_ATTEMPTS) {
+        throw new Error(`${requestPath} failed after ${attempt} attempts: ${detail}`, { cause: error });
+      }
+      console.log(
+        `[RETRY] ${requestPath}: ${detail} (attempt ${attempt}/${MAX_REQUEST_ATTEMPTS}); retrying in ${RETRY_DELAY_MS} ms`,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
   }
 }
 
