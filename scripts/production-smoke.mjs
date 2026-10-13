@@ -206,6 +206,24 @@ await run("Public routes API", async () => {
   return { elapsedMs, detail: `${body.length} bookable route(s)` };
 });
 
+await run("Public homepage car photos without authentication", async () => {
+  const { response, elapsedMs } = await fetchTimed(`${API_BASE_URL}/home/showcase`, {
+    headers: { origin: portalOrigin },
+  });
+  assert(response.status === 200, `HTTP ${response.status} (expected public access)`);
+  const body = await responseJson(response);
+  assert(Array.isArray(body), "showcase response is not an array");
+  assert(
+    body.every((item) => typeof item?.imageUrl === "string" && item.imageUrl.startsWith("https://")),
+    "showcase includes an invalid or non-HTTPS image URL",
+  );
+  assert(
+    response.headers.get("access-control-allow-origin") === portalOrigin,
+    "showcase response does not allow the production portal origin",
+  );
+  return { elapsedMs, detail: `${body.length} public car photo(s)` };
+});
+
 await run("Public guest booking API route", async () => {
   const { response, elapsedMs } = await fetchTimed(`${API_BASE_URL}/bookings/guest`, {
     method: "POST",
