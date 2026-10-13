@@ -32,8 +32,20 @@ export function InternationalPhoneInput({
         country="sy"
         preferredCountries={["sy", "lb", "jo"]}
         value={value.replace(/\D/g, "")}
-        onChange={(digits) => {
-          const normalized = digits.replace(/\D/g, "");
+        onChange={(digits, country) => {
+          let normalized = digits.replace(/\D/g, "");
+          // react-phone-input-2 already pre-fills the dial code. When a customer
+          // pastes a complete international number, some browsers append a second
+          // dial code (e.g. 9639639...). Strip only a *full-length* duplicate,
+          // not a legitimate national number that happens to start with 963.
+          const info = typeof country === "object" && country !== null ? country : null;
+          const dial = info && "dialCode" in info ? String(info.dialCode).replace(/\D/g, "") : "";
+          const iso = info && "countryCode" in info ? String(info.countryCode).toLowerCase() : "";
+          const minNationalDigits = iso === "sy" ? 9 : iso === "lb" ? 7 : iso === "jo" ? 8 : 7;
+          if (dial && normalized.startsWith(dial + dial) &&
+              normalized.length >= dial.length * 2 + minNationalDigits) {
+            normalized = normalized.slice(dial.length);
+          }
           onChange(normalized ? `+${normalized}` : "");
         }}
         localization={arabicCountries}

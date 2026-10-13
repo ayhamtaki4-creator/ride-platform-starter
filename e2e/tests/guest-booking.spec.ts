@@ -196,4 +196,80 @@ test.describe("Public guest booking", () => {
     expect((await prisma.trip.findUniqueOrThrow({ where: { clientRequestId: secret } })).passengerId).toBe(session.user.id);
   });
 
+  test("shows and retries same-device guest booking claims from My Bookings", async ({ request, page }) => {
+    const number = phone();
+    const secret = randomUUID();
+    const guest = await bookAsGuest(request, number, secret);
+    expect(guest.status(), await guest.text()).toBe(201);
+    const { bookingReference } = (await guest.json()) as { bookingReference: string };
+    const registration = await request.post(`${apiBaseURL}/auth/register`, {
+      data: {
+        firstName: "Recovery",
+        lastName: "Passenger",
+        email: `guest-recovery-${randomUUID()}@example.com`,
+        phone: number,
+        password: "TestPassword123!",
+        whatsappOptIn: false,
+      },
+    });
+    expect(registration.status(), await registration.text()).toBe(201);
+    const session = (await registration.json()) as {
+      accessToken: string;
+      refreshToken?: string;
+      user: { id: string; roles: string[] };
+    };
+    await page.addInitScript(({ secret, bookingReference, session }) => {
+      localStorage.setItem("ride_access_token", session.accessToken);
+      if (session.refreshToken) localStorage.setItem("ride_refresh_token", session.refreshToken);
+      localStorage.setItem("ride_user", JSON.stringify(session.user));
+      localStorage.setItem("tareeq_guest_booking_claims_v1", JSON.stringify([
+        { clientRequestId: secret, bookingReference, savedAt: Date.now() },
+      ]));
+    }, { secret, bookingReference, session });
+
+    await page.goto("/rider/bookings");
+    await page.getByText("لديك حجز سابق دون حساب؟ اربطه بحسابك").click();
+    await expect(page.getByText(/وجدنا 1 حجز ضيف محفوظًا في هذا المتصفح/)).toBeVisible();
+    await page.getByRole("button", { name: "ربط حجوزات هذا الجهاز" }).click();
+    await expect(page.getByText("تم ربط 1 حجز بحسابك. يمكنك الآن متابعة تفاصيل الرحلات.")).toBeVisible();
+    await expect(page.getByText(bookingReference).first()).toBeVisible();
+    const trip = await prisma.trip.findUniqueOrThrow({ where: { clientRequestId: secret } });
+    expect(trip.passengerId).toBe(session.user.id);
+  });
+
+  test("automatically links a stored guest proof when the passenger registers in the same browser", async ({ request, page }) => {
+    const number = phone();
+    const secret = randomUUID();
+    const guest = await bookAsGuest(request, number, secret);
+    expect(guest.status(), await guest.text()).toBe(201);
+    const { bookingReference } = (await guest.json()) as { bookingReference: string };
+    await page.addInitScript(({ secret, bookingReference }) => {
+      localStorage.setItem("tareeq_guest_booking_claims_v1", JSON.stringify([
+        { clientRequestId: secret, bookingReference, savedAt: Date.now() },
+      ]));
+    }, { secret, bookingReference });
+
+    await page.goto("/register");
+    await page.getByLabel("الاسم الأول").fill("Same");
+    await page.getByLabel("الاسم الأخير").fill("Browser");
+    await page.getByLabel("البريد الإلكتروني").fill(`same-browser-${randomUUID()}@example.com`);
+    // Paste the full international number: the dial code must NOT be doubled.
+    await page.locator('input[name="phone"]').fill(number);
+    await page.locator('input[autocomplete="new-password"]').nth(0).fill("TestPassword123!");
+    await page.locator('input[autocomplete="new-password"]').nth(1).fill("TestPassword123!");
+    const registerRequest = page.waitForRequest((req) =>
+      req.method() === "POST" && req.url().endsWith("/api/auth/register"),
+    );
+    await page.getByRole("button", { name: "إنشاء الحساب" }).click();
+    const submittedRegistration = await registerRequest;
+    expect((submittedRegistration.postDataJSON() as { phone: string }).phone).toBe(number);
+
+    await expect.poll(async () => {
+      const trip = await prisma.trip.findUnique({ where: { clientRequestId: secret } });
+      return trip?.accountLinkStatus;
+    }, { timeout: 15000 }).toBe("LINKED");
+    await page.goto("/rider/bookings");
+    await expect(page.getByText(bookingReference).first()).toBeVisible();
+  });
+
 });

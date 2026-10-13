@@ -10,7 +10,13 @@ import { Shell } from "@/components/shell";
 import { Icon } from "@/components/ui/icon";
 import { useRiderBookings } from "@/hooks/use-rider-bookings";
 import { sortTripsNewestFirst } from "@/lib/completed-bookings";
-import { claimGuestBooking, forgetGuestBookingClaim } from "@/lib/guest-booking-claims";
+import {
+  claimGuestBooking,
+  claimSavedGuestBookings,
+  forgetGuestBookingClaim,
+  savedGuestBookingClaims,
+  type GuestBookingClaim,
+} from "@/lib/guest-booking-claims";
 import {
   getBookingTab,
   isBookingCancelled,
@@ -44,6 +50,49 @@ export default function RiderBookingsPage() {
   const [guestClaimBusy, setGuestClaimBusy] = useState(false);
   const [guestClaimMessage, setGuestClaimMessage] = useState("");
   const [guestClaimError, setGuestClaimError] = useState("");
+  const [savedClaims, setSavedClaims] = useState<GuestBookingClaim[]>([]);
+  const [retryingSavedClaims, setRetryingSavedClaims] = useState(false);
+
+  function refreshSavedClaims() {
+    setSavedClaims(savedGuestBookingClaims());
+  }
+
+  useEffect(() => {
+    refreshSavedClaims();
+  }, []);
+
+  async function retrySavedGuestClaims() {
+    setGuestClaimError("");
+    setGuestClaimMessage("");
+    const stored = savedGuestBookingClaims();
+    if (!stored.length) {
+      setGuestClaimError("لا توجد رموز ربط محفوظة في هذا المتصفح. استخدم الرمز الخاص من صفحة تأكيد الحجز الأصلية.");
+      return;
+    }
+    const token = localStorage.getItem("ride_access_token");
+    if (!token) {
+      setGuestClaimError("أعد تسجيل الدخول ثم جرّب ربط الحجز.");
+      return;
+    }
+    setRetryingSavedClaims(true);
+    try {
+      const linked = await claimSavedGuestBookings(token);
+      refreshSavedClaims();
+      reload();
+      if (linked > 0) {
+        setGuestClaimMessage(`تم ربط ${linked} حجز بحسابك. يمكنك الآن متابعة تفاصيل الرحلات.`);
+      } else {
+        setGuestClaimError(
+          "لم يتم ربط أي حجز. تأكد أن رقم هاتف حسابك يطابق رقم الحجز، أو جرّب لاحقًا إذا كان الاتصال ضعيفًا."
+        );
+      }
+    } catch {
+      setGuestClaimError("تعذر الاتصال بالخادم. حاول مرة أخرى.");
+    } finally {
+      setRetryingSavedClaims(false);
+    }
+  }
+
 
   async function submitGuestClaim(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,6 +107,7 @@ export default function RiderBookingsPage() {
         return;
       }
       forgetGuestBookingClaim(proof);
+      refreshSavedClaims();
       setGuestClaimCode("");
       setGuestClaimMessage("تم ربط الحجز بحسابك، وستظهر تفاصيله في حجوزاتي.");
       reload();
@@ -147,10 +197,29 @@ export default function RiderBookingsPage() {
 
         <details className="panel" style={{ marginBottom: 20, padding: "18px 22px" }}>
           <summary style={{ cursor: "pointer", fontWeight: 700 }}>لديك حجز سابق دون حساب؟ اربطه بحسابك</summary>
+          {savedClaims.length > 0 ? (
+            <div className="notice success" style={{ marginTop: 14 }}>
+              <strong>وجدنا {savedClaims.length} حجز ضيف محفوظًا في هذا المتصفح.</strong>
+              <p>يمكنك ربطها بحسابك الآن، دون إعادة الحجز ودون الحاجة إلى OTP.</p>
+              <button
+                className="button primary"
+                type="button"
+                onClick={() => void retrySavedGuestClaims()}
+                disabled={retryingSavedClaims || guestClaimBusy}
+              >
+                {retryingSavedClaims ? "جارٍ ربط الحجوزات..." : "ربط حجوزات هذا الجهاز"}
+              </button>
+            </div>
+          ) : (
+            <p style={{ marginTop: 12, lineHeight: 1.8 }}>
+              لا توجد رموز ربط محفوظة لهذا الموقع في المتصفح الحالي.
+              إذا أجريت الحجز من عنوان آخر أو متصفح مختلف، افتح صفحة تأكيد الحجز الأصلية
+              وانسخ «رمز ربط الحجز الخاص»، ثم أدخله أدناه. لا يكفي رقم الحجز العام وحده.
+            </p>
+          )}
           <p style={{ marginTop: 12, lineHeight: 1.8 }}>
-            إذا حجزت من جهاز آخر، أدخل رمز الربط الخاص الذي ظهر بعد تأكيد الحجز.
-            يجب أن يطابق رقم هاتف حسابك رقم الهاتف المستخدم في الحجز.
-            رقم الحجز وحده لا يكفي لحماية بياناتك.
+            لربط حجز من جهاز آخر، أدخل الرمز الخاص من صفحة تأكيد الحجز.
+            يشترط أن يطابق رقم هاتف الحساب الرقم المستخدم في الحجز لحماية خصوصيتك.
           </p>
           <form onSubmit={(event) => void submitGuestClaim(event)} style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
             <label style={{ flex: "1 1 270px" }}>

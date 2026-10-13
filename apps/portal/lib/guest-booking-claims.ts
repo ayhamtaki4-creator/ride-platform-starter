@@ -45,6 +45,11 @@ export function rememberGuestBookingClaim(clientRequestId: string, bookingRefere
   saveClaims([...others, { clientRequestId, bookingReference, savedAt: Date.now() }]);
 }
 
+/** Read-only proof summary for the passenger's recovery UI. Never send codes to telemetry. */
+export function savedGuestBookingClaims(): GuestBookingClaim[] {
+  return readClaims();
+}
+
 export function guestBookingClaimForReference(bookingReference: string | null): GuestBookingClaim | null {
   if (!bookingReference) return null;
   return readClaims().find((item) => item.bookingReference === bookingReference) ?? null;
