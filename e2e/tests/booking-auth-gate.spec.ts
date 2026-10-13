@@ -22,3 +22,20 @@ test("old activation link now shows signup options instead of OTP form", async (
   await expect(page.getByRole("link", { name: "إنشاء حساب جديد" })).toBeVisible();
   await expect(page.getByRole("button", { name: "إرسال رمز التحقق" })).toHaveCount(0);
 });
+
+
+test("guest booking receipt retains a private claim proof only on the booking browser", async ({ page }) => {
+  const clientRequestId = "12345678-1234-4123-8123-123456789abc";
+  await page.addInitScript((proof) => {
+    localStorage.setItem("tareeq_guest_booking_claims_v1", JSON.stringify([
+      { clientRequestId: proof, bookingReference: "LOCAL-BOOKING", savedAt: Date.now() },
+    ]));
+  }, clientRequestId);
+  await page.goto("/booking/success?ref=LOCAL-BOOKING");
+  await expect(page.getByText(/ستُربط الرحلة بحسابك تلقائيًا/)).toBeVisible();
+  await page.getByText("ستستخدم جهازًا آخر؟ احتفظ برمز ربط الحجز").click();
+  await expect(page.getByLabel("رمز ربط الحجز الخاص")).toHaveValue(clientRequestId);
+
+  await page.goto("/booking/success?ref=SOMEONE-ELSE");
+  await expect(page.getByText("ستستخدم جهازًا آخر؟ احتفظ برمز ربط الحجز")).toHaveCount(0);
+});
