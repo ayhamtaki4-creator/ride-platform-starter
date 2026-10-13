@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { ProtectedRoute } from "@/components/protected-route";
 import { RiderBookingCard } from "@/components/rider/booking-card";
@@ -10,6 +10,7 @@ import { Shell } from "@/components/shell";
 import { Icon } from "@/components/ui/icon";
 import { useRiderBookings } from "@/hooks/use-rider-bookings";
 import { sortTripsNewestFirst } from "@/lib/completed-bookings";
+import { claimGuestBooking, forgetGuestBookingClaim } from "@/lib/guest-booking-claims";
 import {
   getBookingTab,
   isBookingCancelled,
@@ -39,6 +40,33 @@ export default function RiderBookingsPage() {
   const [query, setQuery] = useState("");
   const [direction, setDirection] = useState<BookingDirection | "ALL">("ALL");
   const [page, setPage] = useState(1);
+  const [guestClaimCode, setGuestClaimCode] = useState("");
+  const [guestClaimBusy, setGuestClaimBusy] = useState(false);
+  const [guestClaimMessage, setGuestClaimMessage] = useState("");
+  const [guestClaimError, setGuestClaimError] = useState("");
+
+  async function submitGuestClaim(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setGuestClaimBusy(true);
+    setGuestClaimError("");
+    setGuestClaimMessage("");
+    const proof = guestClaimCode.trim();
+    try {
+      const result = await claimGuestBooking(proof);
+      if (!result.linked) {
+        setGuestClaimError("تعذر ربط هذا الحجز. تأكد من رمز الربط وأن رقم هاتف حسابك يطابق الرقم الذي حجزت به.");
+        return;
+      }
+      forgetGuestBookingClaim(proof);
+      setGuestClaimCode("");
+      setGuestClaimMessage("تم ربط الحجز بحسابك، وستظهر تفاصيله في حجوزاتي.");
+      reload();
+    } catch {
+      setGuestClaimError("تعذر ربط هذا الحجز. تأكد من الرمز والاتصال بالإنترنت، ثم أعد المحاولة.");
+    } finally {
+      setGuestClaimBusy(false);
+    }
+  }
 
   const activeBookings = useMemo(
     () => bookings.filter((booking) => !isBookingCompleted(booking) && !isBookingCancelled(booking)),
@@ -116,6 +144,33 @@ export default function RiderBookingsPage() {
             <Icon name="wifi" size={17} /> {isRefreshing ? "جارٍ التحديث..." : "تحديث"}
           </button>
         </div>
+
+        <details className="panel" style={{ marginBottom: 20, padding: "18px 22px" }}>
+          <summary style={{ cursor: "pointer", fontWeight: 700 }}>لديك حجز سابق دون حساب؟ اربطه بحسابك</summary>
+          <p style={{ marginTop: 12, lineHeight: 1.8 }}>
+            إذا حجزت من جهاز آخر، أدخل رمز الربط الخاص الذي ظهر بعد تأكيد الحجز.
+            يجب أن يطابق رقم هاتف حسابك رقم الهاتف المستخدم في الحجز.
+            رقم الحجز وحده لا يكفي لحماية بياناتك.
+          </p>
+          <form onSubmit={(event) => void submitGuestClaim(event)} style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
+            <label style={{ flex: "1 1 270px" }}>
+              <span className="label">رمز ربط الحجز</span>
+              <input
+                className="input ltr-input"
+                value={guestClaimCode}
+                onChange={(event) => setGuestClaimCode(event.target.value)}
+                placeholder="xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
+                autoComplete="off"
+                required
+              />
+            </label>
+            <button className="button primary" type="submit" disabled={guestClaimBusy}>
+              {guestClaimBusy ? "جارٍ الربط..." : "ربط الحجز"}
+            </button>
+          </form>
+          {guestClaimMessage ? <p className="notice success" role="status">{guestClaimMessage}</p> : null}
+          {guestClaimError ? <p className="notice error" role="alert">{guestClaimError}</p> : null}
+        </details>
 
         <section className="panel rider-bookings-panel">
           <div className="rider-booking-tabs" role="tablist" aria-label="تصفية الحجوزات حسب الحالة">
