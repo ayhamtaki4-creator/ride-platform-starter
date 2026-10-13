@@ -253,10 +253,16 @@ test.describe("Public guest booking", () => {
     await page.getByLabel("الاسم الأول").fill("Same");
     await page.getByLabel("الاسم الأخير").fill("Browser");
     await page.getByLabel("البريد الإلكتروني").fill(`same-browser-${randomUUID()}@example.com`);
+    // Paste the full international number: the dial code must NOT be doubled.
     await page.locator('input[name="phone"]').fill(number);
     await page.locator('input[autocomplete="new-password"]').nth(0).fill("TestPassword123!");
     await page.locator('input[autocomplete="new-password"]').nth(1).fill("TestPassword123!");
+    const registerRequest = page.waitForRequest((req) =>
+      req.method() === "POST" && req.url().endsWith("/api/auth/register"),
+    );
     await page.getByRole("button", { name: "إنشاء الحساب" }).click();
+    const submittedRegistration = await registerRequest;
+    expect((submittedRegistration.postDataJSON() as { phone: string }).phone).toBe(number);
 
     await expect.poll(async () => {
       const trip = await prisma.trip.findUnique({ where: { clientRequestId: secret } });
