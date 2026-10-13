@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Shell } from "@/components/shell";
+import { GuestBookingProof } from "@/components/guest-booking-proof";
 
 export default async function GuestBookingSuccessPage({
   searchParams,
@@ -23,8 +24,10 @@ export default async function GuestBookingSuccessPage({
           <Link className="button" href="/register">إنشاء حساب جديد</Link>
         </div>
         <p style={{ marginTop: 20, fontSize: "0.9rem", color: "var(--muted)" }}>
-          الحجوزات التي أُرسلت كضيف لا تُضاف تلقائيًا إلى حسابك عند التسجيل.
+          عند التسجيل أو تسجيل الدخول من هذا المتصفح بنفس رقم هاتف الحجز،
+          ستُربط الرحلة بحسابك تلقائيًا لتتمكن من عرض تفاصيلها ومتابعتها.
         </p>
+        <GuestBookingProof bookingReference={bookingReference} />
         <p><Link href="/">العودة إلى الرئيسية</Link></p>
       </main>
     </Shell>
