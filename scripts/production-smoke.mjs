@@ -221,7 +221,18 @@ await run("Public homepage car photos without authentication", async () => {
     response.headers.get("access-control-allow-origin") === portalOrigin,
     "showcase response does not allow the production portal origin",
   );
-  return { elapsedMs, detail: `${body.length} public car photo(s)` };
+  // The browser loads the image separately from the JSON. Verify the public
+  // media endpoint (and its R2 redirect, if enabled) is usable anonymously.
+  if (body.length) {
+    const image = await fetchTimed(body[0].imageUrl);
+    assert(image.response.status === 200, `public image returned HTTP ${image.response.status}`);
+    assert(
+      image.response.headers.get("content-type")?.startsWith("image/"),
+      "public image URL does not return an image content type",
+    );
+    await image.response.body?.cancel();
+  }
+  return { elapsedMs, detail: `${body.length} public car photo(s); first image reachable` };
 });
 
 await run("Public guest booking API route", async () => {
