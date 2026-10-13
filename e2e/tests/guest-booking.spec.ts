@@ -196,4 +196,45 @@ test.describe("Public guest booking", () => {
     expect((await prisma.trip.findUniqueOrThrow({ where: { clientRequestId: secret } })).passengerId).toBe(session.user.id);
   });
 
+  test("shows and retries same-device guest booking claims from My Bookings", async ({ request, page }) => {
+    const number = phone();
+    const secret = randomUUID();
+    const guest = await bookAsGuest(request, number, secret);
+    expect(guest.status(), await guest.text()).toBe(201);
+    const { bookingReference } = (await guest.json()) as { bookingReference: string };
+    const registration = await request.post(`${apiBaseURL}/auth/register`, {
+      data: {
+        firstName: "Recovery",
+        lastName: "Passenger",
+        email: `guest-recovery-${randomUUID()}@example.com`,
+        phone: number,
+        password: "TestPassword123!",
+        whatsappOptIn: false,
+      },
+    });
+    expect(registration.status(), await registration.text()).toBe(201);
+    const session = (await registration.json()) as {
+      accessToken: string;
+      refreshToken?: string;
+      user: { id: string; roles: string[] };
+    };
+    await page.addInitScript(({ secret, bookingReference, session }) => {
+      localStorage.setItem("ride_access_token", session.accessToken);
+      if (session.refreshToken) localStorage.setItem("ride_refresh_token", session.refreshToken);
+      localStorage.setItem("ride_user", JSON.stringify(session.user));
+      localStorage.setItem("tareeq_guest_booking_claims_v1", JSON.stringify([
+        { clientRequestId: secret, bookingReference, savedAt: Date.now() },
+      ]));
+    }, { secret, bookingReference, session });
+
+    await page.goto("/rider/bookings");
+    await page.getByText("لديك حجز سابق دون حساب؟ اربطه بحسابك").click();
+    await expect(page.getByText(/وجدنا 1 حجز ضيف محفوظًا في هذا المتصفح/)).toBeVisible();
+    await page.getByRole("button", { name: "ربط حجوزات هذا الجهاز" }).click();
+    await expect(page.getByText("تم ربط 1 حجز بحسابك. يمكنك الآن متابعة تفاصيل الرحلات.")).toBeVisible();
+    await expect(page.getByText(bookingReference).first()).toBeVisible();
+    const trip = await prisma.trip.findUniqueOrThrow({ where: { clientRequestId: secret } });
+    expect(trip.passengerId).toBe(session.user.id);
+  });
+
 });
