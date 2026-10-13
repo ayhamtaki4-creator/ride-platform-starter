@@ -2,6 +2,7 @@
 
 import { ROUTE_TYPE_LABELS, ServiceRoute, VehicleClassConfig } from "@/lib/admin-operations";
 import { apiFetch, apiUpload } from "@/lib/api";
+import { rememberGuestBookingClaim } from "@/lib/guest-booking-claims";
 import { reverseGeocode } from "@/lib/geocoding";
 import { formatUploadSize, optimizeMobileImageUpload } from "@/lib/mobile-image-upload";
 import {
@@ -666,6 +667,12 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         });
       }
 
+      if (!isPassenger && booking.bookingReference) {
+        // Keep the private, cryptographically generated booking proof BEFORE
+        // clearing the draft, allowing a later account with the same phone to
+        // claim this specific reservation without relying on phone ownership alone.
+        rememberGuestBookingClaim(requestId, booking.bookingReference);
+      }
       clearPendingBooking();
       await deletePendingTicket(requestId).catch(() => undefined);
       showToast(`تم إرسال الحجز ${booking.bookingReference ?? ""}.`, "success");
