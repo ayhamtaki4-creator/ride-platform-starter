@@ -2,7 +2,7 @@ const API_BASE_URL = trimTrailingSlash(
   process.env.PRODUCTION_API_URL || "https://ride-platform-starter.onrender.com/api",
 );
 const PORTAL_BASE_URL = trimTrailingSlash(
-  process.env.PRODUCTION_PORTAL_URL || "https://alnokhbaeducation.com",
+  process.env.PRODUCTION_PORTAL_URL || "https://tareeqalsham.com",
 );
 const REQUEST_TIMEOUT_MS = numberSetting("PRODUCTION_SMOKE_TIMEOUT_MS", 45_000);
 const SLOW_REQUEST_MS = numberSetting("PRODUCTION_SMOKE_SLOW_MS", 8_000);
