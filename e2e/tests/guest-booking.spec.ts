@@ -237,4 +237,33 @@ test.describe("Public guest booking", () => {
     expect(trip.passengerId).toBe(session.user.id);
   });
 
+  test("automatically links a stored guest proof when the passenger registers in the same browser", async ({ request, page }) => {
+    const number = phone();
+    const secret = randomUUID();
+    const guest = await bookAsGuest(request, number, secret);
+    expect(guest.status(), await guest.text()).toBe(201);
+    const { bookingReference } = (await guest.json()) as { bookingReference: string };
+    await page.addInitScript(({ secret, bookingReference }) => {
+      localStorage.setItem("tareeq_guest_booking_claims_v1", JSON.stringify([
+        { clientRequestId: secret, bookingReference, savedAt: Date.now() },
+      ]));
+    }, { secret, bookingReference });
+
+    await page.goto("/register");
+    await page.getByLabel("الاسم الأول").fill("Same");
+    await page.getByLabel("الاسم الأخير").fill("Browser");
+    await page.getByLabel("البريد الإلكتروني").fill(`same-browser-${randomUUID()}@example.com`);
+    await page.locator('input[name="phone"]').fill(number);
+    await page.locator('input[autocomplete="new-password"]').nth(0).fill("TestPassword123!");
+    await page.locator('input[autocomplete="new-password"]').nth(1).fill("TestPassword123!");
+    await page.getByRole("button", { name: "إنشاء الحساب" }).click();
+
+    await expect.poll(async () => {
+      const trip = await prisma.trip.findUnique({ where: { clientRequestId: secret } });
+      return trip?.accountLinkStatus;
+    }, { timeout: 15000 }).toBe("LINKED");
+    await page.goto("/rider/bookings");
+    await expect(page.getByText(bookingReference).first()).toBeVisible();
+  });
+
 });
