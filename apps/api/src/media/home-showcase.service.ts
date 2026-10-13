@@ -31,18 +31,75 @@ export class HomeShowcaseService {
       take: 120
     });
 
-    const entries = assets.flatMap((asset) => {
+    const configured = assets.flatMap((asset) => {
       const config = this.readShowcase(asset.metadata);
-      return config?.isActive ? [{ asset, config }] : [];
+      return config ? [{ asset, config }] : [];
     });
 
-    return entries
+    // Honour the administrator's curated gallery, including the choice to hide
+    // every image. When no gallery has been configured, show already-approved
+    // public fleet photos to guests without exposing driver or vehicle records.
+    if (!configured.length) return this.publicFleetImages();
+
+    return configured
+      .filter(({ config }) => config.isActive)
       .sort(
         (a, b) =>
           a.config.sortOrder - b.config.sortOrder ||
           a.asset.createdAt.getTime() - b.asset.createdAt.getTime()
       )
       .map(({ asset, config }) => this.serialize(asset.id, config));
+  }
+
+  private async publicFleetImages() {
+    const images = await this.prisma.vehicleImage.findMany({
+      where: {
+        isApproved: true,
+        vehicle: {
+          is: {
+            isActive: true,
+            driverProfile: { is: { status: 'APPROVED' } }
+          }
+        },
+        mediaAsset: {
+          is: {
+            purpose: MediaPurpose.VEHICLE_IMAGE,
+            visibility: MediaVisibility.PUBLIC,
+            status: MediaStatus.APPROVED,
+            deletedAt: null
+          }
+        }
+      },
+      select: {
+        vehicleId: true,
+        mediaAsset: { select: { id: true } },
+        vehicle: { select: { make: true, model: true, year: true } }
+      },
+      orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+      take: 120
+    });
+
+    const seenVehicles = new Set<string>();
+    const gallery: ReturnType<HomeShowcaseService['serialize']>[] = [];
+    for (const image of images) {
+      const mediaId = image.mediaAsset?.id;
+      if (!mediaId || seenVehicles.has(image.vehicleId)) continue;
+      seenVehicles.add(image.vehicleId);
+      const vehicleName = [image.vehicle.make, image.vehicle.model, image.vehicle.year]
+        .filter(Boolean)
+        .join(' ');
+      gallery.push({
+        id: mediaId,
+        titleAr: vehicleName || 'سيارة من أسطول طريق الشام',
+        subtitleAr: 'سيارة مجهزة لرحلات المسافات الطويلة.',
+        sortOrder: gallery.length,
+        isActive: true,
+        imageUrl: this.media.publicVariantUrl(mediaId, 'display')
+      });
+      if (gallery.length >= 24) break;
+    }
+
+    return gallery;
   }
 
   async adminList() {
