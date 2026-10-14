@@ -6468,3 +6468,6 @@ textarea {
 @media (max-width: 640px) {
   .booking-step-requirements { margin-inline: 12px; }
 }
+
+/* Public route discovery and SEO landing navigation */
+.public-service-links{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin:22px auto 0;max-width:1080px}.public-service-links a{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:999px;padding:11px 16px;background:#fff;color:var(--primary);font-weight:700;line-height:1.5}.public-service-links a:hover,.public-service-links a:focus-visible{border-color:var(--primary);text-decoration:underline;text-underline-offset:3px}@media(max-width:600px){.public-service-links a{width:100%;justify-content:space-between}}
