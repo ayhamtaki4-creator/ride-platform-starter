@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Metadata, Viewport } from "next";
 import { AuthProvider } from "@/components/auth-provider";
+import { AnalyticsConsentManager } from "@/components/analytics-consent";
 import { ConnectionStatusBanner } from "@/components/connection-status-banner";
 import { PwaRegistration } from "@/components/pwa-registration";
 import { ToastProvider } from "@/components/ui/toast-provider";
@@ -81,6 +82,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
         </AuthProvider>
         <ConnectionStatusBanner />
         <PwaRegistration />
+        <AnalyticsConsentManager />
       </body>
     </html>
   );
