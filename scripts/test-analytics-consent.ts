@@ -50,6 +50,12 @@ test("loads GA4 only after consent and only on public routes", () => {
   assert.equal(appendedScripts[0].src, "https://www.googletagmanager.com/gtag/js?id=G-TEST123456");
   assert.equal(analytics.initializeAnalytics(), true);
   assert.equal(appendedScripts.length, 1);
+  const queuedCommands = fakeWindow.dataLayer!.filter((row) => ["js", "config"].includes(row[0] as string));
+  assert.equal(queuedCommands.length, 2);
+  for (const command of queuedCommands) {
+    assert.equal(Object.prototype.toString.call(command), "[object Arguments]",
+      "gtag.js silently ignores Array commands; the native Arguments object is required");
+  }
   const config = fakeWindow.dataLayer!.find((row) => row[0] === "config");
   assert.equal(config?.[1], "G-TEST123456");
   assert.equal((config?.[2] as { send_page_view?: boolean }).send_page_view, false);
