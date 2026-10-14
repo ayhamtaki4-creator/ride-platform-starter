@@ -120,6 +120,8 @@ export class AdminBookingsService {
       newBookings,
       staleNewBookings,
       confirmedWithoutDriver,
+      exhaustedTelegramDeliveries,
+      delayedTelegramDeliveries,
       activeTrips,
       availableDrivers,
       financeRows,
@@ -147,6 +149,20 @@ export class AdminBookingsService {
           bookingReviewStatus: 'CONFIRMED',
           status: { in: ['PENDING_DISPATCH', 'SEARCHING_DRIVER'] },
           driverId: null
+        }
+      }),
+      // Telegram alerts exhausted their five automatic delivery attempts.
+      this.prisma.telegramDelivery.count({
+        where: { status: 'FAILED', attempts: { gte: 5 } }
+      }),
+      // Messages stuck before/during dispatch for at least 15 minutes.
+      // Never expose message contents or passenger contact data in the summary.
+      this.prisma.telegramDelivery.count({
+        where: {
+          OR: [
+            { status: 'PENDING', createdAt: { lt: new Date(Date.now() - 15 * 60 * 1000) } },
+            { status: 'SENDING', updatedAt: { lt: new Date(Date.now() - 15 * 60 * 1000) } }
+          ]
         }
       }),
       this.prisma.trip.count({
@@ -184,6 +200,8 @@ export class AdminBookingsService {
       newBookings,
       staleNewBookings,
       confirmedWithoutDriver,
+      exhaustedTelegramDeliveries,
+      delayedTelegramDeliveries,
       activeTrips,
       availableDrivers,
       revenue,
