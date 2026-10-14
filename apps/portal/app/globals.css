@@ -6048,6 +6048,70 @@ textarea {
   color: var(--muted);
 }
 
+.route-choice-details {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.route-choice-aside {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  min-width: 0;
+}
+
+.route-starting-price {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 11px;
+  border: 1px solid #c6e3d6;
+  border-radius: 11px;
+  background: #ecf9f2;
+  white-space: nowrap;
+}
+
+.route-choice-card .route-starting-price small {
+  margin: 0;
+  color: var(--primary-dark);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.route-choice-card .route-starting-price strong {
+  color: var(--primary-dark);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.route-price-note {
+  margin: 12px 2px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+@media (max-width: 480px) {
+  .route-choice-card {
+    gap: 8px;
+    padding: 11px;
+  }
+
+  .route-choice-aside {
+    gap: 5px;
+  }
+
+  .route-starting-price {
+    padding: 6px 7px;
+  }
+
+  .route-choice-card .route-starting-price strong {
+    font-size: 13px;
+  }
+}
+
 .route-booking-highlight {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
