@@ -464,6 +464,12 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     setMapWorking(false);
   }
 
+  function fieldIssue(field: BookingValidationField) {
+    return fieldErrors[field]
+      ? <small className="booking-field-error" role="alert">{fieldErrors[field]}</small>
+      : null;
+  }
+
   function showValidationIssues(issues: BookingValidationIssue[], invalidStep = step) {
     const errors: Partial<Record<BookingValidationField, string>> = {};
     for (const issue of issues) errors[issue.field] ??= issue.message;
@@ -833,6 +839,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         {step === 1 ? (
           <div className="wizard-pane">
             <div className="pane-heading"><h4>اختر خط الرحلة</h4><p>تظهر هنا المسارات الفعالة التي لديها سعر متاح.</p></div>
+            <div data-booking-field="routeId">
             {routesLoadState === "loading" ? (
                <div className="notice" role="status" data-testid="booking-api-wakeup">
                  {slowApiWakeup
@@ -857,8 +864,10 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                 ))}
               </div>
             )}
+            {fieldIssue("routeId")}
+            </div>
             <div className="pane-heading secondary-pane-heading"><h4>نوع الحجز</h4></div>
-            <div className="choice-grid">
+            <div className="choice-grid" data-booking-field="bookingType">
               {availableBookingTypes.map((value) => (
                 <button className={`choice-card ${form.bookingType === value ? "is-selected" : ""}`} type="button" key={value} onClick={() => chooseBookingType(value)}>
                   <span className="choice-icon"><Icon name={value === "SHARED_SEAT" ? "users" : "car"} size={24} /></span>
@@ -866,6 +875,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                 </button>
               ))}
             </div>
+            {fieldIssue("bookingType")}
           </div>
         ) : null}
 
@@ -889,7 +899,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
             ) : null}
 
             <div className="form-grid wizard-form-grid">
-              <label>
+              <label data-booking-field="travelDate">
                 <span className="label">{selectedRoute?.requiresFlightDetails ? flightDateLabel : "تاريخ الرحلة"}</span>
                 <DatePicker
                   selected={parseDateValue(form.travelDate)}
@@ -907,9 +917,10 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                   shouldCloseOnSelect
                   required
                 />
+                {fieldIssue("travelDate")}
               </label>
 
-              <label>
+              <label data-booking-field="flightArrivalTime">
                 <span className="label">{selectedRoute?.requiresFlightDetails ? flightTimeLabel : "وقت الرحلة"}</span>
                 <DatePicker
                   selected={parseTimeValue(form.flightArrivalTime)}
@@ -931,21 +942,23 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                   shouldCloseOnSelect
                   required={selectedRoute?.requiresFlightDetails}
                 />
+                {fieldIssue("flightArrivalTime")}
               </label>
 
-              <label><span className="label">رقم الرحلة الجوية</span><input className="input" value={form.flightNumber} onChange={(event) => update("flightNumber", event.target.value)} placeholder="مثال: ME 265" required={selectedRoute?.requiresFlightDetails} /></label>
+              <label data-booking-field="flightNumber"><span className="label">رقم الرحلة الجوية</span><input className="input" maxLength={40} aria-invalid={Boolean(fieldErrors.flightNumber)} value={form.flightNumber} onChange={(event) => update("flightNumber", event.target.value)} placeholder="مثال: ME 265" required={selectedRoute?.requiresFlightDetails} />{fieldIssue("flightNumber")}</label>
             </div>
 
             {form.bookingType === "PRIVATE_CAR" ? (
               <>
                 <div className="pane-heading secondary-pane-heading"><h4>حجم السيارة</h4><p>اختر الفئة التي تريد طلبها. السعة تُحددها إدارة المنصة.</p></div>
-                <div className="capacity-tier-grid vehicle-choice-grid">
+                <div className="capacity-tier-grid vehicle-choice-grid" data-booking-field="vehicleClass">
                   {vehicleClasses.map((config) => {
                     const price = tierPrice(config.vehicleClass);
                     const isSelected = config.vehicleClass === form.vehicleClass;
                     return <button className={`capacity-tier-card vehicle-choice-card ${isSelected ? "is-selected" : ""}`} data-vehicle-class={config.vehicleClass} disabled={!price} key={config.vehicleClass} onClick={() => update("vehicleClass", config.vehicleClass)} type="button"><span className="capacity-tier-heading"><span className="vehicle-class-title"><strong>{VEHICLE_CLASS_LABELS[config.vehicleClass]}</strong><small className="vehicle-capacity-label">تتسع حتى {config.passengerCapacity} أشخاص و{config.luggageCapacity} حقائب</small></span>{isSelected ? <span className="vehicle-selected-badge"><Icon name="check" size={13} />محددة</span> : null}</span><span className="capacity-tier-price">{price ? `${formatMoney(price.amount, price.currency)} للسيارة` : "السعر غير متاح حاليًا"}</span></button>;
                   })}
                 </div>
+                {fieldIssue("vehicleClass")}
               </>
             ) : <div className="notice">الحجز لمقعد واحد، وتختار الإدارة المركبة المناسبة للرحلة المشتركة.</div>}
           </div>
@@ -955,8 +968,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
           <div className="wizard-pane">
             <div className="pane-heading"><h4>بيانات المسافر والعناوين</h4></div>
             <div className="form-grid wizard-form-grid">
-              <label><span className="label">الاسم الكامل</span><input className="input" value={form.passengerName} onChange={(e) => update("passengerName", e.target.value)} required /></label>
-              <label><span className="label">رقم الهاتف</span><InternationalPhoneInput value={form.passengerPhone} onChange={(value) => update("passengerPhone", value)} name="passengerPhone" required /></label>
+              <label data-booking-field="passengerName"><span className="label">الاسم الكامل</span><input className="input" minLength={3} maxLength={120} aria-invalid={Boolean(fieldErrors.passengerName)} value={form.passengerName} onChange={(e) => update("passengerName", e.target.value)} required />{fieldIssue("passengerName")}</label>
+              <label data-booking-field="passengerPhone"><span className="label">رقم الهاتف مع رمز الدولة *</span><InternationalPhoneInput value={form.passengerPhone} onChange={(value) => update("passengerPhone", value)} name="passengerPhone" ariaInvalid={Boolean(fieldErrors.passengerPhone)} required /><small className="booking-field-hint">اختر الدولة وأدخل الرقم كاملًا، مثل +963944000000 أو +96171123456.</small>{fieldIssue("passengerPhone")}</label>
 
               {(canEditPickup || canEditDropoff) ? (
                 <label className="full-width notice" style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
@@ -969,7 +982,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
               ) : <div className="full-width notice">نقطتا الانطلاق والوصول ثابتتان حسب إعدادات الإدارة لهذا المسار.</div>}
 
               {form.useCustomMapLocations ? (
-                <div className="full-width" style={{ display: "grid", gap: 14 }}>
+                <div className="full-width" data-booking-field="mapLocations" style={{ display: "grid", gap: 14 }}>
                   <div className="section-heading" style={{ marginBottom: 0 }}>
                     <div><strong>اختر النقطة التي تريد تحديدها</strong><small>ستفتح الخريطة في نافذة مستقلة مناسبة للهاتف، ويمكنك البحث عن مكان أو الضغط مباشرة على الخريطة.</small></div>
                     <div className="actions">
@@ -979,20 +992,23 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                   </div>
                   <BookingLocationMap pickup={pickupMapPoint} dropoff={dropoffMapPoint} activeMode={mapSelectionMode} fitKey={`${selectedRoute?.id ?? "route"}:booking-location-picker`} onSelect={selectMapLocation} />
                   {mapWorking ? <div className="notice">جارٍ قراءة اسم المكان المحدد...</div> : <div className="booking-meta"><span>A · {canEditPickup ? "قابلة للتعديل" : "ثابتة من الإدارة"}</span><span>B · {canEditDropoff ? "قابلة للتعديل" : "ثابتة من الإدارة"}</span></div>}
+                  {fieldIssue("mapLocations")}
                 </div>
               ) : null}
 
-              <label>
+              <label data-booking-field="pickupAddress">
                 <span className="label">عنوان الالتقاط</span>
-                <input className="input" value={form.pickupAddress} onChange={(e) => canEditPickup && update("pickupAddress", e.target.value)} readOnly={!canEditPickup} required />
+                <input className="input" maxLength={180} aria-invalid={Boolean(fieldErrors.pickupAddress)} value={form.pickupAddress} onChange={(e) => canEditPickup && update("pickupAddress", e.target.value)} readOnly={!canEditPickup} required />
                 {!canEditPickup ? <small className="booking-location-policy-note">ثابت حسب إعدادات الإدارة.</small> : null}
+                {fieldIssue("pickupAddress")}
               </label>
-              <label>
+              <label data-booking-field="dropoffAddress">
                 <span className="label">عنوان الوصول</span>
-                <input className="input" value={form.dropoffAddress} onChange={(e) => canEditDropoff && update("dropoffAddress", e.target.value)} readOnly={!canEditDropoff} required />
+                <input className="input" maxLength={180} aria-invalid={Boolean(fieldErrors.dropoffAddress)} value={form.dropoffAddress} onChange={(e) => canEditDropoff && update("dropoffAddress", e.target.value)} readOnly={!canEditDropoff} required />
                 {!canEditDropoff ? <small className="booking-location-policy-note">ثابت حسب إعدادات الإدارة.</small> : null}
+                {fieldIssue("dropoffAddress")}
               </label>
-              <label className="full-width"><span className="label">ملاحظات</span><textarea className="input" rows={4} value={form.notes} onChange={(e) => update("notes", e.target.value)} /></label>
+              <label className="full-width" data-booking-field="notes"><span className="label">ملاحظات (اختياري)</span><textarea className="input" maxLength={1000} rows={4} value={form.notes} onChange={(e) => update("notes", e.target.value)} />{fieldIssue("notes")}</label>
             </div>
           </div>
         ) : null}
@@ -1012,7 +1028,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
               {form.useCustomMapLocations ? <div><span>تحديد المواقع</span><strong>تم تخصيص النقاط المسموح بها عبر الخريطة</strong></div> : null}
             </div>
             <div className="quote-card"><span>السعر التقديري</span><strong>{quote ? formatMoney(quote.passengerPrice, quote.currency) : "—"}</strong></div>
-            {!isPassenger ? <div className="notice success">يمكنك إرسال الطلب دون تسجيل دخول، وسيتم حفظ التذكرة المرفقة إن وجدت. إذا كان رقمك مسجّلًا مسبقًا فسيُحفظ الحجز كضيف دون ربطه بحسابك حتى التحقق.</div> : null}
+            {!isPassenger ? <div className="notice success">يمكنك إرسال الطلب دون تسجيل دخول. للاطلاع على تفاصيل الرحلة من حسابك لاحقًا، سجّل بنفس الرقم من هذا المتصفح أو احتفظ برمز ربط الحجز الخاص بعد التأكيد.</div> : null}
           </div>
         ) : null}
       </div>
