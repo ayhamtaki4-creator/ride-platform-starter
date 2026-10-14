@@ -107,6 +107,7 @@ test.describe("Public booking assistant", () => {
     const syriaWhatsApp = dialog.getByRole("link", { name: "واتساب سوريا" });
     await expect(syriaWhatsApp).toHaveAttribute("href", /wa\.me\/963965350502\?text=/);
     await expect(syriaWhatsApp).toHaveAttribute("target", "_blank");
+    expect(new URL((await syriaWhatsApp.getAttribute("href"))!).searchParams.get("text")).toContain("أسعار الرحلات");
     await expect(dialog.getByRole("link", { name: "واتساب لبنان" })).toHaveAttribute("href", /wa\.me\/96171967194\?text=/);
   });
 
