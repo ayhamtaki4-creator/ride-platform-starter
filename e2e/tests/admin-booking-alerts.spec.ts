@@ -27,10 +27,21 @@ test.describe("Admin booking operations alerts", () => {
   });
 
   test("alert links open the appropriate booking filter", async ({ page }) => {
-    await page.route("**/api/admin/dashboard", (route) =>
-      route.fulfill({
+    await page.route("**/api/admin/dashboard", (route) => {
+      const origin = route.request().headers()["origin"] ?? "http://127.0.0.1:3000";
+      const cors = {
+        "access-control-allow-origin": origin,
+        "access-control-allow-credentials": "true",
+        "access-control-allow-methods": "GET, OPTIONS",
+        "access-control-allow-headers": "authorization,content-type",
+      };
+      if (route.request().method() === "OPTIONS") {
+        return route.fulfill({ status: 204, headers: cors });
+      }
+      return route.fulfill({
         status: 200,
         contentType: "application/json",
+        headers: cors,
         body: JSON.stringify({
           totalBookings: 3,
           newBookings: 2,
@@ -44,8 +55,8 @@ test.describe("Admin booking operations alerts", () => {
           unpaidCompletedBookings: 0,
           latest: [],
         }),
-      }),
-    );
+      });
+    });
     await loginAs(page, "admin");
     await page.goto("/admin");
     await expect(page.getByText("حجوزات تحتاج متابعة")).toBeVisible();
