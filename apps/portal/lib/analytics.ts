@@ -14,7 +14,7 @@ const PUBLIC_SERVICE_PATHS = new Set([
 ]);
 
 type GoogleAnalyticsWindow = Window & {
-  dataLayer?: unknown[][];
+  dataLayer?: unknown[];
   gtag?: (...args: unknown[]) => void;
 };
 
@@ -96,8 +96,10 @@ export function initializeAnalytics() {
   if (document.querySelector("script[data-tareeqalsham-analytics]")) return true;
 
   target.dataLayer ??= [];
-  target.gtag ??= (...args: unknown[]) => {
-    target.dataLayer!.push(args);
+  // Google Tag expects the native `arguments` object, not an Array.
+  // Spreading parameters into an array silently drops every GA4 command.
+  target.gtag ??= function gtag() {
+    target.dataLayer!.push(arguments);
   };
   target.gtag("js", new Date());
   target.gtag("config", measurementId, {
