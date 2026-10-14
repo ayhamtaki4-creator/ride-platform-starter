@@ -86,6 +86,57 @@ test.describe("PWA and SEO foundation", () => {
     expect(await sitemap.text()).toContain(expectedSiteUrl);
   });
 
+  test("publishes indexable route-specific service pages and legal/contact pages", async ({ request }) => {
+    const indexedPaths = [
+      "/",
+      "/booking",
+      "/services",
+      "/services/damascus-beirut-airport",
+      "/services/damascus-amman-airport",
+      "/services/damascus-airport-governorates",
+      "/contact",
+      "/privacy",
+      "/terms",
+    ];
+    const sitemapResponse = await request.get("/sitemap.xml");
+    expect(sitemapResponse.status()).toBe(200);
+    const sitemapText = await sitemapResponse.text();
+
+    for (const path of indexedPaths) {
+      const canonical = path === "/" ? expectedSiteUrl : `${expectedSiteUrl}${path}`;
+      expect(sitemapText).toContain(`<loc>${canonical}</loc>`);
+      const response = await request.get(path);
+      expect(response.status(), path).toBe(200);
+      const html = await response.text();
+      expect(html, path).toContain(`href="${canonical}"`);
+    }
+
+    for (const excluded of ["/admin", "/driver", "/rider", "/track", "/login", "/register"]) {
+      expect(sitemapText).not.toContain(`<loc>${expectedSiteUrl}${excluded}`);
+    }
+  });
+
+  test("adds structured organization and service descriptions without hardcoded fares", async ({ request }) => {
+    const home = await (await request.get("/")).text();
+    expect(home).toContain('application/ld+json');
+    expect(home).toContain('"@type":"Organization"');
+    expect(home).toContain('"@type":"WebSite"');
+
+    const service = await (await request.get("/services/damascus-beirut-airport")).text();
+    expect(service).toContain('"@type":"Service"');
+    expect(service).toContain('سيارة خاصة بين دمشق ومطار بيروت');
+    expect(service).toContain('href="/booking"');
+  });
+
+  test("keeps telephone and WhatsApp contact options separate", async ({ page }) => {
+    await page.goto("/contact");
+    await expect(page.getByRole("heading", { name: "تواصل مع طريق الشام" })).toBeVisible();
+    const phone = page.getByRole("link", { name: "اتصال هاتفي" }).first();
+    await expect(phone).toHaveAttribute("href", /^tel:\+963965350502$/);
+    const whatsapp = page.getByRole("link", { name: "مراسلة دعم سوريا عبر واتساب" });
+    await expect(whatsapp).toHaveAttribute("href", /^https:\/\/wa\.me\/963965350502$/);
+  });
+
   test("sends privacy headers on public tracking pages", async ({ request }) => {
     const response = await request.get("/track/privacy-smoke-token");
     expect(response.status()).toBe(200);
