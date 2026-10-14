@@ -40,7 +40,8 @@ const financeItems: NavItem[] = [
 const publicMobileItems: NavItem[] = [
   { href: "/booking", label: "احجز رحلتك", icon: "bookings" },
   { href: "/#how-it-works", label: "كيف تعمل المنصة", icon: "route" },
-  { href: "/#services", label: "خدماتنا", icon: "car" },
+  { href: "/services", label: "خدماتنا", icon: "car" },
+  { href: "/contact", label: "تواصل معنا", icon: "phone" },
   { href: "/#faq", label: "الأسئلة الشائعة", icon: "shield" },
 ];
 
@@ -56,7 +57,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [publicMenuOpen, setPublicMenuOpen] = useState(false);
 
-  const isPublic = pathname === "/" || pathname === "/booking" || pathname === "/booking/success" || pathname === "/activate" || pathname === "/login" || pathname.startsWith("/register");
+  const isPublic = pathname === "/" || pathname === "/booking" || pathname === "/booking/success" || pathname === "/activate" || pathname === "/login" || pathname.startsWith("/register") || pathname === "/services" || pathname.startsWith("/services/") || pathname === "/contact" || pathname === "/privacy" || pathname === "/terms";
   const isAdmin = Boolean(user?.roles.some((role) => ["SUPER_ADMIN", "ADMIN", "OPERATIONS_MANAGER"].includes(role)));
   const isFinance = Boolean(user?.roles.includes("FINANCE_MANAGER"));
   const canViewFinance = Boolean(user?.roles.some((role) => ["SUPER_ADMIN", "ADMIN", "FINANCE_MANAGER"].includes(role)));
@@ -156,7 +157,8 @@ export function Shell({ children }: { children: ReactNode }) {
             <nav className="public-nav" aria-label="التنقل الرئيسي">
               <Link href="/booking">احجز رحلتك</Link>
               <Link href="/#how-it-works">كيف تعمل المنصة</Link>
-              <Link href="/#services">خدماتنا</Link>
+              <Link href="/services">خدماتنا</Link>
+              <Link href="/contact">تواصل معنا</Link>
               <Link href="/#faq">الأسئلة الشائعة</Link>
             </nav>
             <button
@@ -198,8 +200,8 @@ export function Shell({ children }: { children: ReactNode }) {
               </Link>
               <p>منصة موثوقة للحجز والمتابعة على خطوط سوريا ولبنان والأردن، بإشراف مركز عمليات وسائقين ومركبات معتمدين.</p>
             </div>
-            <div><strong>روابط سريعة</strong><Link href="/booking">الحجز</Link><Link href="/#how-it-works">طريقة العمل</Link><Link href="/login">تسجيل الدخول</Link></div>
-            <div><strong>الدعم</strong><span>خدمة ومتابعة على مدار الساعة</span><a href="tel:+963965350502">سوريا: +963 965 350 502</a><a href="tel:+96171967194">لبنان: +961 71 967 194</a><a href="https://tareeqalsham.com">tareeqalsham.com</a></div>
+            <div><strong>روابط سريعة</strong><Link href="/booking">الحجز</Link><Link href="/services">خطوط الخدمة</Link><Link href="/#how-it-works">طريقة العمل</Link><Link href="/privacy">سياسة الخصوصية</Link><Link href="/terms">شروط الحجز</Link><Link href="/login">تسجيل الدخول</Link></div>
+            <div><strong>الدعم</strong><Link href="/contact">تواصل معنا</Link><span>استفسارات الحجوزات والمتابعة</span><a href="tel:+963965350502">سوريا: +963 965 350 502</a><a href="tel:+96171967194">لبنان: +961 71 967 194</a><a href="https://tareeqalsham.com">tareeqalsham.com</a></div>
           </div>
           <div className="public-footer-bottom"><span>© 2026 طريق الشام — جميع الحقوق محفوظة</span><span>دمشق · بيروت · عمّان</span></div>
         </footer>
