@@ -2,6 +2,55 @@ import { expect, test } from "@playwright/test";
 import { loginAs } from "../helpers/auth";
 
 test.describe("Mobile API network resilience", () => {
+
+  test("starts waking an idle API on the public homepage without blocking navigation", async ({ page }) => {
+    let healthCalls = 0;
+    await page.route("**/api/health", async (route) => {
+      healthCalls += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "ok" }),
+      });
+    });
+
+    await page.goto("/");
+    await expect(page.getByRole("link", { name: /احجز رحلتك الآن/ })).toBeVisible();
+    await expect.poll(() => healthCalls).toBe(1);
+    // A public page never needs login and does not wait for API availability.
+    await expect(page.locator("#booking-card")).toHaveCount(0);
+  });
+
+  test("shows service startup feedback and safely waits for the API before listing routes", async ({ page }) => {
+    let healthCalls = 0;
+    let routeCalls = 0;
+    await page.route("**/api/health", async (route) => {
+      healthCalls += 1;
+      // Simulate a sleeping free Render instance; the booking page must not
+      // announce "no routes" or force a refresh while the API is waking.
+      await new Promise((resolve) => setTimeout(resolve, 4_800));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "ok" }),
+      });
+    });
+    await page.route("**/api/routes", async (route) => {
+      routeCalls += 1;
+      await route.continue();
+    });
+    await page.goto("/booking");
+    await expect(page.getByTestId("booking-api-wakeup")).toContainText("جارٍ تشغيل خدمة الحجز", {
+      timeout: 10_000,
+    });
+    await expect(page.getByText("لا توجد مسارات قابلة للحجز حاليًا.")).toHaveCount(0);
+    expect(routeCalls).toBe(0);
+    await expect(page.locator(".route-choice-card").first()).toBeVisible({ timeout: 20_000 });
+    expect(healthCalls).toBe(1);
+    expect(routeCalls).toBeGreaterThanOrEqual(1);
+  });
+
+
   test("retries one transient GET failure and then recovers", async ({ page }) => {
     await loginAs(page, "rider");
     let routeCalls = 0;

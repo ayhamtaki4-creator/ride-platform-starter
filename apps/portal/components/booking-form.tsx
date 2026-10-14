@@ -3,6 +3,7 @@
 import { ROUTE_TYPE_LABELS, ServiceRoute, VehicleClassConfig } from "@/lib/admin-operations";
 import { apiFetch, apiUpload } from "@/lib/api";
 import { rememberGuestBookingClaim } from "@/lib/guest-booking-claims";
+import { warmPublicApi } from "@/lib/public-api-warmup";
 import { reverseGeocode } from "@/lib/geocoding";
 import { formatUploadSize, optimizeMobileImageUpload } from "@/lib/mobile-image-upload";
 import {
@@ -152,6 +153,10 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   const { showToast } = useToast();
   const [routes, setRoutes] = useState<ServiceRoute[]>([]);
   const [routePolicies, setRoutePolicies] = useState<Record<string, RouteBookingPolicy>>({});
+  const [routesLoadState, setRoutesLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [routesLoadError, setRoutesLoadError] = useState("");
+  const [slowApiWakeup, setSlowApiWakeup] = useState(false);
+  const [routesRetryKey, setRoutesRetryKey] = useState(0);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<BookingFormState>({
     routeId: "",
@@ -248,13 +253,31 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   }, []);
 
   useEffect(() => {
-    void Promise.all([
-      apiFetch<ServiceRoute[]>("/routes", { skipAuth: true }),
-      apiFetch<RouteBookingPolicy[]>("/route-booking-policies", { skipAuth: true }),
-    ])
+    let active = true;
+    setRoutesLoadState("loading");
+    setRoutesLoadError("");
+    setSlowApiWakeup(false);
+    const slowNotice = setTimeout(() => {
+      if (active) setSlowApiWakeup(true);
+    }, 4_000);
+
+    void warmPublicApi()
+      .then(async (ready) => {
+        if (!ready) {
+          throw new Error(
+            "يتأخر اتصال خادم الحجز حاليًا. تحقق من اتصالك بالإنترنت ثم جرّب مرة أخرى."
+          );
+        }
+        return Promise.all([
+          apiFetch<ServiceRoute[]>("/routes", { skipAuth: true, timeoutMs: 25_000 }),
+          apiFetch<RouteBookingPolicy[]>("/route-booking-policies", { skipAuth: true, timeoutMs: 25_000 }),
+        ]);
+      })
       .then(([data, policies]) => {
+        if (!active) return;
         setRoutes(data);
         setRoutePolicies(Object.fromEntries(policies.map((policy) => [policy.routeId, policy])));
+        setRoutesLoadState("ready");
         const first = data.find((route) => route.bookable);
         if (first) {
           setForm((current) => {
@@ -277,8 +300,20 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
           });
         }
       })
-      .catch((caught) => setError(caught instanceof Error ? caught.message : "تعذر تحميل المسارات."));
-  }, []);
+      .catch((caught) => {
+        if (!active) return;
+        setRoutesLoadState("error");
+        setRoutesLoadError(caught instanceof Error ? caught.message : "تعذر تحميل المسارات.");
+      })
+      .finally(() => {
+        clearTimeout(slowNotice);
+        if (active) setSlowApiWakeup(false);
+      });
+    return () => {
+      active = false;
+      clearTimeout(slowNotice);
+    };
+  }, [routesRetryKey]);
 
   useEffect(() => {
     if (user && (!form.passengerName || !form.passengerPhone)) {
@@ -770,7 +805,20 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         {step === 1 ? (
           <div className="wizard-pane">
             <div className="pane-heading"><h4>اختر خط الرحلة</h4><p>تظهر هنا المسارات الفعالة التي لديها سعر متاح.</p></div>
-            {routes.length === 0 ? <div className="empty-state">لا توجد مسارات قابلة للحجز حاليًا.</div> : (
+            {routesLoadState === "loading" ? (
+               <div className="notice" role="status" data-testid="booking-api-wakeup">
+                 {slowApiWakeup
+                   ? "جارٍ تشغيل خدمة الحجز والاتصال بالخادم. قد يستغرق ذلك قرابة دقيقة بعد فترة الخمول، ولا تحتاج إلى تحديث الصفحة."
+                   : "جارٍ تجهيز المسارات والأسعار للحجز..."}
+               </div>
+             ) : routesLoadState === "error" ? (
+               <div className="notice error" role="alert">
+                 <p>{routesLoadError}</p>
+                 <button className="button" type="button" onClick={() => setRoutesRetryKey((current) => current + 1)}>
+                   إعادة محاولة تحميل المسارات
+                 </button>
+               </div>
+             ) : routes.length === 0 ? <div className="empty-state">لا توجد مسارات قابلة للحجز حاليًا.</div> : (
               <div className="dynamic-route-grid">
                 {routes.filter((route) => route.bookable).map((route) => (
                   <button className={`route-choice-card ${route.id === form.routeId ? "is-selected" : ""}`} type="button" key={route.id} onClick={() => chooseRoute(route)}>
@@ -943,7 +991,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       {error ? <div className="notice error">{error}</div> : null}
       <div className="wizard-actions">
         {step > 1 ? <button className="button" type="button" onClick={() => setStep((current) => current - 1)}>السابق</button> : <span />}
-        {step < 4 ? <button className="button primary" type="button" disabled={working || ticketWorking || mapWorking} onClick={() => void nextStep()}>التالي</button> : <button className="button primary" type="submit" disabled={working || ticketWorking || mapWorking}>{working ? "جارٍ الإرسال..." : "تأكيد وإرسال الحجز"}</button>}
+        {step < 4 ? <button className="button primary" type="button" disabled={working || ticketWorking || mapWorking || (step === 1 && routesLoadState !== "ready")} onClick={() => void nextStep()}>التالي</button> : <button className="button primary" type="submit" disabled={working || ticketWorking || mapWorking}>{working ? "جارٍ الإرسال..." : "تأكيد وإرسال الحجز"}</button>}
       </div>
     </form>
   );

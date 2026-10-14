@@ -9,6 +9,7 @@ import { NotificationCenter } from "./notification-center";
 import { Icon, IconName } from "./ui/icon";
 import { dashboardHomeForRoles } from "@/lib/role-home";
 import { convertTelephoneLinksToWhatsApp } from "@/lib/whatsapp-link";
+import { warmPublicApi } from "@/lib/public-api-warmup";
 
 type NavItem = { href: string; label: string; icon: IconName };
 
@@ -114,6 +115,14 @@ export function Shell({ children }: { children: ReactNode }) {
     setDrawerOpen(false);
     setPublicMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (isPublic) {
+      // Begin Render's cold start while the visitor is reading the Cloudflare
+      // hosted landing or account pages. Never block page rendering.
+      void warmPublicApi();
+    }
+  }, [isPublic]);
 
   useEffect(() => {
     convertTelephoneLinksToWhatsApp(document);
