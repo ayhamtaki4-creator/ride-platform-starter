@@ -134,7 +134,7 @@ export function AssistantLiveQuote({ onBack }: { onBack: () => void }) {
       {loadState === "ready" && route ? (
         <div className={styles.quoteForm}>
           <label htmlFor="assistant-route">اختر المسار</label>
-          <select id="assistant-route" value={route.id} onChange={(event) => {
+          <select id="assistant-route" disabled={quoteBusy} value={route.id} onChange={(event) => {
             setRouteId(event.target.value);
             const next = routes.find((item) => item.id === event.target.value);
             setVehicleClass(next ? validClasses(next)[0] ?? "SMALL" : "SMALL");
@@ -143,12 +143,12 @@ export function AssistantLiveQuote({ onBack }: { onBack: () => void }) {
             clearQuote();
           }}>
             {routes.map((item) => (
-              <option key={item.id} value={item.id}>{item.origin.nameAr} ← {item.destination.nameAr}</option>
+              <option key={item.id} value={item.id}>من {item.origin.nameAr} إلى {item.destination.nameAr}</option>
             ))}
           </select>
 
           <label htmlFor="assistant-class">فئة السيارة</label>
-          <select id="assistant-class" value={selectedClass} onChange={(event) => {
+          <select id="assistant-class" disabled={quoteBusy} value={selectedClass} onChange={(event) => {
             setVehicleClass(event.target.value as VehicleClass);
             setPassengers(1);
             setLuggage(0);
@@ -163,13 +163,13 @@ export function AssistantLiveQuote({ onBack }: { onBack: () => void }) {
           <div className={styles.quoteCounts}>
             <div>
               <label htmlFor="assistant-passengers">الركاب</label>
-              <select id="assistant-passengers" value={currentPassengers} onChange={(event) => { setPassengers(Number(event.target.value)); clearQuote(); }}>
+              <select id="assistant-passengers" disabled={quoteBusy} value={currentPassengers} onChange={(event) => { setPassengers(Number(event.target.value)); clearQuote(); }}>
                 {Array.from({ length: allowedPassengers }, (_, index) => index + 1).map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
             <div>
               <label htmlFor="assistant-luggage">الحقائب</label>
-              <select id="assistant-luggage" value={currentLuggage} onChange={(event) => { setLuggage(Number(event.target.value)); clearQuote(); }}>
+              <select id="assistant-luggage" disabled={quoteBusy} value={currentLuggage} onChange={(event) => { setLuggage(Number(event.target.value)); clearQuote(); }}>
                 {Array.from({ length: allowedLuggage + 1 }, (_, index) => index).map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
