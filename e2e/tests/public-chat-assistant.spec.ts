@@ -124,11 +124,11 @@ test.describe("Public booking assistant", () => {
     await page.goto("/");
     await page.getByRole("button", { name: "فتح مساعد طريق الشام" }).click();
     const dialog = page.getByRole("dialog", { name: "مساعد طريق الشام" });
-    await dialog.getByRole("textbox", { name: "اكتب سؤالك" }).fill("إذا تأخرت عن موعد السفر شو أعمل؟");
+    await dialog.getByRole("textbox", { name: "اكتب سؤالك" }).fill("إذا وصلت الطائرة متأخرة لمطار بيروت شو أعمل؟");
     await dialog.getByRole("button", { name: "إرسال السؤال" }).click();
 
     await expect(dialog.getByText("يمكنك مراجعة المسارات من صفحة خدماتنا.")).toBeVisible();
-    expect(requestBody).toMatchObject({ message: "إذا تأخرت عن موعد السفر شو أعمل؟" });
+    expect(requestBody).toMatchObject({ message: "إذا وصلت الطائرة متأخرة لمطار بيروت شو أعمل؟" });
   });
 
   test("assistant is also available on booking page", async ({ page }) => {
