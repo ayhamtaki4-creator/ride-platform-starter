@@ -1,6 +1,7 @@
+import { canonicalizeInternationalPhone, INTERNATIONAL_PHONE_MESSAGE, INTERNATIONAL_PHONE_PATTERN } from '../../common/phone';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { VehicleClass } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
@@ -113,7 +114,8 @@ export class UpdateBookingDto {
   @ApiPropertyOptional({ example: '+963944000000' })
   @IsOptional()
   @IsString()
-  @Matches(/^\+?[0-9][0-9\s-]{7,20}$/)
+  @Transform(({ value }) => canonicalizeInternationalPhone(value))
+  @Matches(INTERNATIONAL_PHONE_PATTERN, { message: INTERNATIONAL_PHONE_MESSAGE })
   passengerPhone?: string;
 
   @ApiPropertyOptional({ nullable: true, example: 'تأخرت الرحلة الجوية' })
