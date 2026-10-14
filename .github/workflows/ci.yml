@@ -41,6 +41,9 @@ jobs:
         env:
           SERVICE_TIME_ZONE: Asia/Damascus
 
+      - name: Verify booking phone validation
+        run: pnpm --filter api exec tsx scripts/test-booking-phone-validation.ts
+
       - name: Lint portal
         run: pnpm --filter portal lint
 
