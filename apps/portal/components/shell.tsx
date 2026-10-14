@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "./auth-provider";
 import { DriverTrackingRecoveryBridge } from "./driver-tracking-recovery-bridge";
 import { AnalyticsPreferencesButton } from "./analytics-consent";
+import { SiteAssistant } from "./site-assistant";
 import { NotificationCenter } from "./notification-center";
 import { Icon, IconName } from "./ui/icon";
 import { dashboardHomeForRoles } from "@/lib/role-home";
@@ -206,6 +207,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
           <div className="public-footer-bottom"><span>© 2026 طريق الشام — جميع الحقوق محفوظة</span><span>دمشق · بيروت · عمّان</span><AnalyticsPreferencesButton /></div>
         </footer>
+        <SiteAssistant />
       </div>
     );
   }
