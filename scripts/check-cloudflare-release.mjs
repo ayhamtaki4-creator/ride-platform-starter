@@ -96,6 +96,36 @@ try {
   console.error(`FAIL cold-start booking UI: ${error instanceof Error ? error.message : String(error)}`);
 }
 
+
+/** Latest booking validation: public release bundle must contain wizard guards. */
+try {
+  const bookingUrl = new URL("/booking", base);
+  const response = await fetch(bookingUrl, {
+    signal: AbortSignal.timeout(30000),
+    headers: { "user-agent": "tareeq-al-sham-release-check/1.0" },
+  });
+  if (!response.ok) throw new Error(`Booking HTML returned ${response.status}`);
+  const html = await response.text();
+  const chunkPaths = [...new Set(
+    [...html.matchAll(/\/_next\/static\/chunks\/[^"'<>\\\s]+?\.js/g)].map(([path]) => path),
+  )].slice(0, 60);
+  if (!chunkPaths.length) throw new Error("No booking JS chunks found");
+  const matches = await Promise.allSettled(chunkPaths.map(async path => {
+    const asset = await fetch(new URL(path, base), { signal: AbortSignal.timeout(20000) });
+    if (!asset.ok) return false;
+    const js = await asset.text();
+    return js.includes("رقم الهاتف غير مكتمل أو غير صحيح") &&
+           js.includes("للمتابعة: أدخل الاسم الكامل ورقم الهاتف الدولي الصحيح");
+  }));
+  const validated = matches.some(item => item.status === "fulfilled" && item.value);
+  console.log(`${validated ? "PASS" : "FAIL"} Arabic phone validation and step requirements deployed: scanned ${chunkPaths.length} booking chunks`);
+  if (!validated) failed += 1;
+} catch (error) {
+  failed += 1;
+  console.error(`FAIL Arabic booking validation release: ${error instanceof Error ? error.message : String(error)}`);
+}
+
+
 if (failed) {
   console.error(`${failed} production checks did not pass. Do not consider Cloudflare published.`);
   process.exitCode = 1;
