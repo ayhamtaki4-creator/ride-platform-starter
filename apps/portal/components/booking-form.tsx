@@ -160,6 +160,24 @@ function firstPricedVehicleClass(route: ServiceRoute, bookingType: BookingType):
   );
 }
 
+function getRouteStartingPrice(route: ServiceRoute): { amount: number; currency: string } | null {
+  const prices = route.pricingRules
+    .filter((rule) => rule.bookingType === "PRIVATE_CAR" && rule.isActive !== false)
+    .map((rule) => ({
+      amount: Number(rule.passengerPrice),
+      currency: rule.currency?.trim().toUpperCase(),
+    }))
+    .filter((price) => Number.isFinite(price.amount) && price.amount >= 0 && Boolean(price.currency));
+
+  if (prices.length === 0) return null;
+  // Prices in different currencies cannot be compared without exchange rates.
+  const currency = prices.some((price) => price.currency === "USD") ? "USD" : prices[0].currency;
+  return {
+    amount: Math.min(...prices.filter((price) => price.currency === currency).map((price) => price.amount)),
+    currency,
+  };
+}
+
 export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -876,15 +894,32 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                </div>
              ) : routes.length === 0 ? <div className="empty-state">لا توجد مسارات قابلة للحجز حاليًا.</div> : (
               <div className="dynamic-route-grid">
-                {routes.filter((route) => route.bookable).map((route) => (
-                  <button className={`route-choice-card ${route.id === form.routeId ? "is-selected" : ""}`} type="button" key={route.id} onClick={() => chooseRoute(route)}>
-                    <span className="choice-icon"><Icon name={route.requiresFlightDetails ? "plane" : "route"} size={24} /></span>
-                    <span><strong>{route.nameAr}</strong><small>{ROUTE_TYPE_LABELS[route.routeType]} · {route.estimatedMinutes ? `${route.estimatedMinutes} دقيقة` : "المدة حسب التشغيل"}</small></span>
-                    {route.id === form.routeId ? <Icon name="check" size={18} /> : null}
-                  </button>
-                ))}
+                {routes.filter((route) => route.bookable).map((route) => {
+                  const startingPrice = getRouteStartingPrice(route);
+                  return (
+                    <button className={`route-choice-card ${route.id === form.routeId ? "is-selected" : ""}`} type="button" key={route.id} onClick={() => chooseRoute(route)}>
+                      <span className="choice-icon"><Icon name={route.requiresFlightDetails ? "plane" : "route"} size={24} /></span>
+                      <span className="route-choice-details">
+                        <strong>{route.nameAr}</strong>
+                        <small>{ROUTE_TYPE_LABELS[route.routeType]} · {route.estimatedMinutes ? `${route.estimatedMinutes} دقيقة` : "المدة حسب التشغيل"}</small>
+                      </span>
+                      <span className="route-choice-aside">
+                        {startingPrice ? (
+                          <span className="route-starting-price" aria-label={`السعر يبدأ من ${formatMoney(startingPrice.amount, startingPrice.currency)}`}>
+                            <small>ابتداءً من</small>
+                            <strong><bdi>{formatMoney(startingPrice.amount, startingPrice.currency === "USD" ? "$" : startingPrice.currency)}</bdi></strong>
+                          </span>
+                        ) : null}
+                        {route.id === form.routeId ? <Icon name="check" size={18} aria-hidden="true" /> : null}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
+            {routesLoadState === "ready" && routes.some((route) => route.bookable) ? (
+              <p className="route-price-note">السعر المبدئي لأقل فئة سيارة متاحة؛ يظهر السعر الدقيق بعد اختيار حجم السيارة.</p>
+            ) : null}
             {fieldIssue("routeId")}
             </div>
             <div className="pane-heading secondary-pane-heading"><h4>نوع الحجز</h4></div>
