@@ -76,7 +76,26 @@ try {
     })),
     gtagScripts: [...document.querySelectorAll("script")].filter(s => /googletagmanager\.com\/gtag/.test(s.src)).map(s=>new URL(s.src).hostname),
   }), measurementId);
-  report = { consentWasVisible: true, jsState, seen, failures, browserErrors: pageErrors };
+  const initialGACollect = seen.some(x => x.domain.includes("google-analytics.com") && /\\/g\\/collect/.test(x.path));
+  if (!initialGACollect) {
+    await page.evaluate((id) => {
+      // Use the documented Google tag snippet instead of the site's arrow stub.
+      window.gtag = function () { window.dataLayer.push(arguments); };
+      window.gtag("js", new Date());
+      window.gtag("config", id, {
+        send_page_view: false,
+        page_location: window.location.origin + "/",
+        page_referrer: "",
+      });
+      window.gtag("event", "page_view", {
+        page_location: window.location.origin + "/",
+        page_path: "/",
+        page_title: "طريق الشام — live probe",
+      });
+    }, measurementId);
+    await page.waitForTimeout(11000);
+  }
+  report = { consentWasVisible: true, initialGACollect, standardGtagSentCollect: seen.some(x => x.domain.includes("google-analytics.com") && /\\/g\\/collect/.test(x.path)), jsState, seen, failures, browserErrors: pageErrors };
   console.log("ANALYTICS_LIVE_PROBE " + JSON.stringify(report, null, 2));
   if (!jsState.gtagPresent) throw new Error("gtag not initialized");
   if (!seen.some(x => x.domain.includes("google-analytics.com") && /\/g\/collect/.test(x.path))) {
