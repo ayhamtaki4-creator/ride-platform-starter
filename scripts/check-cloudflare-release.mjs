@@ -65,6 +65,37 @@ try {
   console.error(`FAIL guest-claim recovery UI marker: ${error instanceof Error ? error.message : String(error)}`);
 }
 
+
+/**
+ * Release parity check: the cold-start booking experience is shipped in
+ * client-side route chunks, not the SSR HTML. Scan public assets only.
+ */
+try {
+  const response = await fetch(new URL("/booking", base), {
+    signal: AbortSignal.timeout(30000),
+    headers: { "user-agent": "tareeq-al-sham-release-check/1.0" },
+  });
+  const html = await response.text();
+  if (!response.ok) throw new Error(`Booking HTML returned ${response.status}`);
+  const chunks = [...new Set(
+    [...html.matchAll(/\/_next\/static\/chunks\/[^"'<>\\\s]+?\.js/g)].map(([url]) => url),
+  )].slice(0, 60);
+  if (!chunks.length) throw new Error("No booking JavaScript assets found");
+  const probes = await Promise.allSettled(chunks.map(async path => {
+    const asset = await fetch(new URL(path, base), { signal: AbortSignal.timeout(20000) });
+    if (!asset.ok) return false;
+    const js = await asset.text();
+    return js.includes("جارٍ تشغيل خدمة الحجز والاتصال بالخادم") &&
+           js.includes("إعادة محاولة تحميل المسارات");
+  }));
+  const found = probes.some(item => item.status === "fulfilled" && item.value);
+  console.log(`${found ? "PASS" : "FAIL"} Render cold-start booking UX on Cloudflare: scanned ${chunks.length} booking JS chunks; progress and retry=${found}`);
+  if (!found) failed += 1;
+} catch (error) {
+  failed += 1;
+  console.error(`FAIL cold-start booking UI: ${error instanceof Error ? error.message : String(error)}`);
+}
+
 if (failed) {
   console.error(`${failed} production checks did not pass. Do not consider Cloudflare published.`);
   process.exitCode = 1;
