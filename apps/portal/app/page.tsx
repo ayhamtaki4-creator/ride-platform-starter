@@ -1,7 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { HomeVehicleShowcase } from "@/components/home-vehicle-showcase";
 import { Shell } from "@/components/shell";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { publicServices } from "@/lib/public-services";
+import { serializedJsonLd, organizationSchema, websiteSchema } from "@/lib/structured-data";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 const steps = [
   { icon: "route" as const, number: "01", title: "اختر خط الرحلة", text: "اختر المسار المتاح، موعد الرحلة، وحجم السيارة المناسب لعدد الركاب والحقائب." },
@@ -41,6 +48,8 @@ const faqs = [
 export default function Home() {
   return (
     <Shell>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializedJsonLd(organizationSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializedJsonLd(websiteSchema) }} />
       <section className="home-hero">
         <div className="home-hero-content">
           <div className="hero-kicker"><span><Icon name="sparkles" size={17} /></span>نقل خاص منظم بين سوريا ولبنان والأردن</div>
@@ -103,9 +112,15 @@ export default function Home() {
             </article>
           ))}
         </div>
-        <div className="actions" style={{ justifyContent: "center", marginTop: 28 }}>
+        <div className="actions" style={{ justifyContent: "center", marginTop: 28, flexWrap: "wrap" }}>
           <Link className="button primary button-lg" href="/booking">عرض المسارات والحجز <Icon name="arrow-left" size={18} /></Link>
+          <Link className="button button-lg" href="/services">تفاصيل خدمات النقل</Link>
         </div>
+        <nav className="public-service-links" aria-label="تفاصيل خطوط النقل">
+          {publicServices.map((service) => (
+            <Link key={service.slug} href={`/services/${service.slug}`}>{service.shortTitle} <Icon name="arrow-left" size={15} /></Link>
+          ))}
+        </nav>
       </section>
 
       <HomeVehicleShowcase />
