@@ -50,6 +50,35 @@ async function bookAsGuest(request: APIRequestContext, phoneNumber: string, requ
 }
 
 test.describe("Public guest booking", () => {
+
+  test("accepts a formatted international phone and stores the canonical number", async ({ request }) => {
+    const number = phone();
+    const formatted = `${number.slice(0, 4)} (${number.slice(4, 7)}) ${number.slice(7, 10)}-${number.slice(10)}`;
+    const requestId = randomUUID();
+    const response = await bookAsGuest(request, formatted, requestId);
+    expect(response.status(), await response.text()).toBe(201);
+    const trip = await prisma.trip.findUniqueOrThrow({ where: { clientRequestId: requestId } });
+    expect(trip.contactPhone).toBe(number);
+  });
+
+  test("returns a clear Arabic message for an incomplete passenger phone", async ({ request }) => {
+    const response = await bookAsGuest(request, "+963", randomUUID());
+    expect(response.status()).toBe(400);
+    const errorText = await response.text();
+    expect(errorText).toContain("أدخل رقم هاتف دوليًا صحيحًا");
+    expect(errorText).not.toContain("regular expression");
+  });
+
+  test("accepts a valid formatted international number using 00 country prefix", async ({ request }) => {
+    const number = phone();
+    const requestId = randomUUID();
+    const internationalWith00 = "00" + number.slice(1, 4) + " " + number.slice(4);
+    const response = await bookAsGuest(request, internationalWith00, requestId);
+    expect(response.status(), await response.text()).toBe(201);
+    const trip = await prisma.trip.findUniqueOrThrow({ where: { clientRequestId: requestId } });
+    expect(trip.contactPhone).toBe(number);
+  });
+
   test.afterAll(async () => {
     await prisma.$disconnect();
   });
