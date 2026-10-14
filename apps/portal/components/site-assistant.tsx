@@ -118,7 +118,19 @@ const TOPICS: Topic[] = [
 ];
 
 const quickTopics: TopicId[] = ["booking", "prices", "routes", "status", "support"];
-const whatsappIntro = encodeURIComponent("مرحباً، أود التحدث مع موظف من فريق طريق الشام للاستفسار عن خدمة النقل.");
+const safeSupportTopics: Partial<Record<TopicId, string>> = {
+  booking: "طريقة الحجز",
+  prices: "أسعار الرحلات",
+  routes: "المسارات المتاحة",
+  guest: "الحجز دون حساب",
+  luggage: "الركاب والحقائب",
+  flight: "معلومات رحلة الطيران",
+  status: "متابعة حجز سابق",
+  driver: "بيانات السائق والتتبع",
+  change: "تعديل أو إلغاء الحجز",
+  payment: "طرق الدفع",
+  support: "خدمة العملاء",
+};
 
 const WELCOME: Message = {
   id: 0,
@@ -160,6 +172,7 @@ export function SiteAssistant() {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [sending, setSending] = useState(false);
   const [showLiveQuotes, setShowLiveQuotes] = useState(false);
+  const [supportTopic, setSupportTopic] = useState<TopicId | null>(null);
   const nextId = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -204,6 +217,7 @@ export function SiteAssistant() {
     if (!value || sending) return;
 
     const topic = findTopic(value);
+    if (topic) setSupportTopic(topic.id);
     const explicitRouteRequest = /(مسار|مسارات|خطوط|الوجهات|وجهات|الرحلات المتاحه|السفر من|طرق النقل|route)/.test(normalizeArabic(value));
     if (topic?.id === "prices" || (topic?.id === "routes" && explicitRouteRequest)) {
       appendExchange(value, topic);
@@ -257,9 +271,12 @@ export function SiteAssistant() {
   }
 
   function selectTopic(topic: Topic) {
+    setSupportTopic(topic.id);
     appendExchange(topic.title, topic);
     if (topic.id === "prices" || topic.id === "routes") setShowLiveQuotes(true);
   }
+
+  const whatsappIntro = encodeURIComponent(`مرحباً، أحتاج إلى مساعدة من فريق طريق الشام بخصوص ${supportTopic ? safeSupportTopics[supportTopic] : "خدمة النقل"}.`);
 
   return (
     <div className={styles.container} dir="rtl">
