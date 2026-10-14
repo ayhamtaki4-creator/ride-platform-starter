@@ -3,6 +3,12 @@
 import { ROUTE_TYPE_LABELS, ServiceRoute, VehicleClassConfig } from "@/lib/admin-operations";
 import { apiFetch, apiUpload } from "@/lib/api";
 import { rememberGuestBookingClaim } from "@/lib/guest-booking-claims";
+import {
+  normalizeBookingPhone,
+  validateBookingStep,
+  type BookingValidationField,
+  type BookingValidationIssue,
+} from "@/lib/booking-step-validation";
 import { warmPublicApi } from "@/lib/public-api-warmup";
 import { reverseGeocode } from "@/lib/geocoding";
 import { formatUploadSize, optimizeMobileImageUpload } from "@/lib/mobile-image-upload";
@@ -190,6 +196,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<BookingValidationField, string>>>({});
   const resumeStarted = useRef(false);
 
   const selectedRoute = useMemo(
@@ -359,6 +366,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       void deletePendingTicket(draftId).catch(() => undefined);
     }
     setQuote(null);
+    setFieldErrors({});
     setError("");
   }
 
@@ -369,12 +377,14 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       vehicleClass: selectedRoute ? firstPricedVehicleClass(selectedRoute, bookingType) : "SMALL",
     }));
     setQuote(null);
+    setFieldErrors({});
     setError("");
   }
 
   function update<K extends keyof BookingFormState>(key: K, value: BookingFormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
     if (["routeId", "bookingType", "vehicleClass"].includes(key)) setQuote(null);
+    setFieldErrors({});
     setError("");
   }
 
@@ -454,45 +464,43 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     setMapWorking(false);
   }
 
-  function validateStep() {
-    if (step === 1 && !selectedRoute) {
-      setError("اختر مسارًا متاحًا للحجز.");
+  function showValidationIssues(issues: BookingValidationIssue[], invalidStep = step) {
+    const errors: Partial<Record<BookingValidationField, string>> = {};
+    for (const issue of issues) errors[issue.field] ??= issue.message;
+    setFieldErrors(errors);
+    setError(issues[0]?.message || "");
+    setStep(invalidStep);
+    if (issues.length) {
+      // Scroll the invalid field into view and focus it for keyboard/screen readers.
+      requestAnimationFrame(() => {
+        const field = document.querySelector<HTMLElement>(
+          `[data-booking-field="${issues[0].field}"]`,
+        );
+        field?.scrollIntoView({ behavior: "smooth", block: "center" });
+        field?.querySelector<HTMLElement>("input, button, select, textarea")?.focus({ preventScroll: true });
+      });
+    }
+  }
+
+  function validateStep(targetStep = step, candidate = form) {
+    const issues = validateBookingStep(targetStep, {
+      form: candidate,
+      selectedRoute: routes.find((route) => route.id === candidate.routeId) ?? null,
+      priceAvailable: Boolean(
+        routes.find((route) => route.id === candidate.routeId)?.pricingRules.some(
+          (rule) => rule.bookingType === candidate.bookingType &&
+            rule.vehicleClass === candidate.vehicleClass &&
+            rule.isActive !== false,
+        ),
+      ),
+      minimumDate: tomorrow,
+    });
+    if (issues.length) {
+      showValidationIssues(issues, targetStep);
       return false;
     }
-    if (step === 2 && !form.travelDate) {
-      setError("حدد تاريخ الرحلة.");
-      return false;
-    }
-    if (step === 2 && form.bookingType === "PRIVATE_CAR" && !tierPrice(form.vehicleClass)) {
-      setError("السعر غير متاح لفئة السيارة المختارة.");
-      return false;
-    }
-    if (
-      step === 2 &&
-      selectedRoute?.requiresFlightDetails &&
-      (!form.flightArrivalTime || !form.flightNumber.trim())
-    ) {
-      setError("أدخل وقت الرحلة ورقم الرحلة الجوية قبل الإرسال.");
-      return false;
-    }
-    if (step === 3 && (!form.passengerName.trim() || !form.passengerPhone.trim())) {
-      setError("أدخل اسم المسافر ورقم الهاتف.");
-      return false;
-    }
-    if (step === 3 && (!form.pickupAddress.trim() || !form.dropoffAddress.trim())) {
-      setError("أدخل عنوان الالتقاط والوصول.");
-      return false;
-    }
-    if (
-      step === 3 &&
-      form.useCustomMapLocations &&
-      [form.pickupLatitude, form.pickupLongitude, form.dropoffLatitude, form.dropoffLongitude].some(
-        (value) => value === null || !Number.isFinite(value),
-      )
-    ) {
-      setError("تعذر تجهيز نقاط الخريطة. أعد فتح الخريطة وحاول مجددًا.");
-      return false;
-    }
+    setFieldErrors({});
+    setError("");
     return true;
   }
 
@@ -674,6 +682,16 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       } = candidate;
       const bookingPayload = {
         ...payload,
+        // Do not send empty optional times: class-validator @IsOptional
+        // does not consider an empty string absent, even for routes
+        // without flight details.
+        flightArrivalTime: candidate.flightArrivalTime.trim() || undefined,
+        flightNumber: candidate.flightNumber.trim() || undefined,
+        passengerName: candidate.passengerName.trim(),
+        passengerPhone: normalizeBookingPhone(candidate.passengerPhone),
+        pickupAddress: candidate.pickupAddress.trim(),
+        dropoffAddress: candidate.dropoffAddress.trim(),
+        notes: candidate.notes.trim() || undefined,
         clientRequestId: requestId,
         flightTicketMediaId: isPassenger ? candidate.flightTicketMediaId || undefined : undefined,
         vehicleClass: candidate.bookingType === "PRIVATE_CAR" ? candidate.vehicleClass : "SMALL",
@@ -733,8 +751,18 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (working || ticketWorking || mapWorking) return;
     if (step !== 4) {
       await nextStep();
+      return;
+    }
+    // The final confirmation must re-check every prior step. A restored
+    // draft or ticket extraction can change fields after navigating forward.
+    for (const targetStep of [1, 2, 3]) {
+      if (!validateStep(targetStep)) return;
+    }
+    if (!quote && !(await loadQuoteFor(form))) {
+      setError("تعذر التأكد من سعر الرحلة. تحقق من اتصالك ثم أعد المحاولة.");
       return;
     }
     await createBooking(form);
@@ -790,7 +818,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   }, [draftLoaded, isPassenger, restoredDraft, routes, user]);
 
   return (
-    <form id="booking-card" className="booking-wizard" onSubmit={submit}>
+    <form id="booking-card" className="booking-wizard" onSubmit={submit} noValidate>
       <div className="wizard-header">
         <div><span className="wizard-step-label">الخطوة {step} من 4</span><h3>{stepTitles[step - 1]}</h3></div>
         <span className="wizard-secure"><Icon name="shield" size={17} />حجز آمن</span>
@@ -988,7 +1016,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
           </div>
         ) : null}
       </div>
-      {error ? <div className="notice error">{error}</div> : null}
+      {error ? <div className="notice error" role="alert" aria-live="assertive">{error}</div> : null}
       <div className="wizard-actions">
         {step > 1 ? <button className="button" type="button" onClick={() => setStep((current) => current - 1)}>السابق</button> : <span />}
         {step < 4 ? <button className="button primary" type="button" disabled={working || ticketWorking || mapWorking || (step === 1 && routesLoadState !== "ready")} onClick={() => void nextStep()}>التالي</button> : <button className="button primary" type="submit" disabled={working || ticketWorking || mapWorking}>{working ? "جارٍ الإرسال..." : "تأكيد وإرسال الحجز"}</button>}
