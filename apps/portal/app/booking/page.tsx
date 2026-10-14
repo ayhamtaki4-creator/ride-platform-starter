@@ -1,7 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import BookingFormContent from "@/components/booking-form-lazy-content";
 import { Shell } from "@/components/shell";
 import { Icon } from "@/components/ui/icon";
+
+export const metadata: Metadata = {
+  title: "حجز سيارة خاصة للمطارات وبين المدن",
+  description: "اختر المسار وموعد السفر وفئة السيارة وشاهد السعر قبل إرسال طلب الحجز إلى طريق الشام. الحجز متاح دون تسجيل الدخول.",
+  alternates: { canonical: "/booking" },
+};
 
 export default function BookingPage() {
   return (
