@@ -1,6 +1,6 @@
-# Release 2026-10-14: Arabic booking validation and guarded step transitions.
-# A push touching this workflow triggers one guarded deployment to the
-# existing alnokhbaeducation Worker; no scheduled keepalive or DNS changes.
+# Existing production Workers Builds automatically handles main releases.
+# This separate guarded Wrangler deployment is manual only; it intentionally
+# does not deploy on push and never changes DNS or the Worker name.
 name: Cloudflare Release
 
 on:
@@ -19,12 +19,6 @@ on:
     paths:
       - ".github/workflows/cloudflare-release.yml"
       - "scripts/check-cloudflare-release.mjs"
-  # One-time guarded release when this workflow definition reaches main.
-  # Normal future portal commits still require an explicit manual deployment.
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/cloudflare-release.yml"
 
 permissions:
   contents: read
@@ -59,7 +53,7 @@ jobs:
         run: node scripts/production-smoke.mjs
 
   deploy-existing-worker:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.operation == 'deploy'))
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.operation == 'deploy'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
