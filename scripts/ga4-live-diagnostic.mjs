@@ -76,7 +76,7 @@ try {
     })),
     gtagScripts: [...document.querySelectorAll("script")].filter(s => /googletagmanager\.com\/gtag/.test(s.src)).map(s=>new URL(s.src).hostname),
   }), measurementId);
-  const initialGACollect = seen.some(x => x.domain.includes("google-analytics.com") && /\\/g\\/collect/.test(x.path));
+  const initialGACollect = seen.some(x => x.domain.includes("google-analytics.com") && x.path.includes("/g/collect"));
   if (!initialGACollect) {
     await page.evaluate((id) => {
       // Use the documented Google tag snippet instead of the site's arrow stub.
@@ -95,7 +95,7 @@ try {
     }, measurementId);
     await page.waitForTimeout(11000);
   }
-  report = { consentWasVisible: true, initialGACollect, standardGtagSentCollect: seen.some(x => x.domain.includes("google-analytics.com") && /\\/g\\/collect/.test(x.path)), jsState, seen, failures, browserErrors: pageErrors };
+  report = { consentWasVisible: true, initialGACollect, standardGtagSentCollect: seen.some(x => x.domain.includes("google-analytics.com") && x.path.includes("/g/collect")), jsState, seen, failures, browserErrors: pageErrors };
   console.log("ANALYTICS_LIVE_PROBE " + JSON.stringify(report, null, 2));
   if (!jsState.gtagPresent) throw new Error("gtag not initialized");
   if (!seen.some(x => x.domain.includes("google-analytics.com") && /\/g\/collect/.test(x.path))) {
