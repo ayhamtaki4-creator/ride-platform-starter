@@ -116,6 +116,20 @@ export async function POST(request: Request) {
   const message = scrubSensitive(input.message.trim());
   const history = parseHistory(input.history);
 
+  // Guaranteed facts use verified static replies rather than a generative estimate.
+  if (/(سعر|أسعار|اسعار|بكم|تكلف|دولار|price|cost)/i.test(message)) {
+    return json({
+      answer: "تختلف الأسعار حسب المسار وفئة السيارة المعتمدة. اختر الوجهة وفئة السيارة في /booking لمعرفة السعر الحالي قبل إرسال طلبك. لا يمكنني إعطاء سعر رقمي غير متحقق منه.",
+      source: "verified",
+    });
+  }
+  if (/(حجزي|حالة الحجز|حالة الطلب|وضع الحجز|وضع طلبي|رقم الحجز|مرجع الحجز|وين السائق|حجز سابق)/i.test(message)) {
+    return json({
+      answer: "ليس لدي صلاحية للوصول إلى الحجوزات أو تحديد موقع السائق. لمتابعة طلبك، ادخل إلى حسابك أو تواصل مع مركز العمليات عبر /contact، ولا تكتب رقم الحجز أو بياناتك الشخصية هنا.",
+      source: "verified",
+    });
+  }
+
   try {
     const output = await env.AI.run(MODEL, {
       messages: [
