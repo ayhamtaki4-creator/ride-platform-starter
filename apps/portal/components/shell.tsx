@@ -5,6 +5,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "./auth-provider";
 import { DriverTrackingRecoveryBridge } from "./driver-tracking-recovery-bridge";
+import { AnalyticsPreferencesButton } from "./analytics-consent";
 import { NotificationCenter } from "./notification-center";
 import { Icon, IconName } from "./ui/icon";
 import { dashboardHomeForRoles } from "@/lib/role-home";
@@ -203,7 +204,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <div><strong>روابط سريعة</strong><Link href="/booking">الحجز</Link><Link href="/services">خطوط الخدمة</Link><Link href="/#how-it-works">طريقة العمل</Link><Link href="/privacy">سياسة الخصوصية</Link><Link href="/terms">شروط الحجز</Link><Link href="/login">تسجيل الدخول</Link></div>
             <div><strong>الدعم</strong><Link href="/contact">تواصل معنا</Link><span>استفسارات الحجوزات والمتابعة</span><a href="tel:+963965350502">سوريا: +963 965 350 502</a><a href="tel:+96171967194">لبنان: +961 71 967 194</a><a href="https://tareeqalsham.com">tareeqalsham.com</a></div>
           </div>
-          <div className="public-footer-bottom"><span>© 2026 طريق الشام — جميع الحقوق محفوظة</span><span>دمشق · بيروت · عمّان</span></div>
+          <div className="public-footer-bottom"><span>© 2026 طريق الشام — جميع الحقوق محفوظة</span><span>دمشق · بيروت · عمّان</span><AnalyticsPreferencesButton /></div>
         </footer>
       </div>
     );
