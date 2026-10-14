@@ -5,6 +5,7 @@ export function whatsappHref(phone: string) {
 
 export function convertTelephoneLinksToWhatsApp(root: ParentNode = document) {
   root.querySelectorAll<HTMLAnchorElement>('a[href^="tel:"]').forEach((anchor) => {
+    if (anchor.dataset.contactChannel === "phone") return;
     const raw = anchor.getAttribute("href")?.slice(4) ?? "";
     const href = whatsappHref(raw);
     if (href === "#") return;
