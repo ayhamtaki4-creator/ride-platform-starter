@@ -18,5 +18,18 @@
       "pattern": "tareeqalsham.com",
       "custom_domain": true
     }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "ratelimits": [
+    {
+      "name": "CHAT_RATE_LIMIT",
+      "namespace_id": "2410801",
+      "simple": {
+        "limit": 8,
+        "period": 60
+      }
+    }
   ]
 }

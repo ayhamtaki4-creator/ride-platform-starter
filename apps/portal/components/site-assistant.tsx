@@ -155,6 +155,7 @@ export function SiteAssistant() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
+  const [sending, setSending] = useState(false);
   const nextId = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -193,12 +194,55 @@ export function SiteAssistant() {
     ]);
   }
 
-  function sendMessage(event: FormEvent<HTMLFormElement>) {
+  async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = draft.trim().slice(0, 500);
-    if (!value) return;
-    appendExchange(value, findTopic(value));
+    if (!value || sending) return;
+
+    const topic = findTopic(value);
+    const history = messages
+      .filter((message) => message.id !== 0)
+      .slice(-6)
+      .map((message) => ({
+        role: message.sender === "visitor" ? "user" : "assistant",
+        content: message.text,
+      }));
+
+    const id = nextId.current;
+    nextId.current += 2;
+    setMessages((current) => [...current.slice(-18), { id, sender: "visitor", text: value }]);
     setDraft("");
+    setSending(true);
+
+    let answer = topic?.answer || "المساعد الذكي غير متاح حالياً. يمكنك اختيار موضوع من الأسئلة السريعة أو مراسلة فريق الدعم.";
+    let href = topic?.href || "/contact";
+    let action = topic?.action || "التواصل مع الدعم";
+
+    try {
+      const response = await fetch("/api/assistant/chat", {
+        method: "POST",
+        credentials: "omit",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: value, history }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!response.ok) throw new Error("AI_UNAVAILABLE");
+      const data: unknown = await response.json();
+      if (!data || typeof data !== "object" || !("answer" in data) ||
+        typeof data.answer !== "string" || !data.answer.trim()) {
+        throw new Error("INVALID_AI_RESPONSE");
+      }
+      answer = data.answer.trim().slice(0, 1400);
+    } catch {
+      // The existing, free FAQ answers keep the visitor supported when AI is unavailable.
+    } finally {
+      setMessages((current) => [
+        ...current.slice(-19),
+        { id: id + 1, sender: "assistant", text: answer, href, action },
+      ]);
+      setSending(false);
+    }
   }
 
   function selectTopic(topic: Topic) {
@@ -213,7 +257,7 @@ export function SiteAssistant() {
             <span className={styles.headerIcon}><Icon name="sparkles" size={20} /></span>
             <div>
               <h2 id="site-assistant-heading">مساعد طريق الشام</h2>
-              <p>إجابات آلية للأسئلة الشائعة</p>
+              <p>مساعد ذكي للأسئلة والاستفسارات</p>
             </div>
             <button className={styles.close} type="button" aria-label="إغلاق المحادثة" onClick={() => setOpen(false)}>
               <Icon name="close" size={21} />
@@ -230,6 +274,7 @@ export function SiteAssistant() {
                 ) : null}
               </div>
             ))}
+            {sending ? <div className={styles.assistant} role="status"><p>جارٍ تجهيز الرد...</p></div> : null}
             <div ref={endRef} />
           </div>
           <div className={styles.suggestions} aria-label="أسئلة سريعة">
@@ -247,12 +292,13 @@ export function SiteAssistant() {
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               maxLength={500}
+              disabled={sending}
               placeholder="اكتب سؤالك هنا..."
               autoComplete="off"
             />
-            <button disabled={!draft.trim()} type="submit" aria-label="إرسال السؤال"><Icon name="arrow-left" size={20} /></button>
+            <button disabled={!draft.trim() || sending} type="submit" aria-label="إرسال السؤال"><Icon name="arrow-left" size={20} /></button>
           </form>
-          <p className={styles.disclaimer}>المساعد لا ينشئ أو يؤكد الحجوزات. لا تُرسل بيانات شخصية أو كلمات مرور في المحادثة.</p>
+          <p className={styles.disclaimer}>قد تُعالج الأسئلة عبر Cloudflare AI؛ لا تكتب معلومات شخصية أو كلمات مرور. المساعد لا ينفذ الحجوزات.</p>
         </section>
       ) : null}
       <button

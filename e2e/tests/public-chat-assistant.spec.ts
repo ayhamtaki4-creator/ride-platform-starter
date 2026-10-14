@@ -1,7 +1,10 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Public booking assistant", () => {
-  test("visitor can ask questions without signing in", async ({ page }) => {
+  test("visitor can ask questions without signing in when AI is unavailable", async ({ page }) => {
+    await page.route("**/api/assistant/chat", async (route) => {
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "AI_UNAVAILABLE" }) });
+    });
     await page.goto("/");
 
     const launcher = page.getByRole("button", { name: "فتح مساعد طريق الشام" });
@@ -21,6 +24,28 @@ test.describe("Public booking assistant", () => {
 
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
+  });
+
+
+  test("free-form Arabic questions use AI response without login", async ({ page }) => {
+    let requestBody: unknown;
+    await page.route("**/api/assistant/chat", async (route) => {
+      requestBody = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ answer: "يمكنك مراجعة المسارات من صفحة خدماتنا.", source: "workers-ai" }),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "فتح مساعد طريق الشام" }).click();
+    const dialog = page.getByRole("dialog", { name: "مساعد طريق الشام" });
+    await dialog.getByRole("textbox", { name: "اكتب سؤالك" }).fill("هل ممكن تسافروني من دمشق للمطار؟");
+    await dialog.getByRole("button", { name: "إرسال السؤال" }).click();
+
+    await expect(dialog.getByText("يمكنك مراجعة المسارات من صفحة خدماتنا.")).toBeVisible();
+    expect(requestBody).toMatchObject({ message: "هل ممكن تسافروني من دمشق للمطار؟" });
   });
 
   test("assistant is also available on booking page", async ({ page }) => {
