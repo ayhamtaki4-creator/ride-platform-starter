@@ -15,10 +15,11 @@ const fakeWindow = {
   },
   dataLayer: undefined as unknown[][] | undefined,
   gtag: undefined as ((...args: unknown[]) => void) | undefined,
-} as const;
+};
 
 const fakeDocument = {
   title: "طريق الشام",
+  referrer: "https://tareeqalsham.com/booking/success?ref=PRIVATE-REFERRER",
   querySelector: (selector: string) =>
     selector === "script[data-tareeqalsham-analytics]" ? appendedScripts[0] ?? null : null,
   createElement: (_tag: string) => ({ src: "", async: false, dataset: {} }),
@@ -42,6 +43,7 @@ test("unconfigured consent refuses loading scripts or sending events", () => {
 });
 
 test("loads GA4 only after consent and only on public routes", () => {
+  fakeWindow.location.search = "?ref=PRIVATE-REFERENCE&utm_source=facebook";
   analytics.writeAnalyticsConsent("accepted");
   assert.equal(analytics.initializeAnalytics(), true);
   assert.equal(appendedScripts.length, 1);
@@ -52,6 +54,10 @@ test("loads GA4 only after consent and only on public routes", () => {
   assert.equal(config?.[1], "G-TEST123456");
   assert.equal((config?.[2] as { send_page_view?: boolean }).send_page_view, false);
   assert.equal((config?.[2] as { allow_google_signals?: boolean }).allow_google_signals, false);
+  assert.equal((config?.[2] as { page_location?: string }).page_location, "https://tareeqalsham.com/?utm_source=facebook");
+  assert.equal((config?.[2] as { page_referrer?: string }).page_referrer, "https://tareeqalsham.com/");
+  assert.ok(!JSON.stringify(fakeWindow.dataLayer).includes("PRIVATE-REFERENCE"));
+  assert.ok(!JSON.stringify(fakeWindow.dataLayer).includes("PRIVATE-REFERRER"));
 });
 
 test("page views strip booking references and arbitrary query parameters", () => {
