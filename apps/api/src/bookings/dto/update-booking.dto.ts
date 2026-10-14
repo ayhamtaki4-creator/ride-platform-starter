@@ -1,6 +1,7 @@
+import { canonicalizeInternationalPhone, INTERNATIONAL_PHONE_MESSAGE, INTERNATIONAL_PHONE_PATTERN } from '../../common/phone';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { VehicleClass } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
@@ -24,12 +25,12 @@ import {
 export class UpdateBookingDto {
   @ApiPropertyOptional({ example: '2026-08-18' })
   @IsOptional()
-  @IsDateString()
+  @IsDateString({}, { message: 'تاريخ الرحلة غير صحيح.' })
   travelDate?: string;
 
   @ApiPropertyOptional({ example: '14:30', nullable: true })
   @IsOptional()
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'وقت الرحلة غير صحيح؛ اختر ساعة ودقيقة.' })
   flightArrivalTime?: string | null;
 
   @ApiPropertyOptional({ example: 'ME 265', nullable: true })
@@ -113,7 +114,8 @@ export class UpdateBookingDto {
   @ApiPropertyOptional({ example: '+963944000000' })
   @IsOptional()
   @IsString()
-  @Matches(/^\+?[0-9][0-9\s-]{7,20}$/)
+  @Transform(({ value }) => canonicalizeInternationalPhone(value))
+  @Matches(INTERNATIONAL_PHONE_PATTERN, { message: INTERNATIONAL_PHONE_MESSAGE })
   passengerPhone?: string;
 
   @ApiPropertyOptional({ nullable: true, example: 'تأخرت الرحلة الجوية' })

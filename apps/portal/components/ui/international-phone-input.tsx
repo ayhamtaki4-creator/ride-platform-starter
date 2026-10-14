@@ -9,6 +9,7 @@ type InternationalPhoneInputProps = {
   id?: string;
   name?: string;
   required?: boolean;
+  ariaInvalid?: boolean;
   autoComplete?: string;
   placeholder?: string;
   ariaLabel?: string;
@@ -20,6 +21,7 @@ export function InternationalPhoneInput({
   id,
   name = "phone",
   required = false,
+  ariaInvalid = false,
   autoComplete = "tel",
   placeholder = "أدخل رقم الهاتف",
   ariaLabel = "رقم الهاتف مع رمز الدولة",
@@ -65,6 +67,7 @@ export function InternationalPhoneInput({
           id,
           name,
           required,
+          "aria-invalid": ariaInvalid,
           autoComplete,
           "aria-label": ariaLabel,
           dir: "ltr",

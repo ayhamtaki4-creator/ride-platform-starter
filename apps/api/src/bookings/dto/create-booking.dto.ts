@@ -1,6 +1,7 @@
+import { canonicalizeInternationalPhone, INTERNATIONAL_PHONE_MESSAGE, INTERNATIONAL_PHONE_PATTERN } from '../../common/phone';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BookingDirection, BookingType, VehicleClass } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   Equals,
   IsDateString,
@@ -53,12 +54,12 @@ export class CreateBookingDto {
   vehicleClass: VehicleClass = VehicleClass.SMALL;
 
   @ApiProperty({ example: '2026-08-10' })
-  @IsDateString()
+  @IsDateString({}, { message: 'اختر تاريخ رحلة صحيحًا بصيغة السنة-الشهر-اليوم.' })
   travelDate!: string;
 
   @ApiPropertyOptional({ example: '14:30' })
   @IsOptional()
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'وقت الرحلة غير صحيح. اختر وقتًا بصيغة 14:30.' })
   flightArrivalTime?: string;
 
   @ApiPropertyOptional({ example: 'ME 265' })
@@ -103,9 +104,9 @@ export class CreateBookingDto {
   luggageCount = 0;
 
   @ApiProperty({ example: 'مطار بيروت الدولي' })
-  @IsString()
-  @MinLength(3)
-  @MaxLength(180)
+  @IsString({ message: 'عنوان الانطلاق مطلوب.' })
+  @MinLength(3, { message: 'اكتب عنوان انطلاق واضحًا (3 أحرف على الأقل).' })
+  @MaxLength(180, { message: 'عنوان الانطلاق طويل جدًا.' })
   pickupAddress!: string;
 
   @ApiPropertyOptional({ example: 33.5138, minimum: -90, maximum: 90 })
@@ -125,9 +126,9 @@ export class CreateBookingDto {
   pickupLongitude?: number;
 
   @ApiProperty({ example: 'فندق الشام - دمشق' })
-  @IsString()
-  @MinLength(3)
-  @MaxLength(180)
+  @IsString({ message: 'عنوان الوصول مطلوب.' })
+  @MinLength(3, { message: 'اكتب عنوان وصول واضحًا (3 أحرف على الأقل).' })
+  @MaxLength(180, { message: 'عنوان الوصول طويل جدًا.' })
   dropoffAddress!: string;
 
   @ApiPropertyOptional({ example: 33.8209, minimum: -90, maximum: 90 })
@@ -147,14 +148,15 @@ export class CreateBookingDto {
   dropoffLongitude?: number;
 
   @ApiProperty({ example: 'عمر حداد' })
-  @IsString()
-  @MinLength(3)
-  @MaxLength(120)
+  @IsString({ message: 'اسم المسافر مطلوب.' })
+  @MinLength(3, { message: 'أدخل اسم المسافر الكامل (3 أحرف على الأقل).' })
+  @MaxLength(120, { message: 'اسم المسافر طويل جدًا.' })
   passengerName!: string;
 
   @ApiProperty({ example: '+963944000000' })
   @IsString()
-  @Matches(/^\+?[0-9][0-9\s-]{7,20}$/)
+  @Transform(({ value }) => canonicalizeInternationalPhone(value))
+  @Matches(INTERNATIONAL_PHONE_PATTERN, { message: INTERNATIONAL_PHONE_MESSAGE })
   passengerPhone!: string;
 
   @ApiPropertyOptional({ example: 'كرسي طفل عند الإمكان' })

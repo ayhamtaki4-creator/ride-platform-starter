@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { bookingPhoneError, normalizeBookingPhone } from "@/lib/booking-step-validation";
 import { reverseGeocode } from "@/lib/geocoding";
 import {
   Trip,
@@ -50,6 +51,7 @@ export function BookingEditForm({ booking, admin = false, onSaved }: BookingEdit
   const [luggageCount, setLuggageCount] = useState(booking.luggageCount ?? 0);
   const [passengerName, setPassengerName] = useState(booking.contactName ?? "");
   const [passengerPhone, setPassengerPhone] = useState(booking.contactPhone ?? "");
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const [notes, setNotes] = useState(booking.notes ?? "");
   const [changeNote, setChangeNote] = useState("");
   const [pickupAddress, setPickupAddress] = useState(booking.pickupAddress);
@@ -118,6 +120,12 @@ export function BookingEditForm({ booking, admin = false, onSaved }: BookingEdit
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving) return;
+    const phoneIssue = bookingPhoneError(passengerPhone);
+    if (phoneIssue) {
+      setPhoneTouched(true);
+      showToast(phoneIssue, "error");
+      return;
+    }
     setSaving(true);
     try {
       const endpointPayload = {
@@ -140,7 +148,7 @@ export function BookingEditForm({ booking, admin = false, onSaved }: BookingEdit
             passengerCount,
             luggageCount,
             passengerName,
-            passengerPhone,
+            passengerPhone: normalizeBookingPhone(passengerPhone),
             notes: notes || null,
             ...endpointPayload,
             ...(admin ? { changeNote: changeNote.trim() || undefined } : {}),
@@ -268,10 +276,14 @@ export function BookingEditForm({ booking, admin = false, onSaved }: BookingEdit
           <span className="label">رقم الهاتف</span>
           <InternationalPhoneInput
             value={passengerPhone}
-            onChange={setPassengerPhone}
+            onChange={(value) => { setPassengerPhone(value); setPhoneTouched(true); }}
+            ariaInvalid={phoneTouched && Boolean(bookingPhoneError(passengerPhone))}
             required
             name="booking-edit-phone"
           />
+          {phoneTouched && bookingPhoneError(passengerPhone)
+            ? <small className="booking-field-error" role="alert">{bookingPhoneError(passengerPhone)}</small>
+            : null}
         </label>
       </div>
 

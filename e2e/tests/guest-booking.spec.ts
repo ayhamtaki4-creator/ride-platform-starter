@@ -50,9 +50,6 @@ async function bookAsGuest(request: APIRequestContext, phoneNumber: string, requ
 }
 
 test.describe("Public guest booking", () => {
-  test.afterAll(async () => {
-    await prisma.$disconnect();
-  });
 
   test("does not claim a pre-existing account using a phone number alone", async ({ request }) => {
     const number = phone();
