@@ -40,6 +40,14 @@ jobs:
         env:
           PRODUCTION_PORTAL_URL: https://tareeqalsham.com
         run: node scripts/check-cloudflare-release.mjs
+      - name: Run existing production smoke (read-only plus invalid-input checks)
+        env:
+          PRODUCTION_API_URL: https://ride-platform-starter.onrender.com/api
+          PRODUCTION_PORTAL_URL: https://tareeqalsham.com
+          PRODUCTION_SMOKE_TIMEOUT_MS: "120000"
+          PRODUCTION_SMOKE_MAX_ATTEMPTS: "2"
+          PRODUCTION_SMOKE_RETRY_DELAY_MS: "10000"
+        run: node scripts/production-smoke.mjs
 
   deploy-existing-worker:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'deploy'
