@@ -110,15 +110,21 @@ try {
     [...html.matchAll(/\/_next\/static\/chunks\/[^"'<>\\\s]+?\.js/g)].map(([path]) => path),
   )].slice(0, 60);
   if (!chunkPaths.length) throw new Error("No booking JS chunks found");
+  // Turbopack may put the step copy and validation helper into separate
+  // chunks. Require BOTH markers across all route assets, not within one file.
   const matches = await Promise.allSettled(chunkPaths.map(async path => {
     const asset = await fetch(new URL(path, base), { signal: AbortSignal.timeout(20000) });
-    if (!asset.ok) return false;
+    if (!asset.ok) return { phone: false, steps: false };
     const js = await asset.text();
-    return js.includes("رقم الهاتف غير مكتمل أو غير صحيح") &&
-           js.includes("للمتابعة: أدخل الاسم الكامل ورقم الهاتف الدولي الصحيح");
+    return {
+      phone: js.includes("رقم الهاتف غير مكتمل أو غير صحيح"),
+      steps: js.includes("للمتابعة: أدخل الاسم الكامل ورقم الهاتف الدولي الصحيح")
+    };
   }));
-  const validated = matches.some(item => item.status === "fulfilled" && item.value);
-  console.log(`${validated ? "PASS" : "FAIL"} Arabic phone validation and step requirements deployed: scanned ${chunkPaths.length} booking chunks`);
+  const phoneFound = matches.some(item => item.status === "fulfilled" && item.value.phone);
+  const stepsFound = matches.some(item => item.status === "fulfilled" && item.value.steps);
+  const validated = phoneFound && stepsFound;
+  console.log(`${validated ? "PASS" : "FAIL"} Arabic phone validation and step requirements deployed: scanned ${chunkPaths.length} booking chunks; phone=${phoneFound}; guards=${stepsFound}`);
   if (!validated) failed += 1;
 } catch (error) {
   failed += 1;

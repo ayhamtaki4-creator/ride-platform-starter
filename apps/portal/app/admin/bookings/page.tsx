@@ -26,6 +26,7 @@ export default function AdminBookingsPage() {
   const [bookings, setBookings] = useState<Trip[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"" | BookingReviewStatus>("");
+  const [initialFilterReady, setInitialFilterReady] = useState(false);
   const [eligible, setEligible] = useState<Record<string, EligibleDriver[]>>({});
   const [selection, setSelection] = useState<Record<string, { driverId: string; vehicleId: string }>>({});
   const [message, setMessage] = useState("");
@@ -48,7 +49,18 @@ export default function AdminBookingsPage() {
     }
   }, [query]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const selected = new URLSearchParams(window.location.search).get("status");
+    if (selected && Object.prototype.hasOwnProperty.call(BOOKING_REVIEW_LABELS, selected)) {
+      setStatus(selected as BookingReviewStatus);
+    }
+    setInitialFilterReady(true);
+  }, []);
+
+  // Avoid racing the first unfiltered load against a direct alert link.
+  useEffect(() => {
+    if (initialFilterReady) void load();
+  }, [initialFilterReady, load]);
   useEffect(() => {
     if (!socket) return;
     const refresh = () => void load();

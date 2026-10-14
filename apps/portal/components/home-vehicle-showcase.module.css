@@ -154,3 +154,46 @@
     padding: 20px;
   }
 }
+
+
+.feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  min-height: 110px;
+  padding: 20px 24px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 16px;
+  background: var(--surface, #fafaf9);
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+.feedback p {
+  flex: 1 1 280px;
+  margin: 0;
+}
+
+.feedback button {
+  flex: 0 0 auto;
+}
+
+.imageFallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 30px;
+  background: linear-gradient(145deg, #0e2a4a, #18446d);
+  color: #f8fafc;
+  text-align: center;
+}
+
+.imageFallback span {
+  max-width: 220px;
+  line-height: 1.7;
+}

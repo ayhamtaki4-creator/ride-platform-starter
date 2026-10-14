@@ -12,6 +12,8 @@ import { BOOKING_REVIEW_LABELS, DIRECTION_LABELS, Trip } from "@/lib/types";
 type Dashboard = {
   totalBookings: number;
   newBookings: number;
+  staleNewBookings: number;
+  confirmedWithoutDriver: number;
   activeTrips: number;
   availableDrivers: number;
   revenue: number;
@@ -54,6 +56,30 @@ export default function AdminPage() {
       <div className="card"><div className="label">المحصل نقدًا</div><div className="value">${data?.revenue ?? 0}</div></div>
       <div className="card"><div className="label">غير محصل</div><div className="value">${data?.outstandingRevenue ?? 0}</div><small>{data?.unpaidCompletedBookings ?? 0} حجز مكتمل يحتاج مراجعة دفع</small></div>
     </section>
+    {data && (data.staleNewBookings > 0 || data.confirmedWithoutDriver > 0) ? (
+      <section className="panel" aria-labelledby="operations-attention-title">
+        <div className="section-heading">
+          <div>
+            <h2 id="operations-attention-title">حجوزات تحتاج متابعة</h2>
+            <p className="subtitle">هذه تنبيهات تشغيلية فقط؛ لن يتم رفض أو إلغاء أي حجز تلقائيًا.</p>
+          </div>
+        </div>
+        {data.staleNewBookings > 0 ? (
+          <div className="notice" role="status">
+            يوجد <strong>{data.staleNewBookings}</strong> طلب جديد مضى عليه أكثر من 24 ساعة دون مراجعة.
+            {" "}
+            <Link href="/admin/bookings?status=NEW">مراجعة الطلبات الجديدة</Link>
+          </div>
+        ) : null}
+        {data.confirmedWithoutDriver > 0 ? (
+          <div className="notice" role="status">
+            يوجد <strong>{data.confirmedWithoutDriver}</strong> حجز مؤكد بانتظار تعيين سائق.
+            {" "}
+            <Link href="/admin/bookings?status=CONFIRMED">عرض الحجوزات المؤكدة</Link>
+          </div>
+        ) : null}
+      </section>
+    ) : null}
     <section className="operations-shortcuts">
       <Link className="panel operations-shortcut" href="/admin/tracking"><span>GPS</span><strong>مراقبة السائقين مباشرة</strong><small>حالة التتبع وآخر موقع وصل إلى الخادم بعيدًا عن قائمة الحجوزات.</small></Link>
       <Link className="panel operations-shortcut" href="/admin/routes"><span>المسارات</span><strong>إدارة المدن والمطارات والخطوط</strong><small>إضافة دمشق–عمّان أو أي محافظة وتسعيرها.</small></Link>

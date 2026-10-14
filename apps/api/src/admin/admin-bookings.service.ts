@@ -118,6 +118,8 @@ export class AdminBookingsService {
     const [
       totalBookings,
       newBookings,
+      staleNewBookings,
+      confirmedWithoutDriver,
       activeTrips,
       availableDrivers,
       financeRows,
@@ -126,6 +128,26 @@ export class AdminBookingsService {
       this.prisma.trip.count({ where: { bookingReference: { not: null } } }),
       this.prisma.trip.count({
         where: { bookingReference: { not: null }, bookingReviewStatus: 'NEW' }
+      }),
+      // Warn operators about new requests still awaiting review after 24 hours.
+      // Terminal trips are excluded so historical test records cannot
+      // generate perpetual alerts.
+      this.prisma.trip.count({
+        where: {
+          bookingReference: { not: null },
+          bookingReviewStatus: 'NEW',
+          status: { notIn: [...TERMINAL_TRIP_STATUSES] },
+          requestedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+        }
+      }),
+      // Confirmed but still unassigned trips need dispatch attention.
+      this.prisma.trip.count({
+        where: {
+          bookingReference: { not: null },
+          bookingReviewStatus: 'CONFIRMED',
+          status: { in: ['PENDING_DISPATCH', 'SEARCHING_DRIVER'] },
+          driverId: null
+        }
       }),
       this.prisma.trip.count({
         where: {
@@ -160,6 +182,8 @@ export class AdminBookingsService {
     return {
       totalBookings,
       newBookings,
+      staleNewBookings,
+      confirmedWithoutDriver,
       activeTrips,
       availableDrivers,
       revenue,
