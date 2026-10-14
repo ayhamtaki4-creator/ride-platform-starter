@@ -6429,3 +6429,27 @@ textarea {
     border-inline-start: 0;
   }
 }
+
+
+/* Booking wizard: precise validation cues that remain readable on phones. */
+.booking-field-error {
+  display: block;
+  color: #b42318;
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.7;
+  margin-top: 6px;
+}
+.booking-field-hint {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-top: 5px;
+  line-height: 1.7;
+}
+.booking-wizard input[aria-invalid="true"],
+.booking-wizard textarea[aria-invalid="true"],
+.booking-wizard .international-phone-field[aria-invalid="true"] {
+  border-color: #b42318 !important;
+  box-shadow: 0 0 0 2px rgba(180, 35, 24, 0.09);
+}
