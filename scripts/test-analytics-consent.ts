@@ -86,8 +86,8 @@ test("booking funnel uses only fixed event names and non-sensitive parameters", 
   assert.deepEqual(events[1][2], { booking_mode: "guest", step_number: 1 });
 });
 
-test("private pages cannot send analytics even after consent", () => {
-  for (const path of ["/admin", "/driver", "/rider", "/track/secret-token", "/booking/success", "/login", "/register"]) {
+test("private and unknown public-looking URLs cannot send analytics even after consent", () => {
+  for (const path of ["/admin", "/driver", "/rider", "/track/secret-token", "/booking/success", "/services/private-phone-96399999999", "/login", "/register"]) {
     assert.equal(analytics.isPublicAnalyticsPath(path), false);
     fakeWindow.location.pathname = path;
     const before = fakeWindow.dataLayer!.length;
