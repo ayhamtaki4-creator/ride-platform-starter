@@ -48,7 +48,7 @@ The widget now opens a fare and route explorer when visitors select **كم سع�
 - `GET /api/bookings/quote?routeId=...&bookingType=PRIVATE_CAR&vehicleClass=...&passengerCount=...&luggageCount=...`: authoritative price computed by the backend for an explicitly selected route/class/counts. A successful response is not a reservation or an availability guarantee.
 - Price is cleared immediately on any change to route, class, passenger count, or luggage count. Failures never reuse previous prices; the visitor can go to the official booking page.
 - Initial Render cold starts are handled by the existing public API warmup. No extra database tables or auth permissions are needed.
-- Two WhatsApp actions contact the already-published support numbers. They carry only a fixed, generic greeting, never conversation transcripts, customer details, or price quotes.
+- Two WhatsApp actions contact the already-published support numbers. They carry only a fixed greeting and a vetted category label (for example, prices or routes), never conversation transcripts, customer details, or price quotes.
 
 The generative AI does not invent a price and never receives private booking records. The existing `/booking` form remains the source of truth before placing a reservation. No route-specific booking deep link is used because the wizard does not currently guarantee support for preselecting a route via query parameters.
 
