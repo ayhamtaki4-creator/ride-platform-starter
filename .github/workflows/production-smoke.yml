@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: production-smoke
@@ -57,3 +58,14 @@ jobs:
       - name: Verify current production health
         if: github.event_name != 'push'
         run: node scripts/production-smoke.mjs
+
+      # Scheduled failures open ONE GitHub incident rather than creating an
+      # issue for each six-hour check. The next healthy run closes it.
+      # This uses the ephemeral Actions token, never a production credential.
+      - name: Track scheduled production incident
+        if: always() && github.event_name == 'schedule' && (job.status == 'success' || job.status == 'failure')
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SMOKE_STATUS: ${{ job.status }}
+        run: node scripts/production-smoke-issue.mjs

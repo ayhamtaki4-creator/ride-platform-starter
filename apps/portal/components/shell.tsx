@@ -29,6 +29,7 @@ const adminItems: NavItem[] = [
   { href: "/admin/compliance", label: "الامتثال والملفات", icon: "shield" },
   { href: "/admin/users", label: "الحسابات", icon: "users" },
   { href: "/admin/pricing", label: "الأسعار", icon: "pricing" },
+  { href: "/admin/telegram", label: "إشعارات Telegram", icon: "bell" },
   { href: "/admin/whatsapp", label: "رسائل WhatsApp", icon: "bell" },
 ];
 
