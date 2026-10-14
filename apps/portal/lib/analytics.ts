@@ -7,6 +7,11 @@ export const ANALYTICS_SETTINGS_EVENT = "tareeqalsham:open-analytics-settings";
 
 const measurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim() ?? "";
 const MEASUREMENT_ID_PATTERN = /^G-[A-Z0-9]{6,}$/;
+const PUBLIC_SERVICE_PATHS = new Set([
+  "/services/damascus-beirut-airport",
+  "/services/damascus-amman-airport",
+  "/services/damascus-airport-governorates",
+]);
 
 type GoogleAnalyticsWindow = Window & {
   dataLayer?: unknown[][];
@@ -25,7 +30,7 @@ export function isPublicAnalyticsPath(pathname: string) {
   return pathname === "/" ||
     pathname === "/booking" ||
     pathname === "/services" ||
-    /^\/services\/[a-z0-9-]+$/.test(pathname) ||
+    PUBLIC_SERVICE_PATHS.has(pathname) ||
     pathname === "/contact" ||
     pathname === "/privacy" ||
     pathname === "/terms";
