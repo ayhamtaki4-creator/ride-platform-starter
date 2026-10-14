@@ -44,6 +44,9 @@ jobs:
       - name: Verify booking phone validation
         run: pnpm --filter api exec tsx scripts/test-booking-phone-validation.ts
 
+      - name: Verify production incident deduplication
+        run: node --test scripts/test-production-smoke-issue.mjs
+
       - name: Lint portal
         run: pnpm --filter portal lint
 
