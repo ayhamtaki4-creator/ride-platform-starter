@@ -1,0 +1,110 @@
+name: Cloudflare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "check = inspect current public site; deploy = release current main to the existing Worker"
+        required: true
+        default: check
+        type: choice
+        options:
+          - check
+          - deploy
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/cloudflare-release.yml"
+      - "scripts/check-cloudflare-release.mjs"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tareeq-cloudflare-release
+  cancel-in-progress: false
+
+jobs:
+  check-current:
+    if: github.event_name == 'pull_request' || inputs.operation == 'check'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    # The PR probe is informational: an older production Worker may be deployed.
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Inspect existing public domain without changing it
+        env:
+          PRODUCTION_PORTAL_URL: https://tareeqalsham.com
+        run: node scripts/check-cloudflare-release.mjs
+
+  deploy-existing-worker:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'deploy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+      - name: Configure Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Configure pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10.0.0"
+          run_install: false
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check Cloudflare credentials are provided
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Configure GitHub Actions secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID first."
+            exit 1
+          fi
+      - name: Verify original Worker name and target domain
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const config = JSON.parse(fs.readFileSync("apps/portal/wrangler.jsonc", "utf8"));
+          if (config.name !== "alnokhbaeducation") throw Error("Unexpected Worker name. Release stopped.");
+          if (!config.routes?.some(route => route.pattern === "tareeqalsham.com" && route.custom_domain === true)) {
+            throw Error("Expected tareeqalsham.com custom domain route is missing.");
+          }
+          console.log("Existing Worker target verified: alnokhbaeducation / tareeqalsham.com");
+          NODE
+      - name: Build Next.js for Cloudflare Workers through OpenNext
+        working-directory: apps/portal
+        env:
+          NEXT_PUBLIC_API_URL: https://ride-platform-starter.onrender.com/api
+          NEXT_PUBLIC_SITE_URL: https://tareeqalsham.com
+          SERVICE_TIME_ZONE: Asia/Damascus
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec opennextjs-cloudflare build
+      - name: Deploy to the EXISTING Cloudflare Worker
+        working-directory: apps/portal
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec opennextjs-cloudflare deploy
+      - name: Verify official domain after deploy
+        env:
+          PRODUCTION_PORTAL_URL: https://tareeqalsham.com
+        shell: bash
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if node scripts/check-cloudflare-release.mjs; then
+              exit 0
+            fi
+            echo "Site may still be propagating; attempt ${attempt}/5."
+            sleep 20
+          done
+          exit 1
