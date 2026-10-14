@@ -100,6 +100,9 @@ export function initializeAnalytics() {
     allow_google_signals: false,
     allow_ad_personalization_signals: false,
     cookie_flags: "SameSite=Lax;Secure",
+    // Even automatic session events must not contain arbitrary URL query data.
+    page_location: safePageLocation(),
+    page_referrer: safeReferrer(),
   });
   const script = document.createElement("script");
   script.async = true;
@@ -107,6 +110,25 @@ export function initializeAnalytics() {
   script.dataset.tareeqalshamAnalytics = "true";
   document.head.append(script);
   return true;
+}
+
+function safeReferrer() {
+  // Keep external referral source domains but never full third-party query strings.
+  // In particular, avoid a browser referrer containing /booking/success?ref=...
+  try {
+    const referrer = new URL(document.referrer);
+    if (referrer.protocol !== "https:" && referrer.protocol !== "http:") return "";
+    if (referrer.origin !== window.location.origin) return `${referrer.origin}/`;
+    return isPublicAnalyticsPath(referrer.pathname)
+      ? `${referrer.origin}${referrer.pathname}`
+      : `${referrer.origin}/`;
+  } catch {
+    return "";
+  }
+}
+
+function safePageLocation() {
+  return `${window.location.origin}${window.location.pathname}${safeCampaignQuery()}`;
 }
 
 function safeCampaignQuery() {
@@ -126,7 +148,8 @@ export function trackPublicPageView() {
   const pathname = window.location.pathname;
   gtagWindow().gtag?.("event", "page_view", {
     page_path: pathname,
-    page_location: `${window.location.origin}${pathname}${safeCampaignQuery()}`,
+    page_location: safePageLocation(),
+    page_referrer: safeReferrer(),
     page_title: document.title,
   });
 }
