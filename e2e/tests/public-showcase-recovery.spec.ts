@@ -8,6 +8,7 @@ test.describe("Public homepage vehicle gallery", () => {
       route.fulfill({
         status: 200,
         contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
         body: JSON.stringify({ status: "ok" }),
       }),
     );
@@ -17,11 +18,13 @@ test.describe("Public homepage vehicle gallery", () => {
           ? {
               status: 503,
               contentType: "application/json",
+              headers: { "access-control-allow-origin": "*" },
               body: JSON.stringify({ message: "Temporarily unavailable" }),
             }
           : {
               status: 200,
               contentType: "application/json",
+              headers: { "access-control-allow-origin": "*" },
               body: JSON.stringify([
                 {
                   id: "gallery-test-vehicle",
