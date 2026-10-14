@@ -35,7 +35,7 @@ export default function ContactPage() {
                 <a className="button primary" href={whatsappHref(contact.tel)} target="_blank" rel="noopener noreferrer" aria-label={`مراسلة دعم ${contact.country} عبر واتساب`}>
                   واتساب <Icon name="arrow-left" size={16} />
                 </a>
-                <a className="button" href={`tel:${contact.tel}`}>اتصال هاتفي</a>
+                <a className="button" href={`tel:${contact.tel}`} data-contact-channel="phone">اتصال هاتفي</a>
               </div>
             </section>
           ))}
