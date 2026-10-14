@@ -25,12 +25,12 @@ import {
 export class UpdateBookingDto {
   @ApiPropertyOptional({ example: '2026-08-18' })
   @IsOptional()
-  @IsDateString()
+  @IsDateString({}, { message: 'تاريخ الرحلة غير صحيح.' })
   travelDate?: string;
 
   @ApiPropertyOptional({ example: '14:30', nullable: true })
   @IsOptional()
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'وقت الرحلة غير صحيح؛ اختر ساعة ودقيقة.' })
   flightArrivalTime?: string | null;
 
   @ApiPropertyOptional({ example: 'ME 265', nullable: true })
