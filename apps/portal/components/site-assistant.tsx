@@ -204,7 +204,8 @@ export function SiteAssistant() {
     if (!value || sending) return;
 
     const topic = findTopic(value);
-    if (topic?.id === "prices" || topic?.id === "routes") {
+    const explicitRouteRequest = /(مسار|مسارات|خطوط|الوجهات|وجهات|الرحلات المتاحه|السفر من|طرق النقل|route)/.test(normalizeArabic(value));
+    if (topic?.id === "prices" || (topic?.id === "routes" && explicitRouteRequest)) {
       appendExchange(value, topic);
       setDraft("");
       setShowLiveQuotes(true);
