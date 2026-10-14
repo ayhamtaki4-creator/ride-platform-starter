@@ -51,6 +51,12 @@ tomorrowDate.setDate(tomorrowDate.getDate() + 1);
 tomorrowDate.setHours(0, 0, 0, 0);
 const tomorrow = format(tomorrowDate, "yyyy-MM-dd");
 const stepTitles = ["المسار", "الموعد والسيارة", "بيانات المسافر", "المراجعة"];
+const stepRequirements = [
+  "للمتابعة: اختر مسارًا متاحًا ونوع الحجز (سيارة خاصة).",
+  "للمتابعة: حدد تاريخًا يبدأ من الغد وحجم سيارة بسعر متاح، وأدخل بيانات الطائرة إذا كان المسار يتطلب ذلك.",
+  "للمتابعة: أدخل الاسم الكامل ورقم الهاتف الدولي الصحيح وعنواني الانطلاق والوصول.",
+  "راجع التفاصيل والسعر وتأكد من رقم الهاتف قبل إرسال الحجز. لن يُطلب منك تسجيل الدخول.",
+];
 const MAX_TICKET_BYTES = 10 * 1024 * 1024;
 const MAX_SOURCE_IMAGE_BYTES = 30 * 1024 * 1024;
 const DEFAULT_VEHICLE_CLASSES: VehicleClassConfig[] = [
@@ -835,6 +841,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
           return <li className={`${number < step ? "is-done" : ""} ${number === step ? "is-current" : ""}`} key={title}><span>{number < step ? <Icon name="check" size={16} /> : number}</span><small>{title}</small></li>;
         })}
       </ol>
+      <div className="booking-step-requirements" role="note">{stepRequirements[step - 1]}</div>
       <div className="wizard-body">
         {step === 1 ? (
           <div className="wizard-pane">
