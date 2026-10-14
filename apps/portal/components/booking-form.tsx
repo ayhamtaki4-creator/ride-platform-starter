@@ -3,6 +3,7 @@
 import { ROUTE_TYPE_LABELS, ServiceRoute, VehicleClassConfig } from "@/lib/admin-operations";
 import { apiFetch, apiUpload } from "@/lib/api";
 import { rememberGuestBookingClaim } from "@/lib/guest-booking-claims";
+import { trackBookingStarted, trackBookingStepCompleted, trackBookingSubmitted } from "@/lib/analytics";
 import {
   normalizeBookingPhone,
   validateBookingStep,
@@ -204,6 +205,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<BookingValidationField, string>>>({});
   const resumeStarted = useRef(false);
+  const analyticsStarted = useRef(false);
+  const analyticsSteps = useRef(new Set<number>());
 
   const selectedRoute = useMemo(
     () => routes.find((route) => route.id === form.routeId) ?? null,
@@ -740,6 +743,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       }
       clearPendingBooking();
       await deletePendingTicket(requestId).catch(() => undefined);
+      // Only count reservations acknowledged by the API, never attempted/failed posts.
+      trackBookingSubmitted(isPassenger ? "registered" : "guest");
       showToast(`تم إرسال الحجز ${booking.bookingReference ?? ""}.`, "success");
       if (isPassenger && "id" in booking) onCreated?.(booking);
       router.replace(isPassenger && "id" in booking ? `/rider/bookings/${booking.id}` : `/booking/success?ref=${encodeURIComponent(booking.bookingReference ?? "")}`);
@@ -757,6 +762,15 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   async function nextStep() {
     if (!validateStep()) return;
     if (step === 3 && !(quote ?? (await loadQuoteFor(form)))) return;
+    const bookingMode = isPassenger ? "registered" : "guest";
+    if (!analyticsStarted.current) {
+      analyticsStarted.current = true;
+      trackBookingStarted(bookingMode);
+    }
+    if (!analyticsSteps.current.has(step) && (step === 1 || step === 2 || step === 3)) {
+      analyticsSteps.current.add(step);
+      trackBookingStepCompleted(step, bookingMode);
+    }
     setStep((current) => Math.min(4, current + 1));
     document.getElementById("booking-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
