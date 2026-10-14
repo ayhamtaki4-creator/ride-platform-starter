@@ -14,6 +14,8 @@ type Dashboard = {
   newBookings: number;
   staleNewBookings: number;
   confirmedWithoutDriver: number;
+  exhaustedTelegramDeliveries: number;
+  delayedTelegramDeliveries: number;
   activeTrips: number;
   availableDrivers: number;
   revenue: number;
@@ -76,6 +78,29 @@ export default function AdminPage() {
             يوجد <strong>{data.confirmedWithoutDriver}</strong> حجز مؤكد بانتظار تعيين سائق.
             {" "}
             <Link href="/admin/bookings?status=CONFIRMED">عرض الحجوزات المؤكدة</Link>
+          </div>
+        ) : null}
+      </section>
+    ) : null}
+    {data && ((data.exhaustedTelegramDeliveries ?? 0) > 0 || (data.delayedTelegramDeliveries ?? 0) > 0) ? (
+      <section className="panel" aria-labelledby="telegram-attention-title">
+        <div className="section-heading">
+          <div>
+            <h2 id="telegram-attention-title">تنبيهات Telegram تحتاج متابعة</h2>
+            <p className="subtitle">راجع محاولات إرسال الإشعارات لتتأكد من وصول حجوزات العملاء إلى مركز العمليات.</p>
+          </div>
+          <Link className="button" href="/admin/telegram">سجل الإشعارات</Link>
+        </div>
+        {(data.exhaustedTelegramDeliveries ?? 0) > 0 ? (
+          <div className="notice error" role="status">
+            يوجد <strong>{data.exhaustedTelegramDeliveries}</strong> إشعار فشل نهائيًا بعد خمس محاولات.
+            {" "}<Link href="/admin/telegram?status=FAILED">عرض الإشعارات الفاشلة</Link>
+          </div>
+        ) : null}
+        {(data.delayedTelegramDeliveries ?? 0) > 0 ? (
+          <div className="notice" role="status">
+            يوجد <strong>{data.delayedTelegramDeliveries}</strong> إشعار متأخر أكثر من 15 دقيقة في قائمة الإرسال.
+            {" "}<Link href="/admin/telegram">مراجعة قائمة الإرسال</Link>
           </div>
         ) : null}
       </section>
