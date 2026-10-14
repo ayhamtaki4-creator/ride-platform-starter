@@ -47,6 +47,9 @@ jobs:
       - name: Verify production incident deduplication
         run: node --test scripts/test-production-smoke-issue.mjs
 
+      - name: Verify privacy-first analytics boundaries
+        run: node --experimental-strip-types --test scripts/test-analytics-consent.ts
+
       - name: Lint portal
         run: pnpm --filter portal lint
 
