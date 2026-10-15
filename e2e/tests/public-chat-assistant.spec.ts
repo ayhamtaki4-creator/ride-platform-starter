@@ -183,10 +183,10 @@ test.describe("Public booking assistant", () => {
     await page.locator('[data-booking-field="passengerPhone"] input').fill("+963944000000");
     await page.getByRole("button", { name: "التالي" }).click();
 
-    await expect(page.getByText("راجع طلبك")).toBeVisible();
+    await expect(page.locator(".wizard-header h3")).toHaveText("المراجعة");
     await expect(page.locator(".review-grid")).toContainText("عدد الركاب");
     await expect(page.locator(".review-grid")).toContainText("عدد الحقائب");
-    await expect(page.locator(".quote-card")).toContainText("136");
+    await expect(page.locator(".quote-card")).toContainText(/136|١٣٦/);
     expect(quoteRequests.length).toBeGreaterThanOrEqual(2);
     expect(quoteRequests.every((p) => p.get("passengerCount") === "2" &&
       p.get("luggageCount") === "3" && p.get("routeId") === firstRouteId)).toBe(true);
