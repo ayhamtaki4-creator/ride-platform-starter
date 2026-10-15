@@ -223,7 +223,7 @@ export function SiteAssistant() {
       href: "/contact",
       action: "التواصل مع الدعم",
     };
-    const reply = custom ? { answer: custom.answer } : topic ?? fallback;
+    const reply: { answer: string; href?: string; action?: string } = custom ? { answer: custom.answer } : topic ?? fallback;
     const id = nextId.current;
     nextId.current += 2;
     setMessages((current) => [
