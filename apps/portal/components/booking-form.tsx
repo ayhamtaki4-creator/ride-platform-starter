@@ -892,6 +892,11 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     void (async () => {
       let candidate: BookingFormState = {
         ...restoredDraft.form,
+        // A draft saved before counts were introduced still needs valid defaults.
+        passengerCount: Number.isInteger(restoredDraft.form.passengerCount) &&
+          restoredDraft.form.passengerCount > 0 ? restoredDraft.form.passengerCount : 1,
+        luggageCount: Number.isInteger(restoredDraft.form.luggageCount) &&
+          restoredDraft.form.luggageCount >= 0 ? restoredDraft.form.luggageCount : 0,
         passengerName: restoredDraft.form.passengerName || `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim(),
         passengerPhone: restoredDraft.form.passengerPhone || user?.phone || "",
       };
