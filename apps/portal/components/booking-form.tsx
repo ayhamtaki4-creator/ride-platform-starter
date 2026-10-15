@@ -330,7 +330,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
           : undefined;
         function safeCount(key: "passengerCount" | "luggageCount", min: number, max: number) {
           const raw = search.get(key);
-          const requested = raw !== null && /^\\d{1,2}$/.test(raw) ? Number(raw) : NaN;
+          const requested = raw !== null && /^\d{1,2}$/.test(raw) ? Number(raw) : NaN;
           return Number.isInteger(requested) && requested >= min && requested <= max ? requested : min;
         }
         const assistantPassengers = assistantCapacity
