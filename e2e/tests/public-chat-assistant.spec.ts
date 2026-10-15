@@ -37,6 +37,20 @@ const fixtures = [
 ];
 
 test.describe("Public booking assistant", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route("**/api/assistant/config", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          enabled: true,
+          welcomeMessage: "أهلًا بك في طريق الشام! كيف يمكنني مساعدتك؟",
+          faqs: [{ question: "هل تقدمون مقاعد مشتركة؟", answer: "الحجز الحالي للسيارة الخاصة فقط." }],
+        }),
+      });
+    });
+  });
+
   test("visitor can ask questions without signing in when AI is unavailable", async ({ page }) => {
     await page.route("**/api/assistant/chat", async (route) => {
       await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "AI_UNAVAILABLE" }) });
@@ -94,14 +108,15 @@ test.describe("Public booking assistant", () => {
     await dialog.getByLabel("الركاب").selectOption("2");
     await dialog.getByLabel("الحقائب").selectOption("3");
     await dialog.getByRole("button", { name: "عرض السعر المعتمد" }).click();
-    await expect(dialog.getByText(/123|١٢٣/)).toBeVisible();
+    const priceValue = dialog.locator("[class*=quoteResult] strong");
+    await expect(priceValue).toHaveText(/123|١٢٣/);
     expect(new URL(latestQuoteRequest).searchParams.get("passengerCount")).toBe("2");
     expect(new URL(latestQuoteRequest).searchParams.get("luggageCount")).toBe("3");
 
     await dialog.getByLabel("اختر المسار").selectOption(secondRouteId);
-    await expect(dialog.getByText(/123|١٢٣/)).not.toBeVisible();
+    await expect(priceValue).toHaveCount(0);
     await dialog.getByRole("button", { name: "عرض السعر المعتمد" }).click();
-    await expect(dialog.getByText(/174|١٧٤/)).toBeVisible();
+    await expect(priceValue).toHaveText(/174|١٧٤/);
     expect(new URL(latestQuoteRequest).searchParams.get("routeId")).toBe(secondRouteId);
 
     const syriaWhatsApp = dialog.getByRole("link", { name: "واتساب سوريا" });
@@ -130,6 +145,28 @@ test.describe("Public booking assistant", () => {
 
     await expect(dialog.getByText("يمكنك مراجعة المسارات من صفحة خدماتنا.")).toBeVisible();
     expect(requestBody).toMatchObject({ message: "إذا وصلت الطائرة متأخرة لمطار بيروت شو أعمل؟" });
+  });
+
+
+  test("admin can disable chatbot and hide its launch button", async ({ page }) => {
+    await page.route("**/api/assistant/config", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ enabled: false, welcomeMessage: "خارج الخدمة", faqs: [] }),
+      });
+    });
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: "فتح مساعد طريق الشام" })).toHaveCount(0);
+  });
+
+  test("custom admin FAQs appear with exact verified answers", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "فتح مساعد طريق الشام" }).click();
+    const dialog = page.getByRole("dialog", { name: "مساعد طريق الشام" });
+    await expect(dialog.getByText("أهلًا بك في طريق الشام! كيف يمكنني مساعدتك؟")).toBeVisible();
+    await dialog.getByRole("button", { name: "هل تقدمون مقاعد مشتركة؟" }).click();
+    await expect(dialog.getByText("الحجز الحالي للسيارة الخاصة فقط.")).toBeVisible();
   });
 
   test("assistant is also available on booking page", async ({ page }) => {

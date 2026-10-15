@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
+import { PublicAssistantController, AdminAssistantController } from './assistant-console.controller';
+import { AssistantConsoleService } from './assistant-console.service';
 import { BookingsModule } from '../bookings/bookings.module';
 import { AdminBookingControlController } from './admin-booking-control.controller';
 import { AdminBookingControlService } from './admin-booking-control.service';
@@ -15,9 +18,11 @@ import { AdminTrackingController } from './admin-tracking.controller';
 import { DriverDayAssignmentPolicyService } from './driver-day-assignment-policy.service';
 
 @Module({
-  imports: [BookingsModule],
+  imports: [BookingsModule, AuthModule],
   controllers: [
     AdminController,
+    PublicAssistantController,
+    AdminAssistantController,
     AdminBookingsController,
     AdminBookingControlController,
     AdminDriverManagementController,
@@ -26,6 +31,7 @@ import { DriverDayAssignmentPolicyService } from './driver-day-assignment-policy
   ],
   providers: [
     AdminService,
+    AssistantConsoleService,
     AdminBookingsService,
     AdminBookingControlService,
     AdminDriverManagementService,

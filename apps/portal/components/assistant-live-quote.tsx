@@ -8,6 +8,7 @@ import { warmPublicApi } from "@/lib/public-api-warmup";
 import type { BookingQuote, VehicleClass } from "@/lib/types";
 import { Icon } from "@/components/ui/icon";
 import styles from "./site-assistant.module.css";
+import { recordAssistantEvent } from "@/lib/assistant-config";
 
 const classes: VehicleClass[] = ["SMALL", "MEDIUM", "LARGE"];
 const classNames: Record<VehicleClass, string> = {
@@ -104,6 +105,7 @@ export function AssistantLiveQuote({ onBack }: { onBack: () => void }) {
         throw new Error("INVALID_QUOTE");
       }
       setQuote(result);
+      recordAssistantEvent("QUOTE_SUCCESS", "prices");
     } catch {
       setQuoteError("تعذر جلب سعر معتمد لهذه الاختيارات. جرّب مرة أخرى أو افتح صفحة الحجز.");
     } finally {
@@ -184,7 +186,7 @@ export function AssistantLiveQuote({ onBack }: { onBack: () => void }) {
               <small>السعر حسب المسار والفئة والأعداد المختارة</small>
               <strong>{currencyPrice(quote)}</strong>
               <span>سعر مسترجع من نظام الحجز لحظة الاستعلام، وليس تأكيداً للتوفر أو للحجز. أعد التحقق من السعر في صفحة الحجز قبل الإرسال.</span>
-              <Link href="/booking" className={styles.quoteButton}>الانتقال إلى الحجز <Icon name="arrow-left" size={16} /></Link>
+              <Link href="/booking" className={styles.quoteButton} onClick={() => recordAssistantEvent("BOOKING_CLICK", "prices")}>الانتقال إلى الحجز <Icon name="arrow-left" size={16} /></Link>
             </div>
           ) : (
             <p className={styles.quoteHelp}>الأسعار لا تُخمن بواسطة الذكاء الاصطناعي، بل تُجلب عبر واجهة التسعير الرسمية.</p>

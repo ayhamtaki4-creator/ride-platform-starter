@@ -6,6 +6,7 @@ import { Icon } from "@/components/ui/icon";
 import styles from "./site-assistant.module.css";
 import { AssistantLiveQuote } from "./assistant-live-quote";
 import { whatsappHref } from "@/lib/whatsapp-link";
+import { fetchAssistantConfig, recordAssistantEvent, type AssistantConfiguration, type AssistantFaq, type AssistantMetricTopic } from "@/lib/assistant-config";
 
 type TopicId = "booking" | "prices" | "routes" | "guest" | "luggage" | "flight" | "status" | "driver" | "change" | "payment" | "support";
 
@@ -173,9 +174,30 @@ export function SiteAssistant() {
   const [sending, setSending] = useState(false);
   const [showLiveQuotes, setShowLiveQuotes] = useState(false);
   const [supportTopic, setSupportTopic] = useState<TopicId | null>(null);
+  const [configuration, setConfiguration] = useState<AssistantConfiguration | null>(null);
   const nextId = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshConfig() {
+      try {
+        const data = await fetchAssistantConfig(AbortSignal.timeout(18000));
+        if (!cancelled) setConfiguration(data);
+      } catch {
+        if (!cancelled) setConfiguration(null);
+      }
+    }
+    void refreshConfig();
+    const timer = window.setInterval(() => void refreshConfig(), 45000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
+
+  useEffect(() => {
+    if (!configuration?.enabled) setOpen(false);
+    if (configuration?.welcomeMessage) setMessages((messages) => messages.map((message) => message.id === 0 ? { ...message, text: configuration.welcomeMessage } : message));
+  }, [configuration?.enabled, configuration?.welcomeMessage]);
 
   useEffect(() => {
     if (!open) return;
@@ -195,13 +217,13 @@ export function SiteAssistant() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  function appendExchange(question: string, topic?: Topic) {
+  function appendExchange(question: string, topic?: Topic, custom?: AssistantFaq) {
     const fallback = {
       answer: "لا أملك إجابة مؤكدة عن هذا السؤال. يمكنك اختيار أحد المواضيع أدناه أو التواصل مع فريق الدعم للحصول على معلومات دقيقة.",
       href: "/contact",
       action: "التواصل مع الدعم",
     };
-    const reply = topic ?? fallback;
+    const reply: { answer: string; href?: string; action?: string } = custom ? { answer: custom.answer } : topic ?? fallback;
     const id = nextId.current;
     nextId.current += 2;
     setMessages((current) => [
@@ -217,12 +239,22 @@ export function SiteAssistant() {
     if (!value || sending) return;
 
     const topic = findTopic(value);
+    const customFaq = configuration?.faqs.find((faq) => normalizeArabic(faq.question) === normalizeArabic(value));
+    if (customFaq) {
+      appendExchange(value, undefined, customFaq);
+      setSupportTopic(null);
+      recordAssistantEvent("QUESTION", "custom");
+      setDraft("");
+      return;
+    }
+    recordAssistantEvent("QUESTION", (topic?.id ?? "general") as AssistantMetricTopic);
     if (topic) setSupportTopic(topic.id);
     const explicitRouteRequest = /(مسار|مسارات|خطوط|الوجهات|وجهات|الرحلات المتاحه|السفر من|طرق النقل|route)/.test(normalizeArabic(value));
     if (topic?.id === "prices" || (topic?.id === "routes" && explicitRouteRequest)) {
       appendExchange(value, topic);
       setDraft("");
       setShowLiveQuotes(true);
+      recordAssistantEvent("FARE_VIEW", topic?.id === "prices" ? "prices" : "routes");
       return;
     }
     const history = messages
@@ -273,10 +305,20 @@ export function SiteAssistant() {
   function selectTopic(topic: Topic) {
     setSupportTopic(topic.id);
     appendExchange(topic.title, topic);
-    if (topic.id === "prices" || topic.id === "routes") setShowLiveQuotes(true);
+    if (topic.id === "prices" || topic.id === "routes") {
+      setShowLiveQuotes(true);
+      recordAssistantEvent("FARE_VIEW", topic.id);
+    }
+  }
+
+  function selectCustomFaq(faq: AssistantFaq) {
+    appendExchange(faq.question, undefined, faq);
+    recordAssistantEvent("QUESTION", "custom");
   }
 
   const whatsappIntro = encodeURIComponent(`مرحباً، أحتاج إلى مساعدة من فريق طريق الشام بخصوص ${supportTopic ? safeSupportTopics[supportTopic] : "خدمة النقل"}.`);
+
+  if (!configuration?.enabled) return null;
 
   return (
     <div className={styles.container} dir="rtl">
@@ -297,13 +339,14 @@ export function SiteAssistant() {
               <div key={message.id} className={message.sender === "visitor" ? styles.visitor : styles.assistant}>
                 <p>{message.text}</p>
                 {message.href && message.action ? (
-                  <Link href={message.href} className={styles.action} onClick={() => setOpen(false)}>
+                  <Link href={message.href} className={styles.action} onClick={() => { if (message.href === "/booking") recordAssistantEvent("BOOKING_CLICK", (supportTopic ?? "general") as AssistantMetricTopic); setOpen(false); }}>
                     {message.action}<Icon name="arrow-left" size={15} />
                   </Link>
                 ) : null}
               </div>
             ))}
             {sending ? <div className={styles.assistant} role="status"><p>جارٍ تجهيز الرد...</p></div> : null}
+            {messages.length === 1 && configuration.faqs.length > 0 ? <div className={styles.assistant}><p>أسئلة إضافية يجيب عنها فريق طريق الشام:</p></div> : null}
             <div ref={endRef} />
           </div>}
           {!showLiveQuotes ? <div className={styles.suggestions} aria-label="أسئلة سريعة">
@@ -312,6 +355,7 @@ export function SiteAssistant() {
               if (!topic) return null;
               return <button type="button" key={id} onClick={() => selectTopic(topic)}>{topic.title}</button>;
             })}
+            {configuration.faqs.map((faq, index) => <button type="button" key={`${index}-${faq.question}`} onClick={() => selectCustomFaq(faq)}>{faq.question}</button>)}
           </div> : null}
           {!showLiveQuotes ? <form className={styles.form} onSubmit={sendMessage}>
             <label className={styles.srOnly} htmlFor="site-assistant-message">اكتب سؤالك</label>
@@ -328,8 +372,8 @@ export function SiteAssistant() {
             <button disabled={!draft.trim() || sending} type="submit" aria-label="إرسال السؤال"><Icon name="arrow-left" size={20} /></button>
           </form> : null}
           <nav className={styles.supportBar} aria-label="التواصل مع موظف الدعم">
-            <a href={`${whatsappHref("+963965350502")}?text=${whatsappIntro}`} target="_blank" rel="noopener noreferrer">واتساب سوريا</a>
-            <a href={`${whatsappHref("+96171967194")}?text=${whatsappIntro}`} target="_blank" rel="noopener noreferrer">واتساب لبنان</a>
+            <a href={`${whatsappHref("+963965350502")}?text=${whatsappIntro}`} target="_blank" rel="noopener noreferrer" onClick={() => recordAssistantEvent("WHATSAPP_CLICK", (supportTopic ?? "general") as AssistantMetricTopic)}>واتساب سوريا</a>
+            <a href={`${whatsappHref("+96171967194")}?text=${whatsappIntro}`} target="_blank" rel="noopener noreferrer" onClick={() => recordAssistantEvent("WHATSAPP_CLICK", (supportTopic ?? "general") as AssistantMetricTopic)}>واتساب لبنان</a>
           </nav>
           <p className={styles.disclaimer}>قد تُعالج الأسئلة الحرة عبر Cloudflare AI. لا تُدخل بيانات شخصية أو كلمات مرور؛ لا ينفذ المساعد الحجوزات.</p>
         </section>
@@ -340,7 +384,7 @@ export function SiteAssistant() {
         aria-label={open ? "إغلاق مساعد طريق الشام" : "فتح مساعد طريق الشام"}
         aria-expanded={open}
         aria-controls="site-assistant-panel"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setOpen((value) => { if (!value) recordAssistantEvent("OPEN"); return !value; })}
       >
         <Icon name={open ? "close" : "sparkles"} size={23} />
         {!open ? <span>كيف نساعدك؟</span> : null}
