@@ -112,8 +112,7 @@ export default function AdminPage() {
         ) : null}
         {data.confirmedWithoutDriver > 0 ? (
           <div className="notice" role="status">
-            يوجد <strong>{data.confirmedWithoutDriver}</strong> حجز مؤكد بانتظار تعيين سائق.
-            {" "}
+            يوجد <strong>{data.confirmedWithoutDriver}</strong> حجز مؤكد بانتظار تعيين سائق
             {(data.confirmedWithoutDriverOver30Minutes ?? 0) > 0
               ? <>، منها <strong>{data.confirmedWithoutDriverOver30Minutes}</strong> مضى على تأكيدها أكثر من 30 دقيقة</>
               : null}.
