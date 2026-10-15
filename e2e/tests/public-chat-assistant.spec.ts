@@ -182,10 +182,13 @@ test.describe("Public booking assistant", () => {
     await expect(page.locator('[data-booking-field="luggageCount"] select')).toHaveValue("3");
 
     await page.getByRole("button", { name: "التالي" }).click();
-    const currentHeading = await page.locator(".wizard-header h3").textContent();
-    if (currentHeading !== "بيانات المسافر") {
-      const errors = await page.locator('[role="alert"]').allTextContents();
-      throw new Error(`الانتقال إلى بيانات المسافر لم يكتمل: ${currentHeading}. أسباب التحقق: ${errors.join(" / ")}`);
+    try {
+      await expect(page.locator(".wizard-header h3")).toHaveText("بيانات المسافر", { timeout: 5000 });
+    } catch {
+      const errors = await page.locator(".booking-field-error, .notice.error").allTextContents();
+      const dateText = await page.locator('[data-booking-field="travelDate"]').innerText();
+      const currentHeading = await page.locator(".wizard-header h3").textContent();
+      throw new Error(`الانتقال إلى بيانات المسافر لم يكتمل: ${currentHeading}. التاريخ: ${dateText}. أسباب التحقق: ${errors.join(" / ")}`);
     }
     await page.locator('[data-booking-field="passengerName"] input').fill("محمود أحمد");
     await page.locator('[data-booking-field="passengerPhone"] input').fill("+963944000000");
