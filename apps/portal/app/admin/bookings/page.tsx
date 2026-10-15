@@ -21,11 +21,21 @@ import {
   VEHICLE_CLASS_LABELS,
 } from "@/lib/types";
 
+const attentionLabels = {
+  REVIEW_OVER_30M: "طلبات لم تُراجع منذ 30 دقيقة",
+  REVIEW_OVER_24H: "طلبات لم تُراجع منذ 24 ساعة",
+  DRIVER_UNASSIGNED: "حجوزات مؤكدة دون سائق",
+  DRIVER_OVER_30M: "تعيين سائق متأخر أكثر من 30 دقيقة",
+} as const;
+
+type AttentionFilter = keyof typeof attentionLabels;
+
 export default function AdminBookingsPage() {
   const { socket } = useAuth();
   const [bookings, setBookings] = useState<Trip[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"" | BookingReviewStatus>("");
+  const [attention, setAttention] = useState<"" | AttentionFilter>("");
   const [initialFilterReady, setInitialFilterReady] = useState(false);
   const [eligible, setEligible] = useState<Record<string, EligibleDriver[]>>({});
   const [selection, setSelection] = useState<Record<string, { driverId: string; vehicleId: string }>>({});
@@ -36,9 +46,10 @@ export default function AdminBookingsPage() {
   const query = useMemo(() => {
     const params = new URLSearchParams();
     if (search.trim()) params.set("search", search.trim());
-    if (status) params.set("status", status);
+    if (attention) params.set("attention", attention);
+    else if (status) params.set("status", status);
     return params.toString();
-  }, [search, status]);
+  }, [search, status, attention]);
 
   const load = useCallback(async () => {
     try {
@@ -50,16 +61,24 @@ export default function AdminBookingsPage() {
   }, [query]);
 
   useEffect(() => {
-    const selected = new URLSearchParams(window.location.search).get("status");
-    if (selected && Object.prototype.hasOwnProperty.call(BOOKING_REVIEW_LABELS, selected)) {
-      setStatus(selected as BookingReviewStatus);
+    const params = new URLSearchParams(window.location.search);
+    const selectedPriority = params.get("attention");
+    const selectedStatus = params.get("status");
+    if (selectedPriority && Object.prototype.hasOwnProperty.call(attentionLabels, selectedPriority)) {
+      setAttention(selectedPriority as AttentionFilter);
+    } else if (selectedStatus && Object.prototype.hasOwnProperty.call(BOOKING_REVIEW_LABELS, selectedStatus)) {
+      setStatus(selectedStatus as BookingReviewStatus);
     }
     setInitialFilterReady(true);
   }, []);
 
   // Avoid racing the first unfiltered load against a direct alert link.
   useEffect(() => {
-    if (initialFilterReady) void load();
+    if (!initialFilterReady) return;
+    void load();
+    // Realtime can disconnect; refresh also catches age-based queue transitions.
+    const timer = window.setInterval(() => void load(), 30000);
+    return () => window.clearInterval(timer);
   }, [initialFilterReady, load]);
   useEffect(() => {
     if (!socket) return;
@@ -117,7 +136,22 @@ export default function AdminBookingsPage() {
           subtitle="راجع الحجز وحدد مساره، ثم عيّن سائقًا وسيارة مؤهلين للمسار والتصاريح المطلوبة."
           actions={<Link className="button" href="/admin/tracking">مراقبة GPS للسائقين</Link>}
         />
-        <section className="panel filters"><input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="رقم الحجز أو اسم المسافر أو الهاتف" /><select className="input" value={status} onChange={(e) => setStatus(e.target.value as "" | BookingReviewStatus)}><option value="">كل الحالات</option>{Object.entries(BOOKING_REVIEW_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><button className="button" type="button" onClick={() => void load()}>بحث</button></section>
+        <section className="panel filters" aria-label="تصفية الحجوزات">
+          <input className="input" aria-label="البحث في الحجوزات" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="رقم الحجز أو اسم المسافر أو الهاتف" />
+          <select className="input" aria-label="حالة الحجز" value={status} onChange={(e) => { setStatus(e.target.value as "" | BookingReviewStatus); setAttention(""); }}>
+            <option value="">كل الحالات</option>
+            {Object.entries(BOOKING_REVIEW_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <select className="input" aria-label="أولوية المتابعة" value={attention} onChange={(e) => { setAttention(e.target.value as "" | AttentionFilter); setStatus(""); }}>
+            <option value="">كل الأولويات</option>
+            {Object.entries(attentionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <button className="button" type="button" onClick={() => void load()}>بحث</button>
+        </section>
+        {attention ? <div className="notice" role="status">
+          <strong>قائمة متابعة: {attentionLabels[attention]}</strong>. تظهر الطلبات الأقدم أولاً.
+          {" "}<button className="button compact-button" type="button" onClick={() => setAttention("")}>إزالة فلتر الأولوية</button>
+        </div> : null}
         {message ? <div className="notice success">{message}</div> : null}
         {error ? <div className="notice error">{error}</div> : null}
 
@@ -130,7 +164,7 @@ export default function AdminBookingsPage() {
               booking.bookingReviewStatus !== "REJECTED" &&
               booking.bookingReviewStatus !== "CANCELLED";
             return <article className="booking-card" key={booking.id}>
-              <div className="booking-card-head"><div><strong>{booking.bookingReference}</strong><small>{booking.contactName} · {booking.contactPhone}</small>{booking.bookingSource === "GUEST" ? <small>{booking.accountLinkStatus === "UNLINKED" ? "حجز ضيف غير مرتبط بحساب" : "حجز ضيف بحساب جديد"}</small> : null}</div><StatusPill status={booking.bookingReviewStatus ?? booking.status} label={booking.bookingReviewStatus ? BOOKING_REVIEW_LABELS[booking.bookingReviewStatus] : TRIP_STATUS_LABELS[booking.status]} /></div>
+              <div className="booking-card-head"><div><strong>{booking.bookingReference}</strong><small>{booking.contactName} · {booking.contactPhone}</small><small>ورد الطلب: {new Date(booking.requestedAt).toLocaleString("ar-SY")}</small>{booking.bookingSource === "GUEST" ? <small>{booking.accountLinkStatus === "UNLINKED" ? "حجز ضيف غير مرتبط بحساب" : "حجز ضيف بحساب جديد"}</small> : null}</div><StatusPill status={booking.bookingReviewStatus ?? booking.status} label={booking.bookingReviewStatus ? BOOKING_REVIEW_LABELS[booking.bookingReviewStatus] : TRIP_STATUS_LABELS[booking.status]} /></div>
               <div className="route-booking-highlight"><div><small>المسار</small><strong>{booking.route?.nameAr ?? (booking.direction ? DIRECTION_LABELS[booking.direction] : "مسار غير محدد")}</strong></div><div><small>النوع</small><strong>{booking.bookingType ? BOOKING_TYPE_LABELS[booking.bookingType] : "—"}</strong></div><div><small>التاريخ</small><strong>{booking.travelDate ? new Date(booking.travelDate).toLocaleDateString("ar") : "—"}</strong></div><div><small>{booking.bookingType === "PRIVATE_CAR" ? "فئة السيارة" : "المقاعد"}</small><strong>{booking.bookingType === "PRIVATE_CAR" ? VEHICLE_CLASS_LABELS[booking.vehicleClass ?? "SMALL"] : `${booking.passengerCount ?? 1} مسافر`}</strong></div></div>
               <p>{booking.pickupAddress} ← {booking.dropoffAddress}</p>
               <div className="booking-meta"><span>{booking.flightNumber || "لا يوجد رقم طيران"}</span><span>{booking.flightArrivalTime || "وقت غير محدد"}</span><span>{Number(booking.estimatedFare).toLocaleString("ar")} {booking.currency}</span></div>
@@ -147,6 +181,9 @@ export default function AdminBookingsPage() {
             </article>;
           })}
         </section>
+        {initialFilterReady && bookings.length === 0 && !error ? (
+          <div className="empty-state">لا توجد حجوزات مطابقة لهذه الفلاتر حالياً.</div>
+        ) : null}
       </Shell>
     </ProtectedRoute>
   );
