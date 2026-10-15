@@ -372,7 +372,7 @@ export function SiteAssistant() {
               <Icon name="close" size={21} />
             </button>
           </header>
-          {showLiveQuotes ? <AssistantLiveQuote onBack={() => setShowLiveQuotes(false)} /> : <div ref={messagesRef} className={styles.messages} role="log" aria-live="polite" aria-relevant="additions text">
+          {showLiveQuotes ? <AssistantLiveQuote onBack={() => setShowLiveQuotes(false)} onBook={() => { setOpen(false); setShowLiveQuotes(false); }} /> : <div ref={messagesRef} className={styles.messages} role="log" aria-live="polite" aria-relevant="additions text">
             {messages.map((message) => (
               <div key={message.id} className={message.sender === "visitor" ? styles.visitor : styles.assistant}>
                 <p>{message.text}</p>
