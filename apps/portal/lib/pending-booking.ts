@@ -71,9 +71,9 @@ export function loadPendingBooking(): PendingBooking | null {
     return {
       ...parsed,
       form: {
-        passengerCount: 1,
-        luggageCount: 0,
         ...parsed.form,
+        passengerCount: Number.isInteger(parsed.form.passengerCount) ? parsed.form.passengerCount : 1,
+        luggageCount: Number.isInteger(parsed.form.luggageCount) ? parsed.form.luggageCount : 0,
       },
     };
   } catch {
