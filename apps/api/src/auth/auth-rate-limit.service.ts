@@ -101,6 +101,11 @@ export class AuthRateLimitService implements OnModuleDestroy {
     );
   }
 
+  async assertAssistantMetricAllowed(ipAddress: string | undefined) {
+    if (!this.enabled()) return;
+    await this.consume('assistant-metric-ip', this.normalizeIp(ipAddress), 60, 60 * 60);
+  }
+
   async assertMapsAllowed(ipAddress: string | undefined) {
     if (!this.mapsEnabled()) return;
     await this.consume(
