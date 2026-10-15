@@ -15,7 +15,7 @@ test.describe("Admin booking operations alerts", () => {
       staleNewBookings: number;
       confirmedWithoutDriver: number;
       waitingReviewOverTwoHours: number;
-      attentionQueue: Array<{ id: string; category: string; requestedAt: string; bookingReference: string | null; route: { nameAr: string } | null }>;
+      attentionQueue: Array<{ id: string; category: string; ageMinutes: number; requestedAt: string; bookingReference: string | null; route: { nameAr: string } | null }>;
     };
     for (const value of [
       dashboard.newBookings,
@@ -32,6 +32,8 @@ test.describe("Admin booking operations alerts", () => {
     for (const item of dashboard.attentionQueue) {
       expect(["NEEDS_REVIEW", "NEEDS_DRIVER"]).toContain(item.category);
       expect(item.id).toBeTruthy();
+      expect(Number.isInteger(item.ageMinutes)).toBe(true);
+      expect(item.ageMinutes).toBeGreaterThanOrEqual(0);
       expect(item).not.toHaveProperty("contactPhone");
       expect(item).not.toHaveProperty("contactName");
       expect(item).not.toHaveProperty("passenger");
@@ -61,8 +63,8 @@ test.describe("Admin booking operations alerts", () => {
           waitingReviewOverTwoHours: 2,
           confirmedWithoutDriver: 1,
           attentionQueue: [
-            { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", bookingReference: "TS-OLD-001", requestedAt: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(), travelDate: null, category: "NEEDS_REVIEW", route: { nameAr: "دمشق إلى مطار بيروت" } },
-            { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", bookingReference: "TS-DRV-002", requestedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(), travelDate: null, category: "NEEDS_DRIVER", route: { nameAr: "دمشق إلى مطار الملكة علياء" } },
+            { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", bookingReference: "TS-OLD-001", requestedAt: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(), ageMinutes: 1560, travelDate: null, category: "NEEDS_REVIEW", route: { nameAr: "دمشق إلى مطار بيروت" } },
+            { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", bookingReference: "TS-DRV-002", requestedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(), ageMinutes: 30, travelDate: null, category: "NEEDS_DRIVER", route: { nameAr: "دمشق إلى مطار الملكة علياء" } },
           ],
           activeTrips: 0,
           availableDrivers: 1,
