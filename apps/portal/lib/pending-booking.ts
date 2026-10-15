@@ -9,6 +9,8 @@ export type PendingBookingForm = {
   routeId: string;
   bookingType: BookingType;
   vehicleClass: VehicleClass;
+  passengerCount: number;
+  luggageCount: number;
   travelDate: string;
   flightArrivalTime: string;
   flightNumber: string;
