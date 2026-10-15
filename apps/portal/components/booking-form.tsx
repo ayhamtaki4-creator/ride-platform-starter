@@ -37,7 +37,7 @@ import {
 import { format, parse } from "date-fns";
 import { ar } from "date-fns/locale";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import DatePicker from "react-datepicker";
 import { useAuth } from "./auth-provider";
@@ -179,7 +179,7 @@ function getRouteStartingPrice(route: ServiceRoute): { amount: number; currency:
 }
 
 export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void }) {
-  const router = useRouter();
+  const router = useRouter();\n  const searchParams = useSearchParams();
   const { user } = useAuth();
   const { showToast } = useToast();
   const [routes, setRoutes] = useState<ServiceRoute[]>([]);
@@ -222,7 +222,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<BookingValidationField, string>>>({});
-  const resumeStarted = useRef(false);
+  const resumeStarted = useRef(false);\n  const assistantPrefillApplied = useRef(false);
   const analyticsStarted = useRef(false);
   const analyticsSteps = useRef(new Set<number>());
 
@@ -313,6 +313,31 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         setRoutePolicies(Object.fromEntries(policies.map((policy) => [policy.routeId, policy])));
         setRoutesLoadState("ready");
         const first = data.find((route) => route.bookable);
+        const assistantRouteId = searchParams.get("source") === "assistant" ? searchParams.get("routeId") : null;
+        const assistantRoute = data.find((item) => item.id === assistantRouteId && item.bookable && item.isActive);
+        const requestedClass = searchParams.get("vehicleClass");
+        const assistantClass = assistantRoute?.pricingRules.find((rule) =>
+          rule.bookingType === "PRIVATE_CAR" && rule.vehicleClass === requestedClass && rule.isActive !== false,
+        )?.vehicleClass;
+        const passengerCount = Number(searchParams.get("passengerCount"));
+        const luggageCount = Number(searchParams.get("luggageCount"));
+        if (assistantRoute && assistantClass && !assistantPrefillApplied.current && !loadPendingBooking()) {
+          assistantPrefillApplied.current = true;
+          const capacity = assistantRoute.vehicleClasses?.find((item) => item.vehicleClass === assistantClass)
+            ?? DEFAULT_VEHICLE_CLASSES.find((item) => item.vehicleClass === assistantClass)!;
+          setForm((current) => ({
+            ...current,
+            routeId: assistantRoute.id,
+            bookingType: "PRIVATE_CAR",
+            vehicleClass: assistantClass,
+            pickupAddress: assistantRoute.origin.nameAr,
+            dropoffAddress: assistantRoute.destination.nameAr,
+          }));
+          // The existing booking form owns passenger/luggage counts in its quote UI.
+          // Do not trust any transferred price: booking requotes against the live API.
+          void passengerCount;
+          void luggageCount;
+        }
         if (first) {
           setForm((current) => {
             const restoredRoute = data.find((item) => item.id === current.routeId && item.bookable);
