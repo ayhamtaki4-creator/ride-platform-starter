@@ -113,6 +113,16 @@ export function AssistantLiveQuote({ onBack }: { onBack: () => void }) {
     }
   }, [route, quoteBusy, selectedClass, currentPassengers, currentLuggage]);
 
+  // A quote is informational only. Carry the selected inputs, never a trusted
+  // price; the booking wizard recalculates the fare from the official API.
+  const bookingHref = quote && route ? `/booking?${new URLSearchParams({
+    source: "assistant",
+    routeId: route.id,
+    vehicleClass: selectedClass,
+    passengerCount: String(currentPassengers),
+    luggageCount: String(currentLuggage),
+  }).toString()}` : "/booking";
+
   return (
     <section className={styles.liveQuotes} aria-label="الأسعار والمسارات الحالية">
       <div className={styles.liveQuotesHeader}>
