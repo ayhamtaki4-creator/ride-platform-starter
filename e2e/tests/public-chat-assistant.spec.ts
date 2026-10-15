@@ -126,6 +126,89 @@ test.describe("Public booking assistant", () => {
     await expect(dialog.getByRole("link", { name: "واتساب لبنان" })).toHaveAttribute("href", /wa\.me\/96171967194\?text=/);
   });
 
+  test("quoted trip carries route, vehicle, passengers and bags into a guest booking and re-quotes server side", async ({ page }) => {
+    await page.route("**/api/health", async (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
+    await page.route("**/api/route-booking-policies", async (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
+    await page.route("**/api/routes", async (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fixtures) }));
+
+    const quoteRequests: URLSearchParams[] = [];
+    await page.route("**/api/bookings/quote?**", async (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      quoteRequests.push(params);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          routeId: params.get("routeId"),
+          bookingType: "PRIVATE_CAR",
+          vehicleClass: params.get("vehicleClass"),
+          passengerCount: Number(params.get("passengerCount")),
+          luggageCount: Number(params.get("luggageCount")),
+          passengerPrice: 136,
+          currency: "USD",
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await page.getByRole("button", { name: "فتح مساعد طريق الشام" }).click();
+    const chat = page.getByRole("dialog", { name: "مساعد طريق الشام" });
+    await chat.getByRole("button", { name: "كم سعر الرحلة؟" }).click();
+    await chat.getByLabel("الركاب").selectOption("2");
+    await chat.getByLabel("الحقائب").selectOption("3");
+    await chat.getByRole("button", { name: "عرض السعر المعتمد" }).click();
+
+    const cta = chat.getByRole("link", { name: "احجز هذه الرحلة" });
+    await expect(cta).toBeVisible();
+    await expect(cta).toHaveAttribute("href", /from=assistant/);
+    await expect(cta).toHaveAttribute("href", /passengerCount=2/);
+    await expect(cta).toHaveAttribute("href", /luggageCount=3/);
+    await cta.click();
+
+    await expect(page).toHaveURL(/\/booking\?from=assistant/);
+    await expect(page.getByTestId("assistant-booking-prefill")).toContainText("تم نقل اختياراتك");
+    const routeCard = page.locator(".route-choice-card.is-selected");
+    await expect(routeCard).toContainText("دمشق إلى مطار بيروت");
+    await page.getByRole("button", { name: "التالي" }).click();
+
+    await expect(page.locator('[data-vehicle-class="SMALL"]')).toHaveClass(/is-selected/);
+    await expect(page.locator('[data-booking-field="passengerCount"] select')).toHaveValue("2");
+    await expect(page.locator('[data-booking-field="luggageCount"] select')).toHaveValue("3");
+
+    await page.getByRole("button", { name: "التالي" }).click();
+    await page.locator('[data-booking-field="passengerName"] input').fill("محمود أحمد");
+    await page.locator('[data-booking-field="passengerPhone"] input').fill("+963944000000");
+    await page.getByRole("button", { name: "التالي" }).click();
+
+    await expect(page.getByText("راجع طلبك")).toBeVisible();
+    await expect(page.locator(".review-grid")).toContainText("عدد الركاب");
+    await expect(page.locator(".review-grid")).toContainText("عدد الحقائب");
+    await expect(page.locator(".quote-card")).toContainText("136");
+    expect(quoteRequests.length).toBeGreaterThanOrEqual(2);
+    expect(quoteRequests.every((p) => p.get("passengerCount") === "2" &&
+      p.get("luggageCount") === "3" && p.get("routeId") === firstRouteId)).toBe(true);
+    // Do not submit a real booking; this is a safe end-to-end quote/handoff test.
+  });
+
+  test("stale assistant route falls back to a currently bookable route without trusting its price", async ({ page }) => {
+    await page.route("**/api/health", async (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
+    await page.route("**/api/route-booking-policies", async (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
+    await page.route("**/api/routes", async (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fixtures) }));
+    await page.goto(`/booking?from=assistant&routeId=eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee&vehicleClass=LARGE&passengerCount=8&luggageCount=8&price=1`);
+    await expect(page.getByTestId("assistant-booking-prefill")).toContainText("تغيّر توفر المسار");
+    await expect(page.locator(".route-choice-card.is-selected")).toContainText("دمشق إلى مطار بيروت");
+    await page.getByRole("button", { name: "التالي" }).click();
+    await expect(page.locator('[data-booking-field="passengerCount"] select')).toHaveValue("3");
+    await expect(page.locator('[data-booking-field="luggageCount"] select')).toHaveValue("4");
+    await expect(page.locator('[data-vehicle-class="SMALL"]')).toHaveClass(/is-selected/);
+  });
+
   test("free-form Arabic questions use AI response without login", async ({ page }) => {
     let requestBody: unknown;
     await page.route("**/api/assistant/chat", async (route) => {
