@@ -67,6 +67,7 @@ export default function AdminPage() {
             <h2 id="operations-attention-title">حجوزات تحتاج متابعة</h2>
             <p className="subtitle">هذه تنبيهات تشغيلية فقط؛ لن يتم رفض أو إلغاء أي حجز تلقائيًا.</p>
           </div>
+          <Link className="button" href="/admin/bookings?status=NEW">مراجعة الطلبات الجديدة</Link>
         </div>
         {data.pendingReviewOver30Minutes > 0 ? (
           <div className="notice error" role="status">
