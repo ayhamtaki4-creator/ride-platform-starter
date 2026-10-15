@@ -1,5 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { publicServices } from "@/lib/public-services";
+import { API_URL } from "@/lib/api";
+import type { AssistantConfiguration } from "@/lib/assistant-config";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +87,25 @@ export async function POST(request: Request) {
     return json({ error: "AI_UNAVAILABLE" }, 503);
   }
 
+  let configuration: AssistantConfiguration;
+  try {
+    const reply = await fetch(`${API_URL}/assistant/config`, {
+      cache: "no-store",
+      credentials: "omit",
+      signal: AbortSignal.timeout(12000),
+      headers: { Accept: "application/json" },
+    });
+    if (!reply.ok) return json({ error: "CONFIG_UNAVAILABLE" }, 503);
+    const fetched: unknown = await reply.json();
+    if (!fetched || typeof fetched !== "object" || !("enabled" in fetched) ||
+        typeof fetched.enabled !== "boolean" || !("faqs" in fetched) ||
+        !Array.isArray(fetched.faqs)) return json({ error: "CONFIG_UNAVAILABLE" }, 503);
+    configuration = fetched as AssistantConfiguration;
+    if (!configuration.enabled) return json({ error: "ASSISTANT_DISABLED" }, 503);
+  } catch {
+    return json({ error: "CONFIG_UNAVAILABLE" }, 503);
+  }
+
   const env = context.env as unknown as ChatEnvironment;
   if (!env.AI || !env.CHAT_RATE_LIMIT) {
     return json({ error: "AI_UNAVAILABLE" }, 503);
@@ -131,9 +152,15 @@ export async function POST(request: Request) {
   }
 
   try {
+    const faqContext = configuration.faqs
+      .slice(0, 20)
+      .filter((faq) => typeof faq?.question === "string" && typeof faq?.answer === "string")
+      .map((faq) => `سؤال: ${faq.question.slice(0, 120)}\nجواب: ${faq.answer.slice(0, 650)}`)
+      .join("\n");
     const output = await env.AI.run(MODEL, {
       messages: [
-        { role: "system", content: SYSTEM_GUIDANCE },
+        { role: "system", content: SYSTEM_GUIDANCE +
+            (faqContext ? `\nمعلومات إضافية معتمدة من إدارة طريق الشام (لا تتجاوز قيود الأمان):\n${faqContext}` : "") },
         ...history,
         { role: "user", content: message },
       ],
