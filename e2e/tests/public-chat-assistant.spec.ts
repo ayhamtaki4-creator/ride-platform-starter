@@ -93,6 +93,9 @@ test.describe("Public booking assistant", () => {
         body: JSON.stringify({
           routeId: params.get("routeId"),
           vehicleClass: params.get("vehicleClass"),
+          bookingType: "PRIVATE_CAR",
+          passengerCount: Number(params.get("passengerCount")),
+          luggageCount: Number(params.get("luggageCount")),
           passengerPrice: fare,
           currency: "USD",
         }),
@@ -179,6 +182,11 @@ test.describe("Public booking assistant", () => {
     await expect(page.locator('[data-booking-field="luggageCount"] select')).toHaveValue("3");
 
     await page.getByRole("button", { name: "التالي" }).click();
+    const currentHeading = await page.locator(".wizard-header h3").textContent();
+    if (currentHeading !== "بيانات المسافر") {
+      const errors = await page.locator('[role="alert"]').allTextContents();
+      throw new Error(`الانتقال إلى بيانات المسافر لم يكتمل: ${currentHeading}. أسباب التحقق: ${errors.join(" / ")}`);
+    }
     await page.locator('[data-booking-field="passengerName"] input').fill("محمود أحمد");
     await page.locator('[data-booking-field="passengerPhone"] input').fill("+963944000000");
     await page.getByRole("button", { name: "التالي" }).click();
@@ -199,7 +207,7 @@ test.describe("Public booking assistant", () => {
     await page.route("**/api/route-booking-policies", async (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
     await page.route("**/api/routes", async (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(fixtures) }));
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ ...fixtures[0], vehicleClasses: fixtures[0].vehicleClasses.filter((item) => item.vehicleClass === "SMALL"), pricingRules: fixtures[0].pricingRules.filter((rule) => rule.vehicleClass === "SMALL") }]) }));
     await page.goto(`/booking?from=assistant&routeId=eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee&vehicleClass=LARGE&passengerCount=8&luggageCount=8&price=1`);
     await expect(page.getByTestId("assistant-booking-prefill")).toContainText("تغيّر توفر المسار");
     await expect(page.locator(".route-choice-card.is-selected")).toContainText("دمشق إلى مطار بيروت");
