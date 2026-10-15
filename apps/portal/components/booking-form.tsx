@@ -179,7 +179,8 @@ function getRouteStartingPrice(route: ServiceRoute): { amount: number; currency:
 }
 
 export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void }) {
-  const router = useRouter();\n  const { user } = useAuth();
+  const router = useRouter();
+  const { user } = useAuth();
   const { showToast } = useToast();
   const [routes, setRoutes] = useState<ServiceRoute[]>([]);
   const [routePolicies, setRoutePolicies] = useState<Record<string, RouteBookingPolicy>>({});
@@ -223,7 +224,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<BookingValidationField, string>>>({});
-  const resumeStarted = useRef(false);\n  const analyticsStarted = useRef(false);
+  const resumeStarted = useRef(false);
+  const analyticsStarted = useRef(false);
   const analyticsSteps = useRef(new Set<number>());
 
   const selectedRoute = useMemo(
