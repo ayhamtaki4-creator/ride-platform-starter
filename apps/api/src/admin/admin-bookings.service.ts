@@ -119,13 +119,16 @@ export class AdminBookingsService {
       totalBookings,
       newBookings,
       staleNewBookings,
+      waitingReviewOverTwoHours,
       confirmedWithoutDriver,
       exhaustedTelegramDeliveries,
       delayedTelegramDeliveries,
       activeTrips,
       availableDrivers,
       financeRows,
-      latest
+      latest,
+      oldestUnreviewed,
+      nearestUnassigned
     ] = await Promise.all([
       this.prisma.trip.count({ where: { bookingReference: { not: null } } }),
       this.prisma.trip.count({
@@ -140,6 +143,15 @@ export class AdminBookingsService {
           bookingReviewStatus: 'NEW',
           status: { notIn: [...TERMINAL_TRIP_STATUSES] },
           requestedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+        }
+      }),
+      // Surface at-risk requests earlier than the existing 24-hour escalation.
+      this.prisma.trip.count({
+        where: {
+          bookingReference: { not: null },
+          bookingReviewStatus: 'NEW',
+          status: { notIn: [...TERMINAL_TRIP_STATUSES] },
+          requestedAt: { lt: new Date(Date.now() - 2 * 60 * 60 * 1000) }
         }
       }),
       // Confirmed but still unassigned trips need dispatch attention.
@@ -188,6 +200,41 @@ export class AdminBookingsService {
         orderBy: { requestedAt: 'desc' },
         take: 6,
         include: bookingInclude
+      }),
+      // Lightweight operational list: only identifiers, route and timestamps.
+      // No passenger names, phone numbers, or ticket metadata in the triage feed.
+      this.prisma.trip.findMany({
+        where: {
+          bookingReference: { not: null },
+          bookingReviewStatus: 'NEW',
+          status: { notIn: [...TERMINAL_TRIP_STATUSES] }
+        },
+        orderBy: { requestedAt: 'asc' },
+        take: 8,
+        select: {
+          id: true,
+          bookingReference: true,
+          requestedAt: true,
+          travelDate: true,
+          route: { select: { nameAr: true } }
+        }
+      }),
+      this.prisma.trip.findMany({
+        where: {
+          bookingReference: { not: null },
+          bookingReviewStatus: 'CONFIRMED',
+          driverId: null,
+          status: { in: ['PENDING_DISPATCH', 'SEARCHING_DRIVER'] }
+        },
+        orderBy: [{ travelDate: 'asc' }, { requestedAt: 'asc' }],
+        take: 8,
+        select: {
+          id: true,
+          bookingReference: true,
+          requestedAt: true,
+          travelDate: true,
+          route: { select: { nameAr: true } }
+        }
       })
     ]);
 
@@ -199,6 +246,7 @@ export class AdminBookingsService {
       totalBookings,
       newBookings,
       staleNewBookings,
+      waitingReviewOverTwoHours,
       confirmedWithoutDriver,
       exhaustedTelegramDeliveries,
       delayedTelegramDeliveries,
@@ -208,6 +256,16 @@ export class AdminBookingsService {
       completedBookingValue,
       outstandingRevenue: Math.max(0, completedBookingValue - revenue),
       unpaidCompletedBookings: Number(finance?.unpaidCompleted ?? 0),
+      attentionQueue: [
+        ...oldestUnreviewed.map((item) => ({
+          ...item,
+          category: 'NEEDS_REVIEW' as const
+        })),
+        ...nearestUnassigned.map((item) => ({
+          ...item,
+          category: 'NEEDS_DRIVER' as const
+        }))
+      ],
       latest: latest.map((item) => this.sanitize(item))
     };
   }
