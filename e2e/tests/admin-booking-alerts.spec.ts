@@ -14,16 +14,28 @@ test.describe("Admin booking operations alerts", () => {
       newBookings: number;
       staleNewBookings: number;
       confirmedWithoutDriver: number;
+      waitingReviewOverTwoHours: number;
+      attentionQueue: Array<{ id: string; category: string; requestedAt: string; bookingReference: string | null; route: { nameAr: string } | null }>;
     };
     for (const value of [
       dashboard.newBookings,
       dashboard.staleNewBookings,
       dashboard.confirmedWithoutDriver,
+      dashboard.waitingReviewOverTwoHours,
     ]) {
       expect(Number.isInteger(value)).toBeTruthy();
       expect(value).toBeGreaterThanOrEqual(0);
     }
     expect(dashboard.staleNewBookings).toBeLessThanOrEqual(dashboard.newBookings);
+    expect(dashboard.waitingReviewOverTwoHours).toBeGreaterThanOrEqual(dashboard.staleNewBookings);
+    expect(dashboard.attentionQueue.length).toBeLessThanOrEqual(16);
+    for (const item of dashboard.attentionQueue) {
+      expect(["NEEDS_REVIEW", "NEEDS_DRIVER"]).toContain(item.category);
+      expect(item.id).toBeTruthy();
+      expect(item).not.toHaveProperty("contactPhone");
+      expect(item).not.toHaveProperty("contactName");
+      expect(item).not.toHaveProperty("passenger");
+    }
   });
 
   test("alert links open the appropriate booking filter", async ({ page }) => {
@@ -46,7 +58,12 @@ test.describe("Admin booking operations alerts", () => {
           totalBookings: 3,
           newBookings: 2,
           staleNewBookings: 2,
+          waitingReviewOverTwoHours: 2,
           confirmedWithoutDriver: 1,
+          attentionQueue: [
+            { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", bookingReference: "TS-OLD-001", requestedAt: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(), travelDate: null, category: "NEEDS_REVIEW", route: { nameAr: "دمشق إلى مطار بيروت" } },
+            { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", bookingReference: "TS-DRV-002", requestedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(), travelDate: null, category: "NEEDS_DRIVER", route: { nameAr: "دمشق إلى مطار الملكة علياء" } },
+          ],
           activeTrips: 0,
           availableDrivers: 1,
           revenue: 0,
@@ -60,6 +77,12 @@ test.describe("Admin booking operations alerts", () => {
     await loginAs(page, "admin");
     await page.goto("/admin");
     await expect(page.getByText("حجوزات تحتاج متابعة")).toBeVisible();
+    await expect(page.getByText("أولويات مركز العمليات")).toBeVisible();
+    await expect(page.getByText("مراجعة متأخرة")).toBeVisible();
+    await expect(page.getByText("بحاجة إلى سائق")).toBeVisible();
+    await expect(page.getByText(/ينتظر المراجعة منذ أكثر من ساعتين/)).toBeVisible();
+    await expect(page.getByRole("link", { name: "مراجعة الحجز" })).toHaveAttribute("href", "/admin/bookings/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    await expect(page.getByRole("link", { name: "تعيين سائق" })).toHaveAttribute("href", "/admin/bookings/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
     await page.getByRole("link", { name: "مراجعة الطلبات الجديدة" }).click();
     await expect(page).toHaveURL(/\/admin\/bookings\?status=NEW/);
     await expect(page.locator("section.filters select")).toHaveValue("NEW");
