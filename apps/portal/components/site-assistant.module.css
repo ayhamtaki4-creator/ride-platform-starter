@@ -23,3 +23,31 @@
 .srOnly{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .launcher:focus-visible,.close:focus-visible,.suggestions button:focus-visible,.form button:focus-visible,.form input:focus-visible,.action:focus-visible{outline:3px solid #ddad44;outline-offset:2px}
 @media(max-width:600px){.container{left:max(12px,env(safe-area-inset-left));bottom:max(12px,env(safe-area-inset-bottom))}.panel{width:min(380px,calc(100vw - 24px));height:min(540px,calc(100dvh - 95px))}.launcher{min-height:52px;padding:10px 14px}}
+
+
+/* Live public route and quote explorer */
+.liveQuotes{display:flex;flex:1 1 auto;min-height:0;flex-direction:column;overflow-y:auto;padding:14px;gap:12px;background:#fff}
+.liveQuotesHeader{display:grid;gap:5px}
+.liveQuotesHeader h3{font-size:16px;color:var(--text,#10211a);margin:4px 0;font-weight:800}
+.liveQuotesHeader p{font-size:12px;line-height:1.8;color:var(--muted,#68756f);margin:0}
+.backButton{display:flex;align-items:center;gap:5px;border:0;background:transparent;padding:4px 0;color:var(--primary,#0b7a53);font-size:12px;font-weight:800;align-self:start}
+.quoteForm{display:grid;gap:8px;padding-bottom:10px}
+.quoteForm label{font-size:12px;font-weight:800;color:var(--text,#10211a)}
+.quoteForm select{min-width:0;max-width:100%;min-height:42px;width:100%;padding:8px 10px;border:1px solid var(--border,#dce4e0);border-radius:10px;background:#fff;color:var(--text,#10211a);font:inherit;font-size:13px}
+.quoteCounts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.quoteCounts>div{min-width:0;display:grid;gap:5px}
+.quoteButton{display:flex;justify-content:center;align-items:center;gap:7px;min-height:44px;margin-top:4px;padding:10px;border:0;border-radius:12px;color:#fff;background:var(--primary,#0b7a53);font-size:13px;font-weight:800;text-align:center}
+.quoteButton:disabled{opacity:.5;cursor:not-allowed}
+.quoteResult{display:grid;gap:8px;padding:12px;background:#edf8f2;border:1px solid #b9e0c7;border-radius:12px}
+.quoteResult small{font-size:11px;color:#38694b}
+.quoteResult strong{font-size:24px;color:var(--primary-dark,#075c3f)}
+.quoteResult span,.quoteHelp{font-size:11px;line-height:1.9;color:var(--muted,#68756f)}
+.quoteHelp{margin:2px 0}
+.quoteNotice{padding:12px;border:1px solid #dce4e0;border-radius:12px;background:#f6faf8;color:var(--muted,#68756f);font-size:12px;line-height:1.8}
+.quoteNotice p{margin:0 0 8px}
+.outlineButton{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:8px 12px;border:1px solid #b7d2c2;border-radius:10px;background:#fff;color:#075c3f;font-size:12px;font-weight:800;margin:4px}
+.quoteError{color:#b42318;margin:0;font-size:12px;line-height:1.8}
+.supportBar{display:flex;flex:0 0 auto;gap:8px;padding:9px 12px 1px}
+.supportBar a{display:flex;align-items:center;justify-content:center;flex:1;min-height:39px;border:1px solid #b7d9c4;background:#f1faf5;border-radius:9px;color:#176143;font-size:12px;font-weight:800}
+.supportBar a:hover{background:#e2f5ea}
+@media(max-width:600px){.quoteForm select{font-size:16px}.supportBar a{font-size:11px}}

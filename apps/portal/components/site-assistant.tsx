@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/ui/icon";
 import styles from "./site-assistant.module.css";
+import { AssistantLiveQuote } from "./assistant-live-quote";
+import { whatsappHref } from "@/lib/whatsapp-link";
 
 type TopicId = "booking" | "prices" | "routes" | "guest" | "luggage" | "flight" | "status" | "driver" | "change" | "payment" | "support";
 
@@ -116,6 +118,19 @@ const TOPICS: Topic[] = [
 ];
 
 const quickTopics: TopicId[] = ["booking", "prices", "routes", "status", "support"];
+const safeSupportTopics: Partial<Record<TopicId, string>> = {
+  booking: "طريقة الحجز",
+  prices: "أسعار الرحلات",
+  routes: "المسارات المتاحة",
+  guest: "الحجز دون حساب",
+  luggage: "الركاب والحقائب",
+  flight: "معلومات رحلة الطيران",
+  status: "متابعة حجز سابق",
+  driver: "بيانات السائق والتتبع",
+  change: "تعديل أو إلغاء الحجز",
+  payment: "طرق الدفع",
+  support: "خدمة العملاء",
+};
 
 const WELCOME: Message = {
   id: 0,
@@ -156,6 +171,8 @@ export function SiteAssistant() {
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [sending, setSending] = useState(false);
+  const [showLiveQuotes, setShowLiveQuotes] = useState(false);
+  const [supportTopic, setSupportTopic] = useState<TopicId | null>(null);
   const nextId = useRef(1);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -200,6 +217,14 @@ export function SiteAssistant() {
     if (!value || sending) return;
 
     const topic = findTopic(value);
+    if (topic) setSupportTopic(topic.id);
+    const explicitRouteRequest = /(مسار|مسارات|خطوط|الوجهات|وجهات|الرحلات المتاحه|السفر من|طرق النقل|route)/.test(normalizeArabic(value));
+    if (topic?.id === "prices" || (topic?.id === "routes" && explicitRouteRequest)) {
+      appendExchange(value, topic);
+      setDraft("");
+      setShowLiveQuotes(true);
+      return;
+    }
     const history = messages
       .filter((message) => message.id !== 0)
       .slice(-6)
@@ -246,8 +271,12 @@ export function SiteAssistant() {
   }
 
   function selectTopic(topic: Topic) {
+    setSupportTopic(topic.id);
     appendExchange(topic.title, topic);
+    if (topic.id === "prices" || topic.id === "routes") setShowLiveQuotes(true);
   }
+
+  const whatsappIntro = encodeURIComponent(`مرحباً، أحتاج إلى مساعدة من فريق طريق الشام بخصوص ${supportTopic ? safeSupportTopics[supportTopic] : "خدمة النقل"}.`);
 
   return (
     <div className={styles.container} dir="rtl">
@@ -263,7 +292,7 @@ export function SiteAssistant() {
               <Icon name="close" size={21} />
             </button>
           </header>
-          <div className={styles.messages} role="log" aria-live="polite" aria-relevant="additions text">
+          {showLiveQuotes ? <AssistantLiveQuote onBack={() => setShowLiveQuotes(false)} /> : <div className={styles.messages} role="log" aria-live="polite" aria-relevant="additions text">
             {messages.map((message) => (
               <div key={message.id} className={message.sender === "visitor" ? styles.visitor : styles.assistant}>
                 <p>{message.text}</p>
@@ -276,15 +305,15 @@ export function SiteAssistant() {
             ))}
             {sending ? <div className={styles.assistant} role="status"><p>جارٍ تجهيز الرد...</p></div> : null}
             <div ref={endRef} />
-          </div>
-          <div className={styles.suggestions} aria-label="أسئلة سريعة">
+          </div>}
+          {!showLiveQuotes ? <div className={styles.suggestions} aria-label="أسئلة سريعة">
             {quickTopics.map((id) => {
               const topic = TOPICS.find((item) => item.id === id);
               if (!topic) return null;
               return <button type="button" key={id} onClick={() => selectTopic(topic)}>{topic.title}</button>;
             })}
-          </div>
-          <form className={styles.form} onSubmit={sendMessage}>
+          </div> : null}
+          {!showLiveQuotes ? <form className={styles.form} onSubmit={sendMessage}>
             <label className={styles.srOnly} htmlFor="site-assistant-message">اكتب سؤالك</label>
             <input
               id="site-assistant-message"
@@ -297,8 +326,12 @@ export function SiteAssistant() {
               autoComplete="off"
             />
             <button disabled={!draft.trim() || sending} type="submit" aria-label="إرسال السؤال"><Icon name="arrow-left" size={20} /></button>
-          </form>
-          <p className={styles.disclaimer}>قد تُعالج الأسئلة عبر Cloudflare AI؛ لا تكتب معلومات شخصية أو كلمات مرور. المساعد لا ينفذ الحجوزات.</p>
+          </form> : null}
+          <nav className={styles.supportBar} aria-label="التواصل مع موظف الدعم">
+            <a href={`${whatsappHref("+963965350502")}?text=${whatsappIntro}`} target="_blank" rel="noopener noreferrer">واتساب سوريا</a>
+            <a href={`${whatsappHref("+96171967194")}?text=${whatsappIntro}`} target="_blank" rel="noopener noreferrer">واتساب لبنان</a>
+          </nav>
+          <p className={styles.disclaimer}>قد تُعالج الأسئلة الحرة عبر Cloudflare AI. لا تُدخل بيانات شخصية أو كلمات مرور؛ لا ينفذ المساعد الحجوزات.</p>
         </section>
       ) : null}
       <button

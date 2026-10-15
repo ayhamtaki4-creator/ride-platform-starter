@@ -39,3 +39,25 @@ Some local `next dev` setups do not initialize OpenNext's Cloudflare development
 - The assistant is informational and has no privileged operational API credentials.
 - Rate limit is enforced server-side **before** triggering inference and fails closed if unavailable.
 - For production beyond the free-tier trial, consider Cloudflare WAF/bot management, a verified human handoff, a durable cost budget, and analytics that never collect conversation content.
+
+## Live routes, exact price quoting, and human handoff
+
+The widget now opens a fare and route explorer when visitors select **كم سعر الرحلة؟** / **ما المسارات المتاحة؟** or ask a matching question. The explorer calls the same public API used by the booking form:
+
+- `GET /api/routes`: only bookable, active, private-car routes.
+- `GET /api/bookings/quote?routeId=...&bookingType=PRIVATE_CAR&vehicleClass=...&passengerCount=...&luggageCount=...`: authoritative price computed by the backend for an explicitly selected route/class/counts. A successful response is not a reservation or an availability guarantee.
+- Price is cleared immediately on any change to route, class, passenger count, or luggage count. Failures never reuse previous prices; the visitor can go to the official booking page.
+- Initial Render cold starts are handled by the existing public API warmup. No extra database tables or auth permissions are needed.
+- Two WhatsApp actions contact the already-published support numbers. They carry only a fixed greeting and a vetted category label (for example, prices or routes), never conversation transcripts, customer details, or price quotes.
+
+The generative AI does not invent a price and never receives private booking records. The existing `/booking` form remains the source of truth before placing a reservation. No route-specific booking deep link is used because the wizard does not currently guarantee support for preselecting a route via query parameters.
+
+### Smoke check after release
+
+1. Open `/` in a private browsing session and open **مساعد طريق الشام**.
+2. Select **كم سعر الرحلة؟**. Verify current routes appear and no inactive route is visible.
+3. Choose a route, car class, number of passengers and bags, then click **عرض السعر المعتمد**.
+4. Check the returned fare and currency against the booking form for the same selections.
+5. Change the route/class/counts: the old fare must disappear. Check quote failure shows a clear message rather than a stale result.
+6. Verify both WhatsApp links open the correct contact with only the generic request text.
+7. Verify the free-form AI assistant and guest booking flow still work as before.
