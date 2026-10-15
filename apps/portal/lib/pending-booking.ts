@@ -9,6 +9,8 @@ export type PendingBookingForm = {
   routeId: string;
   bookingType: BookingType;
   vehicleClass: VehicleClass;
+  passengerCount: number;
+  luggageCount: number;
   travelDate: string;
   flightArrivalTime: string;
   flightNumber: string;
@@ -64,7 +66,16 @@ export function loadPendingBooking(): PendingBooking | null {
       clearPendingBooking();
       return null;
     }
-    return parsed;
+    // Pre-October drafts predate the explicit passenger/luggage selectors.
+    // Preserve every saved field and give these new fields their safe defaults.
+    return {
+      ...parsed,
+      form: {
+        passengerCount: 1,
+        luggageCount: 0,
+        ...parsed.form,
+      },
+    };
   } catch {
     clearPendingBooking();
     return null;
