@@ -340,9 +340,9 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         }
         if (first) {
           setForm((current) => {
-            const restoredRoute = data.find((item) => item.id === current.routeId && item.bookable);
-            const route = restoredRoute ?? first;
-            const bookingType = preferredBookingType(route, current.bookingType);
+            const restoredRoute = data.find((item) => item.id === current.routeId && item.bookable);\n            const handoffRoute = assistantPrefillApplied.current ? assistantRoute : null;
+            const route = handoffRoute ?? restoredRoute ?? first;
+            const bookingType = handoffRoute ? "PRIVATE_CAR" : preferredBookingType(route, current.bookingType);
             const keepsVehicleClass =
               bookingType !== "PRIVATE_CAR" ||
               route.pricingRules.some(
@@ -352,9 +352,9 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
               ...current,
               routeId: route.id,
               bookingType,
-              vehicleClass: keepsVehicleClass ? current.vehicleClass : firstPricedVehicleClass(route, bookingType),
-              pickupAddress: restoredRoute ? current.pickupAddress || route.origin.nameAr : route.origin.nameAr,
-              dropoffAddress: restoredRoute ? current.dropoffAddress || route.destination.nameAr : route.destination.nameAr,
+              vehicleClass: handoffRoute && assistantClass ? assistantClass : keepsVehicleClass ? current.vehicleClass : firstPricedVehicleClass(route, bookingType),
+              pickupAddress: handoffRoute ? route.origin.nameAr : restoredRoute ? current.pickupAddress || route.origin.nameAr : route.origin.nameAr,
+              dropoffAddress: handoffRoute ? route.destination.nameAr : restoredRoute ? current.dropoffAddress || route.destination.nameAr : route.destination.nameAr,
             };
           });
         }
