@@ -108,14 +108,15 @@ test.describe("Public booking assistant", () => {
     await dialog.getByLabel("الركاب").selectOption("2");
     await dialog.getByLabel("الحقائب").selectOption("3");
     await dialog.getByRole("button", { name: "عرض السعر المعتمد" }).click();
-    await expect(dialog.getByText(/123|١٢٣/)).toBeVisible();
+    const priceValue = dialog.locator("[class*=quoteResult] strong");
+    await expect(priceValue).toHaveText(/123|١٢٣/);
     expect(new URL(latestQuoteRequest).searchParams.get("passengerCount")).toBe("2");
     expect(new URL(latestQuoteRequest).searchParams.get("luggageCount")).toBe("3");
 
     await dialog.getByLabel("اختر المسار").selectOption(secondRouteId);
-    await expect(dialog.getByText(/123|١٢٣/)).not.toBeVisible();
+    await expect(priceValue).toHaveCount(0);
     await dialog.getByRole("button", { name: "عرض السعر المعتمد" }).click();
-    await expect(dialog.getByText(/174|١٧٤/)).toBeVisible();
+    await expect(priceValue).toHaveText(/174|١٧٤/);
     expect(new URL(latestQuoteRequest).searchParams.get("routeId")).toBe(secondRouteId);
 
     const syriaWhatsApp = dialog.getByRole("link", { name: "واتساب سوريا" });
