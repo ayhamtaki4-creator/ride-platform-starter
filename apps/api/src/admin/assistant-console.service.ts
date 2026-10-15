@@ -63,6 +63,10 @@ export class AssistantConsoleService {
       question: item.question.trim(),
       answer: item.answer.trim()
     }));
+    const farePattern = /(?:\d[\d,.\s]*\s*(?:دولار|دولارات|usd|syp|\$))|(?:(?:usd|syp|\$)\s*\d)/i;
+    if (faqs.some((faq) => farePattern.test(faq.answer))) {
+      throw new BadRequestException('لا تضع سعراً رقمياً ثابتاً في الأسئلة الشائعة؛ استخدم التسعير المباشر من صفحة الحجز.');
+    }
     if (new Set(faqs.map((item) => item.question.toLocaleLowerCase())).size !== faqs.length) {
       throw new BadRequestException('يوجد سؤال مكرر؛ عدّل الأسئلة المكررة أولاً.');
     }
