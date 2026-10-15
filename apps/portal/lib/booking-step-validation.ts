@@ -5,6 +5,8 @@ export type BookingValidationField =
   | "routeId"
   | "bookingType"
   | "vehicleClass"
+  | "passengerCount"
+  | "luggageCount"
   | "travelDate"
   | "flightArrivalTime"
   | "flightNumber"
@@ -79,6 +81,20 @@ export function validateBookingStep(step: number, context: BookingValidationCont
     }
     if (form.bookingType === "PRIVATE_CAR" && !priceAvailable) {
       add("vehicleClass", "اختر حجم سيارة له سعر متاح لهذا المسار.");
+    }
+    if (form.bookingType === "PRIVATE_CAR") {
+      const capacity = selectedRoute?.vehicleClasses?.find((item) => item.vehicleClass === form.vehicleClass)
+        ?? ({ SMALL: { passengerCapacity: 3, luggageCapacity: 4 },
+              MEDIUM: { passengerCapacity: 4, luggageCapacity: 5 },
+              LARGE: { passengerCapacity: 8, luggageCapacity: 8 } } as const)[form.vehicleClass];
+      if (!Number.isInteger(form.passengerCount) || form.passengerCount < 1 ||
+          (capacity && form.passengerCount > capacity.passengerCapacity)) {
+        add("passengerCount", "اختر عدد ركاب صحيحًا ضمن سعة السيارة المحددة.");
+      }
+      if (!Number.isInteger(form.luggageCount) || form.luggageCount < 0 ||
+          (capacity && form.luggageCount > capacity.luggageCapacity)) {
+        add("luggageCount", "اختر عدد حقائب صحيحًا ضمن سعة السيارة المحددة.");
+      }
     }
     if (selectedRoute?.requiresFlightDetails && !form.flightArrivalTime) {
       add("flightArrivalTime", "اختر وقت وصول أو إقلاع الطائرة قبل المتابعة.");
