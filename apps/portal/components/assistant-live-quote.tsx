@@ -186,7 +186,7 @@ export function AssistantLiveQuote({ onBack }: { onBack: () => void }) {
               <small>السعر حسب المسار والفئة والأعداد المختارة</small>
               <strong>{currencyPrice(quote)}</strong>
               <span>سعر مسترجع من نظام الحجز لحظة الاستعلام، وليس تأكيداً للتوفر أو للحجز. أعد التحقق من السعر في صفحة الحجز قبل الإرسال.</span>
-              <Link href="/booking" className={styles.quoteButton} onClick={() => recordAssistantEvent("BOOKING_CLICK", "prices")}>الانتقال إلى الحجز <Icon name="arrow-left" size={16} /></Link>
+              <Link href={bookingHref} className={styles.quoteButton} onClick={() => recordAssistantEvent("BOOKING_CLICK", "prices")}>احجز هذه الرحلة <Icon name="arrow-left" size={16} /></Link>
             </div>
           ) : (
             <p className={styles.quoteHelp}>الأسعار لا تُخمن بواسطة الذكاء الاصطناعي، بل تُجلب عبر واجهة التسعير الرسمية.</p>
