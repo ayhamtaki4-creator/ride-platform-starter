@@ -5,6 +5,8 @@ export type BookingValidationField =
   | "routeId"
   | "bookingType"
   | "vehicleClass"
+  | "passengerCount"
+  | "luggageCount"
   | "travelDate"
   | "flightArrivalTime"
   | "flightNumber"
@@ -79,6 +81,22 @@ export function validateBookingStep(step: number, context: BookingValidationCont
     }
     if (form.bookingType === "PRIVATE_CAR" && !priceAvailable) {
       add("vehicleClass", "اختر حجم سيارة له سعر متاح لهذا المسار.");
+    }
+    if (form.bookingType === "PRIVATE_CAR" && selectedRoute) {
+      const capacity = selectedRoute.vehicleClasses?.find((item) => item.vehicleClass === form.vehicleClass);
+      const defaultCapacity = {
+        SMALL: { passengerCapacity: 3, luggageCapacity: 4 },
+        MEDIUM: { passengerCapacity: 4, luggageCapacity: 5 },
+        LARGE: { passengerCapacity: 8, luggageCapacity: 8 },
+      }[form.vehicleClass];
+      const maxPassengers = Math.min(20, capacity?.passengerCapacity ?? defaultCapacity.passengerCapacity);
+      const maxLuggage = Math.min(20, capacity?.luggageCapacity ?? defaultCapacity.luggageCapacity);
+      if (!Number.isInteger(form.passengerCount) || form.passengerCount < 1 || form.passengerCount > maxPassengers) {
+        add("passengerCount", `عدد الركاب يجب أن يكون بين 1 و${maxPassengers} حسب فئة السيارة.`);
+      }
+      if (!Number.isInteger(form.luggageCount) || form.luggageCount < 0 || form.luggageCount > maxLuggage) {
+        add("luggageCount", `عدد الحقائب يجب أن يكون بين 0 و${maxLuggage} حسب فئة السيارة.`);
+      }
     }
     if (selectedRoute?.requiresFlightDetails && !form.flightArrivalTime) {
       add("flightArrivalTime", "اختر وقت وصول أو إقلاع الطائرة قبل المتابعة.");
