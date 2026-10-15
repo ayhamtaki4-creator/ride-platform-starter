@@ -3,6 +3,7 @@
 import { ROUTE_TYPE_LABELS, ServiceRoute, VehicleClassConfig } from "@/lib/admin-operations";
 import { apiFetch, apiUpload } from "@/lib/api";
 import { rememberGuestBookingClaim } from "@/lib/guest-booking-claims";
+import { parseAssistantBookingSelection, type AssistantBookingSelection } from "@/lib/assistant-booking-handoff";
 import { trackBookingStarted, trackBookingStepCompleted, trackBookingSubmitted } from "@/lib/analytics";
 import {
   normalizeBookingPhone,
@@ -54,7 +55,7 @@ const tomorrow = format(tomorrowDate, "yyyy-MM-dd");
 const stepTitles = ["المسار", "الموعد والسيارة", "بيانات المسافر", "المراجعة"];
 const stepRequirements = [
   "للمتابعة: اختر مسارًا متاحًا ونوع الحجز (سيارة خاصة).",
-  "للمتابعة: حدد تاريخًا يبدأ من الغد وحجم سيارة بسعر متاح، وأدخل بيانات الطائرة إذا كان المسار يتطلب ذلك.",
+  "للمتابعة: اختر تاريخًا يبدأ من الغد، وفئة سيارة تناسب عدد الركاب والحقائب، وأدخل بيانات الطائرة إذا طُلبت.",
   "للمتابعة: أدخل الاسم الكامل ورقم الهاتف الدولي الصحيح وعنواني الانطلاق والوصول.",
   "راجع التفاصيل والسعر وتأكد من رقم الهاتف قبل إرسال الحجز. لن يُطلب منك تسجيل الدخول.",
 ];
@@ -193,6 +194,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     routeId: "",
     bookingType: "PRIVATE_CAR",
     vehicleClass: "SMALL",
+    passengerCount: 1,
+    luggageCount: 0,
     travelDate: tomorrow,
     flightArrivalTime: "",
     flightNumber: "",
@@ -223,6 +226,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<BookingValidationField, string>>>({});
   const resumeStarted = useRef(false);
+  const assistantSelection = useRef<AssistantBookingSelection | null>(null);
+  const [assistantNotice, setAssistantNotice] = useState("");
   const analyticsStarted = useRef(false);
   const analyticsSteps = useRef(new Set<number>());
 
@@ -276,12 +281,26 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   }
 
   useEffect(() => {
-    const pending = loadPendingBooking();
-    if (pending) {
-      setDraftId(pending.id);
-      setForm((current) => ({ ...current, ...pending.form }));
-      setStep(Math.min(4, Math.max(1, pending.step || 1)));
-      setRestoredDraft(pending);
+    // A fresh assistant handoff is an explicit new booking, not a request to
+    // resume/auto-submit a previous draft. Do not read or forward any fare.
+    const incoming = parseAssistantBookingSelection(window.location.search);
+    assistantSelection.current = incoming;
+    if (incoming) {
+      setForm((current) => ({ ...current, ...incoming, bookingType: "PRIVATE_CAR" }));
+      setStep(1);
+    } else {
+      const pending = loadPendingBooking();
+      if (pending) {
+        setDraftId(pending.id);
+        // Older browser drafts predate passenger/luggage counts.
+        const passengerCount = Number.isInteger(pending.form.passengerCount) && pending.form.passengerCount > 0
+          ? Math.min(20, pending.form.passengerCount) : 1;
+        const luggageCount = Number.isInteger(pending.form.luggageCount) && pending.form.luggageCount >= 0
+          ? Math.min(20, pending.form.luggageCount) : 0;
+        setForm((current) => ({ ...current, ...pending.form, passengerCount, luggageCount }));
+        setStep(Math.min(4, Math.max(1, pending.step || 1)));
+        setRestoredDraft(pending);
+      }
     }
     setDraftLoaded(true);
   }, []);
@@ -312,24 +331,43 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         setRoutes(data);
         setRoutePolicies(Object.fromEntries(policies.map((policy) => [policy.routeId, policy])));
         setRoutesLoadState("ready");
-        const first = data.find((route) => route.bookable);
+        const first = data.find((route) => route.bookable && route.isActive);
         if (first) {
           setForm((current) => {
-            const restoredRoute = data.find((item) => item.id === current.routeId && item.bookable);
+            const incoming = assistantSelection.current;
+            const restoredRoute = data.find((item) => item.id === (incoming?.routeId ?? current.routeId) && item.bookable && item.isActive);
             const route = restoredRoute ?? first;
             const bookingType = preferredBookingType(route, current.bookingType);
-            const keepsVehicleClass =
-              bookingType !== "PRIVATE_CAR" ||
-              route.pricingRules.some(
-                (rule) => rule.bookingType === bookingType && rule.vehicleClass === current.vehicleClass && rule.isActive !== false,
-              );
+            const requestedClass = incoming?.vehicleClass ?? current.vehicleClass;
+            const keepsVehicleClass = bookingType !== "PRIVATE_CAR" ||
+              route.pricingRules.some((rule) => rule.bookingType === bookingType &&
+                rule.vehicleClass === requestedClass && rule.isActive !== false);
+            const vehicleClass = keepsVehicleClass ? requestedClass : firstPricedVehicleClass(route, bookingType);
+            const config = route.vehicleClasses?.find((item) => item.vehicleClass === vehicleClass) ??
+              DEFAULT_VEHICLE_CLASSES.find((item) => item.vehicleClass === vehicleClass)!;
+            const passengerCount = Math.min(Math.max(current.passengerCount, 1), Math.min(20, Math.max(1, config.passengerCapacity)));
+            const luggageCount = Math.min(Math.max(current.luggageCount, 0), Math.min(20, Math.max(0, config.luggageCapacity)));
+            if (incoming) {
+              const adjusted = !restoredRoute || !keepsVehicleClass ||
+                passengerCount !== incoming.passengerCount || luggageCount !== incoming.luggageCount;
+              setAssistantNotice(adjusted
+                ? "تغيّر توفر المسار أو سعة السيارة منذ عرض السعر في المساعد. راجع الاختيارات المحددة والسعر قبل المتابعة."
+                : "تم نقل اختياراتك من المساعد. أكمل تاريخ الرحلة وبياناتك، وسيُعاد احتساب السعر قبل التأكيد.");
+            }
             return {
               ...current,
               routeId: route.id,
               bookingType,
-              vehicleClass: keepsVehicleClass ? current.vehicleClass : firstPricedVehicleClass(route, bookingType),
-              pickupAddress: restoredRoute ? current.pickupAddress || route.origin.nameAr : route.origin.nameAr,
-              dropoffAddress: restoredRoute ? current.dropoffAddress || route.destination.nameAr : route.destination.nameAr,
+              vehicleClass,
+              passengerCount,
+              luggageCount,
+              pickupAddress: incoming || !restoredRoute ? route.origin.nameAr : current.pickupAddress || route.origin.nameAr,
+              dropoffAddress: incoming || !restoredRoute ? route.destination.nameAr : current.dropoffAddress || route.destination.nameAr,
+              ...(incoming ? {
+                useCustomMapLocations: false,
+                pickupLatitude: null, pickupLongitude: null,
+                dropoffLatitude: null, dropoffLongitude: null,
+              } : {}),
             };
           });
         }
@@ -375,6 +413,8 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
       routeId: route.id,
       bookingType,
       vehicleClass: firstPricedVehicleClass(route, bookingType),
+      passengerCount: 1,
+      luggageCount: 0,
       pickupAddress: route.origin.nameAr,
       dropoffAddress: route.destination.nameAr,
       useCustomMapLocations: false,
@@ -409,8 +449,20 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
   }
 
   function update<K extends keyof BookingFormState>(key: K, value: BookingFormState[K]) {
-    setForm((current) => ({ ...current, [key]: value }));
-    if (["routeId", "bookingType", "vehicleClass"].includes(key)) setQuote(null);
+    setForm((current) => {
+      if (key === "vehicleClass" && selectedRoute) {
+        const capacity = vehicleClasses.find((item) => item.vehicleClass === value) ??
+          DEFAULT_VEHICLE_CLASSES.find((item) => item.vehicleClass === value)!;
+        return {
+          ...current,
+          vehicleClass: value as VehicleClass,
+          passengerCount: Math.min(current.passengerCount, capacity.passengerCapacity),
+          luggageCount: Math.min(current.luggageCount, capacity.luggageCapacity),
+        };
+      }
+      return { ...current, [key]: value };
+    });
+    if (["routeId", "bookingType", "vehicleClass", "passengerCount", "luggageCount"].includes(key)) setQuote(null);
     setFieldErrors({});
     setError("");
   }
@@ -546,8 +598,15 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         routeId: candidate.routeId,
         bookingType: candidate.bookingType,
         vehicleClass: candidate.bookingType === "PRIVATE_CAR" ? candidate.vehicleClass : "SMALL",
+        passengerCount: String(candidate.passengerCount),
+        luggageCount: String(candidate.luggageCount),
       });
       const data = await apiFetch<BookingQuote>(`/bookings/quote?${params}`, { skipAuth: true });
+      if (data.routeId !== candidate.routeId || data.vehicleClass !== candidate.vehicleClass ||
+        data.passengerCount !== candidate.passengerCount || data.luggageCount !== candidate.luggageCount ||
+        !Number.isFinite(data.passengerPrice) || data.passengerPrice < 0 || !data.currency) {
+        throw new Error("لم نتمكن من مطابقة عرض السعر مع اختيارات الركاب والحقائب. حاول مجددًا.");
+      }
       setQuote(data);
       return data;
     } catch (caught) {
@@ -805,8 +864,15 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
     for (const targetStep of [1, 2, 3]) {
       if (!validateStep(targetStep)) return;
     }
-    if (!quote && !(await loadQuoteFor(form))) {
+    const currentPrice = quote;
+    const verifiedPrice = await loadQuoteFor(form);
+    if (!verifiedPrice) {
       setError("تعذر التأكد من سعر الرحلة. تحقق من اتصالك ثم أعد المحاولة.");
+      return;
+    }
+    if (currentPrice && (currentPrice.passengerPrice !== verifiedPrice.passengerPrice ||
+      currentPrice.currency !== verifiedPrice.currency)) {
+      setError("تغيّر سعر الرحلة منذ آخر مراجعة. راجع السعر الجديد ثم اضغط تأكيد الحجز مرة أخرى.");
       return;
     }
     await createBooking(form);
@@ -874,6 +940,7 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         })}
       </ol>
       <div className="booking-step-requirements" role="note">{stepRequirements[step - 1]}</div>
+      {assistantNotice && step <= 2 ? <div className="notice" role="status" data-testid="assistant-booking-prefill">{assistantNotice}</div> : null}
       <div className="wizard-body">
         {step === 1 ? (
           <div className="wizard-pane">
@@ -1015,6 +1082,26 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
                   })}
                 </div>
                 {fieldIssue("vehicleClass")}
+                <div className="pane-heading secondary-pane-heading">
+                  <h4>عدد الركاب والحقائب</h4>
+                  <p>حدّد الأعداد الفعلية بما يناسب سعة السيارة المختارة.</p>
+                </div>
+                <div className="form-grid wizard-form-grid">
+                  <label data-booking-field="passengerCount"><span className="label">عدد الركاب</span>
+                    <select className="input" value={form.passengerCount} onChange={(event) => update("passengerCount", Number(event.target.value))}>
+                      {Array.from({ length: Math.min(20, Math.max(1, selectedClassConfig.passengerCapacity)) }, (_, i) => i + 1).map((n) =>
+                        <option value={n} key={n}>{n} {n === 1 ? "راكب" : "ركاب"}</option>)}
+                    </select>
+                    {fieldIssue("passengerCount")}
+                  </label>
+                  <label data-booking-field="luggageCount"><span className="label">عدد الحقائب</span>
+                    <select className="input" value={form.luggageCount} onChange={(event) => update("luggageCount", Number(event.target.value))}>
+                      {Array.from({ length: Math.min(20, Math.max(0, selectedClassConfig.luggageCapacity)) + 1 }, (_, i) => i).map((n) =>
+                        <option value={n} key={n}>{n} {n === 1 ? "حقيبة" : "حقائب"}</option>)}
+                    </select>
+                    {fieldIssue("luggageCount")}
+                  </label>
+                </div>
               </>
             ) : <div className="notice">الحجز لمقعد واحد، وتختار الإدارة المركبة المناسبة للرحلة المشتركة.</div>}
           </div>
@@ -1075,7 +1162,11 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
             <div className="review-grid">
               <div><span>المسار</span><strong>{selectedRoute?.nameAr}</strong></div>
               <div><span>نوع الحجز</span><strong>{BOOKING_TYPE_LABELS[form.bookingType]}</strong></div>
-              {form.bookingType === "PRIVATE_CAR" ? <div><span>فئة السيارة</span><strong>{VEHICLE_CLASS_LABELS[form.vehicleClass]} · حتى {quote?.passengerCapacity ?? selectedClassConfig.passengerCapacity} أشخاص و{quote?.luggageCapacity ?? selectedClassConfig.luggageCapacity} حقائب</strong></div> : null}
+              {form.bookingType === "PRIVATE_CAR" ? <>
+                <div><span>فئة السيارة</span><strong>{VEHICLE_CLASS_LABELS[form.vehicleClass]} · حتى {quote?.passengerCapacity ?? selectedClassConfig.passengerCapacity} أشخاص و{quote?.luggageCapacity ?? selectedClassConfig.luggageCapacity} حقائب</strong></div>
+                <div><span>عدد الركاب</span><strong>{form.passengerCount}</strong></div>
+                <div><span>عدد الحقائب</span><strong>{form.luggageCount}</strong></div>
+              </> : null}
               <div><span>{selectedRoute?.requiresFlightDetails ? flightDateLabel : "تاريخ الرحلة"}</span><strong>{formatArrivalDate(form.travelDate)}</strong></div>
               {selectedRoute?.requiresFlightDetails ? <div><span>الرحلة الجوية</span><strong>{form.flightNumber || "بانتظار الاستخراج"} · {form.flightArrivalTime || "—"}</strong></div> : null}
               {isTicketUploadEnabled && form.flightTicketFileName ? <div><span>تذكرة الطيران</span><strong>{form.flightTicketFileName}</strong></div> : null}
