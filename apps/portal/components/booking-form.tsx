@@ -332,6 +332,20 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
         setRoutePolicies(Object.fromEntries(policies.map((policy) => [policy.routeId, policy])));
         setRoutesLoadState("ready");
         const first = data.find((route) => route.bookable && route.isActive);
+        const incoming = assistantSelection.current;
+        if (incoming) {
+          const incomingRoute = data.find((item) => item.id === incoming.routeId && item.bookable && item.isActive);
+          const incomingClassPriced = Boolean(incomingRoute?.pricingRules.some((rule) =>
+            rule.bookingType === "PRIVATE_CAR" && rule.vehicleClass === incoming.vehicleClass && rule.isActive !== false));
+          const incomingCapacity = incomingRoute?.vehicleClasses?.find((item) => item.vehicleClass === incoming.vehicleClass) ??
+            DEFAULT_VEHICLE_CLASSES.find((item) => item.vehicleClass === incoming.vehicleClass);
+          const adjusted = !incomingRoute || !incomingClassPriced ||
+            !incomingCapacity || incoming.passengerCount > incomingCapacity.passengerCapacity ||
+            incoming.luggageCount > incomingCapacity.luggageCapacity;
+          setAssistantNotice(adjusted
+            ? "تغيّر توفر المسار أو سعة السيارة منذ عرض السعر في المساعد. راجع الاختيارات المحددة والسعر قبل المتابعة."
+            : "تم نقل اختياراتك من المساعد. أكمل تاريخ الرحلة وبياناتك، وسيُعاد احتساب السعر قبل التأكيد.");
+        }
         if (first) {
           setForm((current) => {
             const incoming = assistantSelection.current;
@@ -347,13 +361,6 @@ export function BookingForm({ onCreated }: { onCreated?: (booking: Trip) => void
               DEFAULT_VEHICLE_CLASSES.find((item) => item.vehicleClass === vehicleClass)!;
             const passengerCount = Math.min(Math.max(current.passengerCount, 1), Math.min(20, Math.max(1, config.passengerCapacity)));
             const luggageCount = Math.min(Math.max(current.luggageCount, 0), Math.min(20, Math.max(0, config.luggageCapacity)));
-            if (incoming) {
-              const adjusted = !restoredRoute || !keepsVehicleClass ||
-                passengerCount !== incoming.passengerCount || luggageCount !== incoming.luggageCount;
-              setAssistantNotice(adjusted
-                ? "تغيّر توفر المسار أو سعة السيارة منذ عرض السعر في المساعد. راجع الاختيارات المحددة والسعر قبل المتابعة."
-                : "تم نقل اختياراتك من المساعد. أكمل تاريخ الرحلة وبياناتك، وسيُعاد احتساب السعر قبل التأكيد.");
-            }
             return {
               ...current,
               routeId: route.id,
