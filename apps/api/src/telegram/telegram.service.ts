@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -193,11 +194,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   async retry(id: string) {
     this.assertConfigured();
 
-    const delivery = await this.prisma.telegramDelivery.findUnique({ where: { id } });
-    if (!delivery) throw new NotFoundException('سجل إرسال Telegram غير موجود.');
-
-    const updated = await this.prisma.telegramDelivery.update({
-      where: { id },
+    // Only failed/skipped deliveries can be retried. Re-sending SENT messages
+    // would duplicate booking notifications; changing an in-flight delivery
+    // could race with the queue processor on another Render instance.
+    const claimed = await this.prisma.telegramDelivery.updateMany({
+      where: { id, status: { in: ['FAILED', 'SKIPPED'] } },
       data: {
         chatId: this.chatId,
         status: 'PENDING',
@@ -208,6 +209,15 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         sentAt: null
       }
     });
+    if (claimed.count !== 1) {
+      const exists = await this.prisma.telegramDelivery.findUnique({
+        where: { id },
+        select: { id: true }
+      });
+      if (!exists) throw new NotFoundException('سجل إرسال Telegram غير موجود.');
+      throw new ConflictException('يمكن إعادة محاولة الإشعارات الفاشلة أو المتخطاة فقط، وليس الإشعارات المرسلة أو قيد الإرسال.');
+    }
+    const updated = await this.prisma.telegramDelivery.findUniqueOrThrow({ where: { id } });
     void this.processQueue();
     return updated;
   }

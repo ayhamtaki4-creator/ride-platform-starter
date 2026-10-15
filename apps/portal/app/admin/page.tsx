@@ -32,8 +32,10 @@ type Dashboard = {
   newBookings: number;
   staleNewBookings: number;
   waitingReviewOverTwoHours: number;
+  pendingReviewOver30Minutes: number;
   attentionQueue: AttentionItem[];
   confirmedWithoutDriver: number;
+  confirmedWithoutDriverOver30Minutes: number;
   exhaustedTelegramDeliveries: number;
   delayedTelegramDeliveries: number;
   activeTrips: number;
@@ -78,7 +80,7 @@ export default function AdminPage() {
       <div className="card"><div className="label">المحصل نقدًا</div><div className="value">${data?.revenue ?? 0}</div></div>
       <div className="card"><div className="label">غير محصل</div><div className="value">${data?.outstandingRevenue ?? 0}</div><small>{data?.unpaidCompletedBookings ?? 0} حجز مكتمل يحتاج مراجعة دفع</small></div>
     </section>
-    {data && ((data.waitingReviewOverTwoHours ?? 0) > 0 || data.staleNewBookings > 0 || data.confirmedWithoutDriver > 0) ? (
+    {data && ((data.pendingReviewOver30Minutes ?? 0) > 0 || (data.waitingReviewOverTwoHours ?? 0) > 0 || data.staleNewBookings > 0 || data.confirmedWithoutDriver > 0) ? (
       <section className="panel" aria-labelledby="operations-attention-title">
         <div className="section-heading">
           <div>
@@ -86,6 +88,13 @@ export default function AdminPage() {
             <p className="subtitle">هذه تنبيهات تشغيلية فقط؛ لن يتم رفض أو إلغاء أي حجز تلقائيًا.</p>
           </div>
         </div>
+        {(data.pendingReviewOver30Minutes ?? 0) > 0 ? (
+          <div className="notice error" role="status">
+            يوجد <strong>{data.pendingReviewOver30Minutes}</strong> طلباً جديداً لم يُراجع منذ أكثر من 30 دقيقة.
+            {" "}
+            <Link href="/admin/bookings?attention=REVIEW_OVER_30M">مراجعة الطلبات المتأخرة</Link>
+          </div>
+        ) : null}
         {(data.waitingReviewOverTwoHours ?? 0) > 0 ? (
           <div className="notice" role="status">
             يوجد <strong>{data.waitingReviewOverTwoHours}</strong> طلب جديد ينتظر المراجعة منذ أكثر من ساعتين.
@@ -98,13 +107,21 @@ export default function AdminPage() {
             يوجد <strong>{data.staleNewBookings}</strong> طلب جديد مضى عليه أكثر من 24 ساعة دون مراجعة.
             {" "}
             <Link href="/admin/bookings?status=NEW">مراجعة الطلبات الجديدة</Link>
+            {" · "}<Link href="/admin/bookings?attention=REVIEW_OVER_24H">عرض المتأخرة أكثر من 24 ساعة</Link>
           </div>
         ) : null}
         {data.confirmedWithoutDriver > 0 ? (
           <div className="notice" role="status">
-            يوجد <strong>{data.confirmedWithoutDriver}</strong> حجز مؤكد بانتظار تعيين سائق.
+            يوجد <strong>{data.confirmedWithoutDriver}</strong> حجز مؤكد بانتظار تعيين سائق
+            {(data.confirmedWithoutDriverOver30Minutes ?? 0) > 0
+              ? <>، منها <strong>{data.confirmedWithoutDriverOver30Minutes}</strong> مضى على تأكيدها أكثر من 30 دقيقة</>
+              : null}.
             {" "}
-            <Link href="/admin/bookings?status=CONFIRMED">عرض الحجوزات المؤكدة</Link>
+            <Link href="/admin/bookings?attention=DRIVER_UNASSIGNED">عرض قائمة التعيين</Link>
+            {" · "}<Link href="/admin/bookings?status=CONFIRMED">عرض الحجوزات المؤكدة</Link>
+            {(data.confirmedWithoutDriverOver30Minutes ?? 0) > 0
+              ? <> · <Link href="/admin/bookings?attention=DRIVER_OVER_30M">التعيينات المتأخرة فقط</Link></>
+              : null}
           </div>
         ) : null}
       </section>

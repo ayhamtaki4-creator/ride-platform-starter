@@ -28,12 +28,28 @@ Never send API keys, Neon connection strings, customer details, or exported back
   only the workflow URL, never booking information.
 - Enable GitHub notifications for **Issues** / repository activity if you want
   alerts delivered to email/mobile; an Issue alone is not an instant push alert.
-- Admin dashboard shows active booking-review delays, confirmed unassigned
-  trips, failed Telegram delivery attempts (5 exhausted), and dispatches stuck
-  for at least 15 minutes. The /admin/telegram page displays a filtered
-  delivery list and retry controls for authorized staff.
-- The queue already retries Telegram sends up to five times. Avoid hitting
-  retry repeatedly until credentials and bot permissions are checked.
+- Admin dashboard shows **unreviewed active bookings older than 30 minutes**,
+  **24-hour escalation**, **confirmed bookings without an assigned driver**,
+  and **unassigned confirmations older than 30 minutes**. Open the respective
+  queue directly: `/admin/bookings?attention=REVIEW_OVER_30M`,
+  `REVIEW_OVER_24H`, `DRIVER_UNASSIGNED`, or `DRIVER_OVER_30M`.
+  The queue is filtered in the database and sorted oldest first; it continues
+  to refresh every 30 seconds even when its realtime socket is disconnected.
+  These are operational reminders, **not automatic cancellations**.
+- Telegram monitoring includes failed deliveries after five attempts and
+  pending/in-progress messages delayed at least 15 minutes. The
+  `/admin/telegram` page displays a filtered history and retry controls.
+  Manual retry is only permitted for **FAILED** or **SKIPPED** items. Never
+  resend **SENT**, **PENDING**, or **SENDING** deliveries because that can
+  create duplicate staff notifications.
+- The delivery queue already retries Telegram sends up to five times. First
+  verify bot credentials and chat permissions; then retry failed records.
+  Render free-tier instances may sleep, so the queue is not an immediate SLA.
+- Operational response sequence: 1) review `REVIEW_OVER_30M`, 2) confirm
+  or reject each booking manually, 3) assign a qualified driver for
+  `DRIVER_UNASSIGNED`, 4) check Telegram failed/delayed alerts, 5) verify
+  assigned trips appear on the driver's app. Rejected/terminal bookings are
+  intentionally excluded from the actionable NEW review queue.
 - Important: Render can idle and scheduled GitHub Actions can start late. Six-hour
   probes are **not** a real-time uptime SLA.
 
