@@ -7,7 +7,7 @@ import { BookingReviewStatus, Prisma } from '@prisma/client';
 import { AuthUser } from '../iam/auth-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
-import { AdminBookingsQueryDto } from './dto/admin-bookings-query.dto';
+import { AdminBookingAttentionFilter, AdminBookingsQueryDto } from './dto/admin-bookings-query.dto';
 
 const TERMINAL_TRIP_STATUSES = [
   'COMPLETED',
@@ -17,6 +17,41 @@ const TERMINAL_TRIP_STATUSES = [
   'PASSENGER_NO_SHOW',
   'DRIVER_NO_SHOW'
 ] as const;
+
+const REVIEW_DELAY_MINUTES = 30;
+const DRIVER_ASSIGNMENT_DELAY_MINUTES = 30;
+
+function attentionWhere(attention: AdminBookingAttentionFilter, now: Date): Prisma.TripWhereInput {
+  const reviewCutoff = new Date(now.getTime() - REVIEW_DELAY_MINUTES * 60_000);
+  const driverCutoff = new Date(now.getTime() - DRIVER_ASSIGNMENT_DELAY_MINUTES * 60_000);
+  switch (attention) {
+    case 'REVIEW_OVER_30M':
+    case 'REVIEW_OVER_24H':
+      return {
+        bookingReviewStatus: 'NEW',
+        status: { notIn: [...TERMINAL_TRIP_STATUSES] },
+        requestedAt: {
+          lt: attention === 'REVIEW_OVER_24H' ? new Date(now.getTime() - 24 * 60 * 60_000) : reviewCutoff
+        }
+      };
+    case 'DRIVER_UNASSIGNED':
+      return {
+        bookingReviewStatus: 'CONFIRMED',
+        status: { in: ['PENDING_DISPATCH', 'SEARCHING_DRIVER'] },
+        driverId: null
+      };
+    case 'DRIVER_OVER_30M':
+      return {
+        bookingReviewStatus: 'CONFIRMED',
+        status: { in: ['PENDING_DISPATCH', 'SEARCHING_DRIVER'] },
+        driverId: null,
+        OR: [
+          { confirmedAt: { lt: driverCutoff } },
+          { confirmedAt: null, requestedAt: { lt: driverCutoff } }
+        ]
+      };
+  }
+}
 
 type FinanceSummaryRow = {
   bookedValue: Prisma.Decimal;
@@ -119,7 +154,9 @@ export class AdminBookingsService {
       totalBookings,
       newBookings,
       staleNewBookings,
+      pendingReviewOver30Minutes,
       confirmedWithoutDriver,
+      confirmedWithoutDriverOver30Minutes,
       exhaustedTelegramDeliveries,
       delayedTelegramDeliveries,
       activeTrips,
@@ -129,7 +166,11 @@ export class AdminBookingsService {
     ] = await Promise.all([
       this.prisma.trip.count({ where: { bookingReference: { not: null } } }),
       this.prisma.trip.count({
-        where: { bookingReference: { not: null }, bookingReviewStatus: 'NEW' }
+        where: {
+          bookingReference: { not: null },
+          bookingReviewStatus: 'NEW',
+          status: { notIn: [...TERMINAL_TRIP_STATUSES] }
+        }
       }),
       // Warn operators about new requests still awaiting review after 24 hours.
       // Terminal trips are excluded so historical test records cannot
@@ -142,6 +183,13 @@ export class AdminBookingsService {
           requestedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) }
         }
       }),
+      // Review delays matter much earlier than 24 hours for airport transfers.
+      this.prisma.trip.count({
+        where: {
+          bookingReference: { not: null },
+          ...attentionWhere('REVIEW_OVER_30M', new Date())
+        }
+      }),
       // Confirmed but still unassigned trips need dispatch attention.
       this.prisma.trip.count({
         where: {
@@ -149,6 +197,13 @@ export class AdminBookingsService {
           bookingReviewStatus: 'CONFIRMED',
           status: { in: ['PENDING_DISPATCH', 'SEARCHING_DRIVER'] },
           driverId: null
+        }
+      }),
+      // Dispatches delayed 30 minutes after confirmation (or request for legacy records).
+      this.prisma.trip.count({
+        where: {
+          bookingReference: { not: null },
+          ...attentionWhere('DRIVER_OVER_30M', new Date())
         }
       }),
       // Telegram alerts exhausted their five automatic delivery attempts.
@@ -199,7 +254,9 @@ export class AdminBookingsService {
       totalBookings,
       newBookings,
       staleNewBookings,
+      pendingReviewOver30Minutes,
       confirmedWithoutDriver,
+      confirmedWithoutDriverOver30Minutes,
       exhaustedTelegramDeliveries,
       delayedTelegramDeliveries,
       activeTrips,
@@ -231,12 +288,18 @@ export class AdminBookingsService {
   async list(query: AdminBookingsQueryDto) {
     const search = query.search?.trim();
     const history = query.history === 'true';
+    // Explicit attention queues override status/history to match dashboard counts.
+    // Always filter in Postgres before the 300-item cap so old urgent bookings
+    // do not disappear behind newer non-actionable records.
+    const urgent = query.attention ? attentionWhere(query.attention, new Date()) : null;
     const where: Prisma.TripWhereInput = {
       bookingReference: { not: null },
-      status: history
-        ? { in: [...TERMINAL_TRIP_STATUSES] }
-        : { notIn: [...TERMINAL_TRIP_STATUSES] },
-      ...(query.status ? { bookingReviewStatus: query.status } : {}),
+      ...(!urgent ? {
+        status: history
+          ? { in: [...TERMINAL_TRIP_STATUSES] }
+          : { notIn: [...TERMINAL_TRIP_STATUSES] },
+        ...(query.status ? { bookingReviewStatus: query.status } : {})
+      } : urgent),
       ...(search
         ? {
             OR: [
@@ -251,7 +314,9 @@ export class AdminBookingsService {
 
     const bookings = await this.prisma.trip.findMany({
       where,
-      orderBy: [{ requestedAt: 'desc' }],
+      orderBy: urgent
+        ? [{ requestedAt: 'asc' }]
+        : [{ requestedAt: 'desc' }],
       take: 300,
       include: bookingInclude
     });
