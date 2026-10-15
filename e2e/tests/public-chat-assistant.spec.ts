@@ -169,6 +169,70 @@ test.describe("Public booking assistant", () => {
     await expect(dialog.getByText("الحجز الحالي للسيارة الخاصة فقط.")).toBeVisible();
   });
 
+  test("compact assistant stays inside mobile viewport without page zoom, horizontal overflow, or unwanted keyboard focus", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: "فتح مساعد طريق الشام" })).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 250));
+
+    const before = await page.evaluate(() => ({
+      scrollY: window.scrollY,
+      scale: window.visualViewport?.scale ?? 1,
+    }));
+    await page.getByRole("button", { name: "فتح مساعد طريق الشام" }).click();
+    const dialog = page.getByRole("dialog", { name: "مساعد طريق الشام" });
+    await expect(dialog).toBeVisible();
+    const sizes = await page.evaluate(() => {
+      const panel = document.getElementById("site-assistant-panel")!;
+      const bounds = panel.getBoundingClientRect();
+      const input = document.getElementById("site-assistant-message")!;
+      return {
+        x: bounds.x, y: bounds.y, right: bounds.right, bottom: bounds.bottom,
+        width: bounds.width, height: bounds.height,
+        viewportWidth: document.documentElement.clientWidth,
+        documentWidth: document.documentElement.scrollWidth,
+        scale: window.visualViewport?.scale ?? 1,
+        scrollY: window.scrollY,
+        inputFont: parseFloat(getComputedStyle(input).fontSize),
+        autoFocused: document.activeElement === input,
+      };
+    });
+
+    expect(sizes.width).toBeLessThanOrEqual(320);
+    expect(sizes.x).toBeGreaterThanOrEqual(0);
+    expect(sizes.right).toBeLessThanOrEqual(320);
+    expect(sizes.y).toBeGreaterThanOrEqual(0);
+    expect(sizes.bottom).toBeLessThanOrEqual(568);
+    expect(sizes.height).toBeGreaterThan(200);
+    expect(sizes.documentWidth).toBeLessThanOrEqual(sizes.viewportWidth);
+    expect(sizes.inputFont).toBeGreaterThanOrEqual(16);
+    expect(sizes.autoFocused).toBe(false);
+    expect(sizes.scale).toBeCloseTo(before.scale, 4);
+    expect(sizes.scrollY).toBe(before.scrollY);
+
+    await dialog.getByRole("button", { name: "كيف أحجز رحلة؟" }).click();
+    await expect(dialog.getByText(/اضغط «ابدأ الحجز»/)).toBeVisible();
+    expect(await page.evaluate(() => window.scrollY)).toBe(before.scrollY);
+    await dialog.getByRole("button", { name: "إغلاق المحادثة" }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("chat panel remains fully visible on smaller and larger viewports", async ({ page }) => {
+    for (const size of [{ width: 375, height: 667 }, { width: 390, height: 844 }, { width: 1280, height: 720 }]) {
+      await page.setViewportSize(size);
+      await page.goto("/");
+      await page.getByRole("button", { name: "فتح مساعد طريق الشام" }).click();
+      const panel = page.getByRole("dialog", { name: "مساعد طريق الشام" });
+      const rect = await panel.boundingBox();
+      expect(rect).not.toBeNull();
+      expect(rect!.x).toBeGreaterThanOrEqual(0);
+      expect(rect!.y).toBeGreaterThanOrEqual(0);
+      expect(rect!.x + rect!.width).toBeLessThanOrEqual(size.width);
+      expect(rect!.y + rect!.height).toBeLessThanOrEqual(size.height);
+      await panel.getByRole("button", { name: "إغلاق المحادثة" }).click();
+    }
+  });
+
   test("assistant is also available on booking page", async ({ page }) => {
     await page.goto("/booking");
     await expect(page.getByRole("button", { name: "فتح مساعد طريق الشام" })).toBeVisible();
