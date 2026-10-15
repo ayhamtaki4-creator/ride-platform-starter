@@ -9,6 +9,7 @@ import type { BookingQuote, VehicleClass } from "@/lib/types";
 import { Icon } from "@/components/ui/icon";
 import styles from "./site-assistant.module.css";
 import { recordAssistantEvent } from "@/lib/assistant-config";
+import { assistantBookingHref } from "@/lib/assistant-booking-handoff";
 
 const classes: VehicleClass[] = ["SMALL", "MEDIUM", "LARGE"];
 const classNames: Record<VehicleClass, string> = {
@@ -101,7 +102,8 @@ export function AssistantLiveQuote({ onBack }: { onBack: () => void }) {
       // Use the same public quote endpoint as the booking wizard; never compute fares in the chatbot.
       const result = await apiFetch<BookingQuote>(`/bookings/quote?${params}`, { skipAuth: true, timeoutMs: 25_000 });
       if (!Number.isFinite(result.passengerPrice) || result.passengerPrice < 0 || !result.currency ||
-        result.routeId !== route.id || result.vehicleClass !== selectedClass) {
+        result.routeId !== route.id || result.vehicleClass !== selectedClass ||
+        result.passengerCount !== currentPassengers || result.luggageCount !== currentLuggage) {
         throw new Error("INVALID_QUOTE");
       }
       setQuote(result);
@@ -181,12 +183,17 @@ export function AssistantLiveQuote({ onBack }: { onBack: () => void }) {
             {quoteBusy ? "جارٍ جلب السعر…" : "عرض السعر المعتمد"}
           </button>
           {quoteError ? <p className={styles.quoteError} role="alert">{quoteError}</p> : null}
-          {quote ? (
+          {quote && quote.routeId === route.id && quote.vehicleClass === selectedClass &&
+          quote.passengerCount === currentPassengers && quote.luggageCount === currentLuggage ? (
             <div className={styles.quoteResult} role="status">
               <small>السعر حسب المسار والفئة والأعداد المختارة</small>
               <strong>{currencyPrice(quote)}</strong>
-              <span>سعر مسترجع من نظام الحجز لحظة الاستعلام، وليس تأكيداً للتوفر أو للحجز. أعد التحقق من السعر في صفحة الحجز قبل الإرسال.</span>
-              <Link href="/booking" className={styles.quoteButton} onClick={() => recordAssistantEvent("BOOKING_CLICK", "prices")}>الانتقال إلى الحجز <Icon name="arrow-left" size={16} /></Link>
+              <span>السعر حسب الخيارات الحالية؛ ستُراجع صلاحية المسار والسعة والسعر مجدداً أثناء الحجز.</span>
+              <Link
+                href={assistantBookingHref({ routeId: route.id, vehicleClass: selectedClass, passengerCount: currentPassengers, luggageCount: currentLuggage })}
+                className={styles.quoteButton}
+                onClick={() => recordAssistantEvent("BOOKING_CLICK", "prices")}
+              >احجز هذه الرحلة <Icon name="arrow-left" size={16} /></Link>
             </div>
           ) : (
             <p className={styles.quoteHelp}>الأسعار لا تُخمن بواسطة الذكاء الاصطناعي، بل تُجلب عبر واجهة التسعير الرسمية.</p>
