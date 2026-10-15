@@ -9,10 +9,30 @@ import { useAuth } from "@/components/auth-provider";
 import { apiFetch } from "@/lib/api";
 import { BOOKING_REVIEW_LABELS, DIRECTION_LABELS, Trip } from "@/lib/types";
 
+type AttentionItem = {
+  id: string;
+  bookingReference: string | null;
+  requestedAt: string;
+  travelDate: string | null;
+  route: { nameAr: string } | null;
+  category: "NEEDS_REVIEW" | "NEEDS_DRIVER";
+};
+
+function elapsedLabel(iso: string): string {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+  if (!Number.isFinite(minutes)) return "بانتظار التحديث";
+  if (minutes < 60) return `منذ ${minutes} دقيقة`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `منذ ${hours} ساعة`;
+  return `منذ ${Math.floor(hours / 24)} يوم`;
+}
+
 type Dashboard = {
   totalBookings: number;
   newBookings: number;
   staleNewBookings: number;
+  waitingReviewOverTwoHours: number;
+  attentionQueue: AttentionItem[];
   confirmedWithoutDriver: number;
   exhaustedTelegramDeliveries: number;
   delayedTelegramDeliveries: number;
@@ -58,7 +78,7 @@ export default function AdminPage() {
       <div className="card"><div className="label">المحصل نقدًا</div><div className="value">${data?.revenue ?? 0}</div></div>
       <div className="card"><div className="label">غير محصل</div><div className="value">${data?.outstandingRevenue ?? 0}</div><small>{data?.unpaidCompletedBookings ?? 0} حجز مكتمل يحتاج مراجعة دفع</small></div>
     </section>
-    {data && (data.staleNewBookings > 0 || data.confirmedWithoutDriver > 0) ? (
+    {data && ((data.waitingReviewOverTwoHours ?? 0) > 0 || data.staleNewBookings > 0 || data.confirmedWithoutDriver > 0) ? (
       <section className="panel" aria-labelledby="operations-attention-title">
         <div className="section-heading">
           <div>
@@ -66,8 +86,15 @@ export default function AdminPage() {
             <p className="subtitle">هذه تنبيهات تشغيلية فقط؛ لن يتم رفض أو إلغاء أي حجز تلقائيًا.</p>
           </div>
         </div>
-        {data.staleNewBookings > 0 ? (
+        {(data.waitingReviewOverTwoHours ?? 0) > 0 ? (
           <div className="notice" role="status">
+            يوجد <strong>{data.waitingReviewOverTwoHours}</strong> طلب جديد ينتظر المراجعة منذ أكثر من ساعتين.
+            {" "}
+            <Link href="/admin/bookings?status=NEW">مراجعة الحجوزات الآن</Link>
+          </div>
+        ) : null}
+        {data.staleNewBookings > 0 ? (
+          <div className="notice error" role="status">
             يوجد <strong>{data.staleNewBookings}</strong> طلب جديد مضى عليه أكثر من 24 ساعة دون مراجعة.
             {" "}
             <Link href="/admin/bookings?status=NEW">مراجعة الطلبات الجديدة</Link>
@@ -103,6 +130,43 @@ export default function AdminPage() {
             {" "}<Link href="/admin/telegram">مراجعة قائمة الإرسال</Link>
           </div>
         ) : null}
+      </section>
+    ) : null}
+    {data?.attentionQueue?.length ? (
+      <section className="panel" aria-labelledby="operations-priority-title">
+        <div className="section-heading">
+          <div>
+            <h2 id="operations-priority-title">أولويات مركز العمليات</h2>
+            <p className="subtitle">
+              أقدم الحجوزات غير المراجعة، وأقرب الحجوزات المؤكدة دون سائق.
+              هذه قائمة للمتابعة اليدوية؛ لا يتم تأكيد أو رفض أو تعيين أي حجز تلقائياً.
+            </p>
+          </div>
+          <Link className="button" href="/admin/bookings">كل الحجوزات</Link>
+        </div>
+        <div className="booking-list">
+          {data.attentionQueue.map((item) => {
+            const needsReview = item.category === "NEEDS_REVIEW";
+            const overdue = needsReview && Date.now() - new Date(item.requestedAt).getTime() >= 24 * 60 * 60 * 1000;
+            return <article className="booking-card compact" key={item.id}>
+              <div className="booking-card-head">
+                <div>
+                  <strong>{item.bookingReference || "حجز دون مرجع"}</strong>
+                  <small>{item.route?.nameAr ?? "راجع تفاصيل المسار"} · {elapsedLabel(item.requestedAt)}</small>
+                </div>
+                <span className={overdue ? "status danger" : "status"}>
+                  {needsReview ? (overdue ? "مراجعة متأخرة" : "بانتظار المراجعة") : "بحاجة إلى سائق"}
+                </span>
+              </div>
+              <div className="actions">
+                <Link className="button primary compact-button" href={`/admin/bookings/${item.id}`}>
+                  {needsReview ? "مراجعة الحجز" : "تعيين سائق"}
+                </Link>
+              </div>
+            </article>;
+          })}
+        </div>
+        <p className="subtitle">تُعرض حتى 8 حجوزات من كل فئة. للاطلاع على البقية، افتح قائمة الحجوزات الكاملة.</p>
       </section>
     ) : null}
     <section className="operations-shortcuts">
