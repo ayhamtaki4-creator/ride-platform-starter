@@ -13,13 +13,13 @@ type AttentionItem = {
   id: string;
   bookingReference: string | null;
   requestedAt: string;
+  ageMinutes: number;
   travelDate: string | null;
   route: { nameAr: string } | null;
   category: "NEEDS_REVIEW" | "NEEDS_DRIVER";
 };
 
-function elapsedLabel(iso: string): string {
-  const minutes = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+function elapsedLabel(minutes: number): string {
   if (!Number.isFinite(minutes)) return "بانتظار التحديث";
   if (minutes < 60) return `منذ ${minutes} دقيقة`;
   const hours = Math.floor(minutes / 60);
@@ -147,12 +147,12 @@ export default function AdminPage() {
         <div className="booking-list">
           {data.attentionQueue.map((item) => {
             const needsReview = item.category === "NEEDS_REVIEW";
-            const overdue = needsReview && Date.now() - new Date(item.requestedAt).getTime() >= 24 * 60 * 60 * 1000;
+            const overdue = needsReview && item.ageMinutes >= 24 * 60;
             return <article className="booking-card compact" key={item.id}>
               <div className="booking-card-head">
                 <div>
                   <strong>{item.bookingReference || "حجز دون مرجع"}</strong>
-                  <small>{item.route?.nameAr ?? "راجع تفاصيل المسار"} · {elapsedLabel(item.requestedAt)}</small>
+                  <small>{item.route?.nameAr ?? "راجع تفاصيل المسار"} · {elapsedLabel(item.ageMinutes)}</small>
                 </div>
                 <span className={overdue ? "status danger" : "status"}>
                   {needsReview ? (overdue ? "مراجعة متأخرة" : "بانتظار المراجعة") : "بحاجة إلى سائق"}
