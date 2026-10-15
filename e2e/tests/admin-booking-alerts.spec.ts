@@ -71,7 +71,8 @@ test.describe("Admin booking operations alerts", () => {
     await expect(page.getByText("حجوزات تحتاج متابعة")).toBeVisible();
     await page.getByRole("link", { name: "مراجعة الطلبات الجديدة" }).click();
     await expect(page).toHaveURL(/\/admin\/bookings\?status=NEW/);
-    await expect(page.locator("section.filters select")).toHaveValue("NEW");
+    await expect(page.getByRole("combobox", { name: "حالة الحجز" })).toHaveValue("NEW");
+    await expect(page.getByRole("combobox", { name: "أولوية المتابعة" })).toHaveValue("");
   });
 
   test("priority queues match their dashboard criteria and exclude terminal reservations", async ({ request }) => {
