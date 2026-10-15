@@ -238,6 +238,8 @@ export class AdminBookingsService {
       })
     ]);
 
+    const snapshotTime = Date.now();
+    const ageMinutes = (requestedAt: Date) => Math.max(0, Math.floor((snapshotTime - requestedAt.getTime()) / 60000));
     const finance = financeRows[0];
     const completedBookingValue = Number(finance?.bookedValue ?? 0);
     const revenue = Number(finance?.collectedValue ?? 0);
@@ -259,11 +261,13 @@ export class AdminBookingsService {
       attentionQueue: [
         ...oldestUnreviewed.map((item) => ({
           ...item,
-          category: 'NEEDS_REVIEW' as const
+          category: 'NEEDS_REVIEW' as const,
+          ageMinutes: ageMinutes(item.requestedAt)
         })),
         ...nearestUnassigned.map((item) => ({
           ...item,
-          category: 'NEEDS_DRIVER' as const
+          category: 'NEEDS_DRIVER' as const,
+          ageMinutes: ageMinutes(item.requestedAt)
         }))
       ],
       latest: latest.map((item) => this.sanitize(item))
