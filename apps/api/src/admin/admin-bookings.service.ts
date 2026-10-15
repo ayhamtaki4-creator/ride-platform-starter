@@ -299,17 +299,18 @@ export class AdminBookingsService {
           ? { in: [...TERMINAL_TRIP_STATUSES] }
           : { notIn: [...TERMINAL_TRIP_STATUSES] },
         ...(query.status ? { bookingReviewStatus: query.status } : {})
-      } : urgent),
-      ...(search
-        ? {
-            OR: [
-              { bookingReference: { contains: search, mode: 'insensitive' } },
-              { contactName: { contains: search, mode: 'insensitive' } },
-              { contactPhone: { contains: search, mode: 'insensitive' } },
-              { flightNumber: { contains: search, mode: 'insensitive' } }
-            ]
-          }
-        : {})
+      } : {}),
+      AND: [
+        ...(urgent ? [urgent] : []),
+        ...(search ? [{
+          OR: [
+            { bookingReference: { contains: search, mode: 'insensitive' as const } },
+            { contactName: { contains: search, mode: 'insensitive' as const } },
+            { contactPhone: { contains: search, mode: 'insensitive' as const } },
+            { flightNumber: { contains: search, mode: 'insensitive' as const } }
+          ]
+        }] : [])
+      ]
     };
 
     const bookings = await this.prisma.trip.findMany({
