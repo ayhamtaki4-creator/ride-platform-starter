@@ -842,3 +842,25 @@ model TelegramDelivery {
   @@index([status, nextAttemptAt])
   @@index([createdAt])
 }
+
+
+/** One row per public assistant configuration; only admins can update it. */
+model AssistantConfiguration {
+  id             String   @id @default("main")
+  enabled        Boolean  @default(true)
+  welcomeMessage String
+  faqs           Json
+  updatedAt      DateTime @updatedAt
+}
+
+/** Daily aggregated, category-only counts; no identity or chat text. */
+model AssistantMetric {
+  day       DateTime @db.Date
+  event     String
+  topic     String
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@id([day, event, topic])
+  @@index([day])
+}
