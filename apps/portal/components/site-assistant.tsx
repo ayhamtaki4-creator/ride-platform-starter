@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/ui/icon";
 import styles from "./site-assistant.module.css";
@@ -176,7 +176,8 @@ export function SiteAssistant() {
   const [supportTopic, setSupportTopic] = useState<TopicId | null>(null);
   const [configuration, setConfiguration] = useState<AssistantConfiguration | null>(null);
   const nextId = useRef(1);
-  const endRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const [viewportMetrics, setViewportMetrics] = useState<{ visibleHeight: number; keyboardInset: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -199,14 +200,43 @@ export function SiteAssistant() {
     if (configuration?.welcomeMessage) setMessages((messages) => messages.map((message) => message.id === 0 ? { ...message, text: configuration.welcomeMessage } : message));
   }, [configuration?.enabled, configuration?.welcomeMessage]);
 
+  // Opening the assistant must never trigger the mobile keyboard or iOS text-input zoom.
   useEffect(() => {
-    if (!open) return;
-    inputRef.current?.focus();
+    if (!open || !window.matchMedia("(min-width: 768px) and (pointer: fine)").matches) return;
+    inputRef.current?.focus({ preventScroll: true });
   }, [open]);
 
+  // Scroll only the conversation log; scrollIntoView also scrolls the whole page
+  // on mobile browsers and made the website seem to zoom/jump when opening chat.
   useEffect(() => {
-    if (open) endRef.current?.scrollIntoView({ block: "end" });
-  }, [messages, open]);
+    if (!open || showLiveQuotes) return;
+    const list = messagesRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [messages, open, sending, showLiveQuotes]);
+
+  // iOS Safari keeps fixed elements relative to the layout viewport when the
+  // keyboard opens. Fit the assistant to the *visual* viewport without resizing
+  // or zooming the surrounding website.
+  useEffect(() => {
+    if (!open || !window.visualViewport) return;
+    const viewport = window.visualViewport;
+    const sync = () => {
+      const obscured = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      setViewportMetrics({
+        visibleHeight: Math.round(viewport.height),
+        keyboardInset: obscured > 140 ? Math.round(obscured) : 0,
+      });
+    };
+    sync();
+    viewport.addEventListener("resize", sync);
+    viewport.addEventListener("scroll", sync);
+    window.addEventListener("orientationchange", sync);
+    return () => {
+      viewport.removeEventListener("resize", sync);
+      viewport.removeEventListener("scroll", sync);
+      window.removeEventListener("orientationchange", sync);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -321,20 +351,28 @@ export function SiteAssistant() {
   if (!configuration?.enabled) return null;
 
   return (
-    <div className={styles.container} dir="rtl">
+    <div
+      className={styles.container}
+      dir="rtl"
+      data-keyboard-open={viewportMetrics !== null && viewportMetrics.keyboardInset > 0 ? "true" : "false"}
+      style={viewportMetrics ? {
+        "--assistant-visual-height": `${viewportMetrics.visibleHeight}px`,
+        "--assistant-keyboard-inset": `${viewportMetrics.keyboardInset}px`,
+      } as CSSProperties : undefined}
+    >
       {open ? (
         <section className={styles.panel} role="dialog" aria-modal="false" aria-labelledby="site-assistant-heading" id="site-assistant-panel">
           <header className={styles.header}>
-            <span className={styles.headerIcon}><Icon name="sparkles" size={20} /></span>
-            <div>
+            <span className={styles.headerIcon}><Icon name="route" size={22} /></span>
+            <div className={styles.headerText}>
               <h2 id="site-assistant-heading">مساعد طريق الشام</h2>
-              <p>مساعد ذكي للأسئلة والاستفسارات</p>
+              <p><span className={styles.statusDot} aria-hidden="true" /> هنا لمساعدتك في رحلتك</p>
             </div>
             <button className={styles.close} type="button" aria-label="إغلاق المحادثة" onClick={() => setOpen(false)}>
               <Icon name="close" size={21} />
             </button>
           </header>
-          {showLiveQuotes ? <AssistantLiveQuote onBack={() => setShowLiveQuotes(false)} /> : <div className={styles.messages} role="log" aria-live="polite" aria-relevant="additions text">
+          {showLiveQuotes ? <AssistantLiveQuote onBack={() => setShowLiveQuotes(false)} /> : <div ref={messagesRef} className={styles.messages} role="log" aria-live="polite" aria-relevant="additions text">
             {messages.map((message) => (
               <div key={message.id} className={message.sender === "visitor" ? styles.visitor : styles.assistant}>
                 <p>{message.text}</p>
@@ -347,15 +385,17 @@ export function SiteAssistant() {
             ))}
             {sending ? <div className={styles.assistant} role="status"><p>جارٍ تجهيز الرد...</p></div> : null}
             {messages.length === 1 && configuration.faqs.length > 0 ? <div className={styles.assistant}><p>أسئلة إضافية يجيب عنها فريق طريق الشام:</p></div> : null}
-            <div ref={endRef} />
           </div>}
-          {!showLiveQuotes ? <div className={styles.suggestions} aria-label="أسئلة سريعة">
+          {!showLiveQuotes ? <div className={styles.suggestionsWrap}>
+            <span className={styles.suggestionsTitle}><Icon name="sparkles" size={13} /> اختر سؤالاً سريعاً</span>
+            <div className={styles.suggestions} aria-label="أسئلة سريعة">
             {quickTopics.map((id) => {
               const topic = TOPICS.find((item) => item.id === id);
               if (!topic) return null;
               return <button type="button" key={id} onClick={() => selectTopic(topic)}>{topic.title}</button>;
             })}
             {configuration.faqs.map((faq, index) => <button type="button" key={`${index}-${faq.question}`} onClick={() => selectCustomFaq(faq)}>{faq.question}</button>)}
+            </div>
           </div> : null}
           {!showLiveQuotes ? <form className={styles.form} onSubmit={sendMessage}>
             <label className={styles.srOnly} htmlFor="site-assistant-message">اكتب سؤالك</label>
@@ -368,12 +408,13 @@ export function SiteAssistant() {
               disabled={sending}
               placeholder="اكتب سؤالك هنا..."
               autoComplete="off"
+              enterKeyHint="send"
             />
             <button disabled={!draft.trim() || sending} type="submit" aria-label="إرسال السؤال"><Icon name="arrow-left" size={20} /></button>
           </form> : null}
           <nav className={styles.supportBar} aria-label="التواصل مع موظف الدعم">
-            <a href={`${whatsappHref("+963965350502")}?text=${whatsappIntro}`} target="_blank" rel="noopener noreferrer" onClick={() => recordAssistantEvent("WHATSAPP_CLICK", (supportTopic ?? "general") as AssistantMetricTopic)}>واتساب سوريا</a>
-            <a href={`${whatsappHref("+96171967194")}?text=${whatsappIntro}`} target="_blank" rel="noopener noreferrer" onClick={() => recordAssistantEvent("WHATSAPP_CLICK", (supportTopic ?? "general") as AssistantMetricTopic)}>واتساب لبنان</a>
+            <a href={`${whatsappHref("+963965350502")}?text=${whatsappIntro}`} target="_blank" rel="noopener noreferrer" onClick={() => recordAssistantEvent("WHATSAPP_CLICK", (supportTopic ?? "general") as AssistantMetricTopic)}><Icon name="phone" size={14} /> واتساب سوريا</a>
+            <a href={`${whatsappHref("+96171967194")}?text=${whatsappIntro}`} target="_blank" rel="noopener noreferrer" onClick={() => recordAssistantEvent("WHATSAPP_CLICK", (supportTopic ?? "general") as AssistantMetricTopic)}><Icon name="phone" size={14} /> واتساب لبنان</a>
           </nav>
           <p className={styles.disclaimer}>قد تُعالج الأسئلة الحرة عبر Cloudflare AI. لا تُدخل بيانات شخصية أو كلمات مرور؛ لا ينفذ المساعد الحجوزات.</p>
         </section>
@@ -386,7 +427,7 @@ export function SiteAssistant() {
         aria-controls="site-assistant-panel"
         onClick={() => setOpen((value) => { if (!value) recordAssistantEvent("OPEN"); return !value; })}
       >
-        <Icon name={open ? "close" : "sparkles"} size={23} />
+        <span className={styles.launcherIcon}><Icon name={open ? "close" : "sparkles"} size={20} /></span>
         {!open ? <span>كيف نساعدك؟</span> : null}
       </button>
     </div>
