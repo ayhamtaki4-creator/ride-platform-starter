@@ -198,6 +198,21 @@ export default function AssistantAdminPage() {
               </div>
               {!Object.keys(stats.topics).length ? <div className="empty-state">لا توجد أحداث أسئلة مسجلة بعد.</div> : null}
             </section>
+            <section className="panel">
+              <h2>فتح المساعد حسب اليوم</h2>
+              <p className="subtitle">عدد مرات فتح نافذة المحادثة المسجلة بموافقة الزوار خلال آخر 30 يومًا (قد يفتح الشخص النافذة أكثر من مرة).</p>
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead><tr><th>التاريخ</th><th>مرات الفتح</th></tr></thead>
+                  <tbody>
+                    {stats.daily.slice().reverse().map((item) => (
+                      <tr key={item.day}><td>{item.day}</td><td>{item.count}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {!stats.daily.length ? <div className="empty-state">لا توجد أحداث مسجلة بعد.</div> : null}
+            </section>
           </>
         ) : null}
       </Shell>
