@@ -39,7 +39,7 @@ function currencyPrice(quote: BookingQuote) {
   return `${new Intl.NumberFormat("ar-SY", { maximumFractionDigits: 2 }).format(quote.passengerPrice)} ${quote.currency}`;
 }
 
-export function AssistantLiveQuote({ onBack }: { onBack: () => void }) {
+export function AssistantLiveQuote({ onBack, onBook }: { onBack: () => void; onBook: () => void }) {
   const [routes, setRoutes] = useState<ServiceRoute[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [routeId, setRouteId] = useState("");
@@ -192,7 +192,7 @@ export function AssistantLiveQuote({ onBack }: { onBack: () => void }) {
               <Link
                 href={assistantBookingHref({ routeId: route.id, vehicleClass: selectedClass, passengerCount: currentPassengers, luggageCount: currentLuggage })}
                 className={styles.quoteButton}
-                onClick={() => recordAssistantEvent("BOOKING_CLICK", "prices")}
+                onClick={() => { recordAssistantEvent("BOOKING_CLICK", "prices"); onBook(); }}
               >احجز هذه الرحلة <Icon name="arrow-left" size={16} /></Link>
             </div>
           ) : (
