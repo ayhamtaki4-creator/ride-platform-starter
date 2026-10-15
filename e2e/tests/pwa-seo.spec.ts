@@ -128,6 +128,53 @@ test.describe("PWA and SEO foundation", () => {
     expect(service).toContain('href="/booking"');
   });
 
+  test("renders route-specific search landing pages with useful directions and crawlable related links", async ({ request }) => {
+    const cases = [
+      {
+        slug: "damascus-beirut-airport",
+        title: "سيارة من دمشق إلى مطار بيروت والعكس",
+        outbound: "من دمشق إلى مطار بيروت",
+        inbound: "من مطار بيروت إلى دمشق",
+      },
+      {
+        slug: "damascus-amman-airport",
+        title: "سيارة من دمشق إلى مطار الملكة علياء والعكس",
+        outbound: "من دمشق إلى مطار الملكة علياء",
+        inbound: "من مطار الملكة علياء إلى دمشق",
+      },
+      {
+        slug: "damascus-airport-governorates",
+        title: "توصيل مطار دمشق الدولي إلى المحافظات والعكس",
+        outbound: "من مطار دمشق الدولي إلى المحافظات السورية",
+        inbound: "من المحافظات إلى مطار دمشق الدولي",
+      },
+    ];
+
+    for (const item of cases) {
+      const path = `/services/${item.slug}`;
+      const response = await request.get(path);
+      expect(response.status(), path).toBe(200);
+      const html = await response.text();
+      const canonical = `${expectedSiteUrl}${path}`;
+      expect(html).toContain(item.title);
+      expect(html).toContain(item.outbound);
+      expect(html).toContain(item.inbound);
+      expect(html).toContain("معلومات مهمة قبل السفر");
+      expect(html).toContain("مسارات أخرى قد تهمك");
+      expect(html).toContain(`href="${canonical}"`);
+      expect(html).toContain('"@type":"Service"');
+      expect(html).toContain('"@type":"BreadcrumbList"');
+      expect(html).toContain('"itemListElement"');
+      expect(html).toContain('href="/booking"');
+      expect(html).toContain("لا");
+      for (const other of cases.filter((route) => route.slug !== item.slug)) {
+        expect(html).toContain(`href="/services/${other.slug}"`);
+      }
+      // Do not introduce fabricated static prices into search pages/schema.
+      expect(html).not.toMatch(/(?:startingPrice|offers|priceCurrency|priceSpecification)\\s*:/);
+    }
+  });
+
   test("keeps telephone and WhatsApp contact options separate", async ({ page }) => {
     await page.goto("/contact");
     await expect(page.getByRole("heading", { name: "تواصل مع طريق الشام" })).toBeVisible();
